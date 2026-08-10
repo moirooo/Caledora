@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "WikiBase"
+description = "Une application Wikipédia structurée qui transforme des fichiers TXT balisés en pages éditables, sans génération ni reformulation de contenu. Elle permet d’importer, prévisualiser, modifier, comparer et organiser des pages avec infobox, sections, images, tableaux, liens, références et corbeille."
+version = "1.0.0"
+id = "artifacts/wikibase"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23486
+
+[services.development]
+run = "pnpm --filter @workspace/wikibase run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/wikibase", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/wikibase/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23486"
+BASE_PATH = "/"

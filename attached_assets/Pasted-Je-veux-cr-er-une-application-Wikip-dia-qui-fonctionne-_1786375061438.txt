@@ -1,0 +1,603 @@
+Je veux créer une application Wikipédia qui fonctionne à partir de fichiers texte structurés.
+
+IMPORTANT :
+Je ne veux PAS que l’IA génère, reformule, enrichisse ou invente du contenu.
+
+L’application doit uniquement lire les données présentes dans le fichier importé et les placer automatiquement au bon endroit dans la page Wikipédia.
+
+Le fichier source est la seule source de vérité.
+
+Si une information n’est pas présente dans le fichier :
+ne rien inventer,
+ne rien compléter,
+ne rien supposer.
+
+==================================================
+1. PRINCIPE GÉNÉRAL
+==================================================
+
+Je veux pouvoir créer une page Wikipédia simplement en important un fichier texte structuré.
+
+Exemple :
+
+je clique sur :
+
+Créer une page
+
+je choisis :
+
+Catégorie : Éducation
+Type : Université
+
+puis j’importe :
+
+Universa_Lacora.txt
+
+L’application lit le fichier et construit automatiquement la page Wikipédia.
+
+Elle doit uniquement répartir les informations selon les balises du fichier.
+
+==================================================
+2. FORMAT DU FICHIER TEXTE
+==================================================
+
+Je veux un format simple et lisible par un humain.
+
+Exemple complet :
+
+[TITRE]
+Universa Lacora
+
+[SOUS-TITRE]
+Université métropolitaine de Caledora
+
+[ALIASES]
+Université de Caledora
+Campus Lacora
+Universa
+
+[INTRODUCTION]
+Universa Lacora est le principal ensemble universitaire de Caledora.
+Elle accueille environ 52 000 étudiants sur son campus principal.
+
+[INFOBOX]
+
+Nom = Universa Lacora
+Nom original = Universa Metropolitana Lacora
+Type = Université publique
+Fondation = 1684
+Président = Mateo Ferran
+Ville = Caledora
+Quartier = Campus Aurea
+Étudiants = 52 000
+Enseignants = 4 800
+Chercheurs = 2 100
+Budget = 1,8 milliard d’euros
+Site web = universa-lacora.cal
+
+[IMAGE_INFOBOX]
+fichier = universa_lacora.jpg
+légende = Vue du campus principal d’Universa Lacora
+alt = Campus d’Universa Lacora
+
+[SECTION]
+Histoire
+
+[TEXTE]
+Universa Lacora trouve son origine dans un collège fondé en 1684.
+
+[TEXTE]
+L’établissement est progressivement devenu l’une des principales universités de la région.
+
+[SOUS-SECTION]
+Création du campus moderne
+
+[TEXTE]
+Le campus actuel est développé à partir de 1958 autour du lac de Lacora.
+
+[SECTION]
+Organisation
+
+[TEXTE]
+L’université est organisée autour de plusieurs facultés et instituts.
+
+[LISTE]
+Faculté de droit
+Faculté de médecine
+Faculté des sciences
+Faculté d’économie
+
+[SECTION]
+Campus
+
+[TEXTE]
+Le campus principal se situe à Campus Aurea.
+
+[IMAGE]
+fichier = campus_aurea.jpg
+légende = Campus Aurea vu depuis le lac
+alignement = droite
+taille = 300
+alt = Bâtiments de Campus Aurea
+
+[SECTION]
+Recherche
+
+[TEXTE]
+Les activités de recherche couvrent notamment les sciences, la médecine et l’ingénierie.
+
+[TABLEAU]
+titre = Principaux instituts
+
+colonnes = Institut | Domaine | Chercheurs
+
+ligne = Sciencia Park | Sciences fondamentales | 850
+ligne = Technova | Ingénierie | 620
+ligne = Instituto Medica | Médecine | 410
+
+[SECTION]
+Personnalités liées
+
+[LISTE]
+Nikos Maren
+Clara Bellera
+Marco Valen
+
+[SECTION]
+Voir aussi
+
+[LIENS]
+Caledora
+Sciencia Park
+Technova Lacora
+Campus Aurea
+
+[CATEGORIES]
+Université
+Caledora
+Enseignement supérieur
+Universa Lacora
+
+==================================================
+3. INTERPRÉTATION DES BALISES
+==================================================
+
+L’application doit comprendre automatiquement :
+
+[TITRE]
+→ titre principal de la page
+
+[SOUS-TITRE]
+→ sous-titre éventuel
+
+[ALIASES]
+→ noms alternatifs de la page
+
+[INTRODUCTION]
+→ texte situé avant le sommaire
+
+[INFOBOX]
+→ données de l’infobox
+
+Format :
+clé = valeur
+
+Exemple :
+Fondation = 1684
+
+La partie avant "=" devient le label.
+La partie après "=" devient la valeur.
+
+[IMAGE_INFOBOX]
+→ image principale de l’infobox
+
+[SECTION]
+→ titre H2
+
+[SOUS-SECTION]
+→ titre H3
+
+[SOUS-SOUS-SECTION]
+→ titre H4
+
+[TEXTE]
+→ paragraphe
+
+[LISTE]
+→ liste à puces
+
+[LISTE_NUMEROTEE]
+→ liste numérotée
+
+[IMAGE]
+→ image dans l’article
+
+[TABLEAU]
+→ tableau Wikipédia
+
+[LIENS]
+→ liens internes
+
+[REFERENCES]
+→ notes et références
+
+[BIBLIOGRAPHIE]
+→ bibliographie
+
+[CATEGORIES]
+→ catégories en bas de page
+
+==================================================
+4. AUCUNE GÉNÉRATION DE CONTENU
+==================================================
+
+RÈGLE ABSOLUE :
+
+L’application ne doit jamais créer un texte qui n’existe pas dans le document.
+
+Exemple :
+
+si le fichier contient :
+
+Fondation = 1684
+
+l’application peut afficher :
+
+Fondation : 1684
+
+mais elle ne doit jamais écrire :
+
+« L’université fut fondée en 1684 dans le contexte du développement intellectuel de Caledora. »
+
+car cette phrase n’existe pas dans le fichier.
+
+Même chose pour les sections.
+
+Si le fichier ne contient aucune section :
+
+Sport
+
+alors ne pas créer de section Sport.
+
+==================================================
+5. INFOBOX
+==================================================
+
+L’infobox doit être construite automatiquement uniquement depuis le bloc :
+
+[INFOBOX]
+
+Chaque ligne :
+
+clé = valeur
+
+devient une ligne de l’infobox.
+
+Exemple :
+
+[INFOBOX]
+
+Fondation = 1684
+Type = Université publique
+Étudiants = 52 000
+
+doit produire :
+
+Fondation      1684
+Type            Université publique
+Étudiants       52 000
+
+L’ordre du fichier doit être conservé.
+
+Ne pas ajouter automatiquement de champs.
+
+==================================================
+6. SOMMAIRE
+==================================================
+
+Le sommaire doit être généré automatiquement à partir des balises :
+
+[SECTION]
+[SOUS-SECTION]
+[SOUS-SOUS-SECTION]
+
+Exemple :
+
+[SECTION]
+Histoire
+
+[SOUS-SECTION]
+Fondation
+
+[SECTION]
+Campus
+
+donne :
+
+Sommaire
+
+1 Histoire
+  1.1 Fondation
+
+2 Campus
+
+==================================================
+7. IMAGES
+==================================================
+
+Les images peuvent être ajoutées séparément dans l’application.
+
+Dans le fichier texte :
+
+[IMAGE]
+
+fichier = campus.jpg
+légende = Vue du campus
+alignement = droite
+taille = 300
+alt = Vue aérienne du campus
+
+L’application cherche l’image importée portant le même nom.
+
+Si l’image n’existe pas :
+afficher un emplacement manquant ou demander de l’importer.
+
+Je dois ensuite pouvoir :
+
+ajouter une image
+supprimer une image
+remplacer une image
+modifier sa légende
+modifier son alt
+modifier son alignement
+modifier sa taille
+
+==================================================
+8. LIENS INTERNES
+==================================================
+
+Deux systèmes doivent fonctionner.
+
+SYSTÈME 1 :
+
+Dans le fichier texte, je peux écrire :
+
+[[Caledora]]
+
+Cela signifie que Caledora est un lien interne.
+
+Si la page Caledora existe :
+lien bleu.
+
+Si elle n’existe pas :
+lien rouge.
+
+SYSTÈME 2 :
+
+Je peux également utiliser le bloc :
+
+[LIENS]
+
+Caledora
+Campus Aurea
+Sciencia Park
+
+L’application affiche ces pages dans « Voir aussi ».
+
+==================================================
+9. FORMAT DES LIENS DANS LE TEXTE
+==================================================
+
+Exemple :
+
+[TEXTE]
+Universa Lacora est située dans [[Caledora]], à proximité de [[Sciencia Park]].
+
+L’application affiche :
+
+Universa Lacora est située dans Caledora, à proximité de Sciencia Park.
+
+Caledora et Sciencia Park sont cliquables.
+
+==================================================
+10. TABLEAUX
+==================================================
+
+Format :
+
+[TABLEAU]
+
+titre = Principales facultés
+
+colonnes = Faculté | Étudiants | Création
+
+ligne = Droit | 8 200 | 1684
+ligne = Médecine | 6 400 | 1812
+ligne = Sciences | 11 200 | 1958
+
+L’application doit automatiquement construire un tableau Wikipédia.
+
+==================================================
+11. RÉFÉRENCES
+==================================================
+
+Format :
+
+[REFERENCES]
+
+1 = Archives de Caledora, Universa Lacora, 2025
+2 = Rapport annuel de l’université, 2026
+3 = Institut métropolitain de statistique, 2026
+
+Les références sont affichées automatiquement dans la section Notes et références.
+
+==================================================
+12. CRÉATION DE PAGE
+==================================================
+
+Processus :
+
+Créer une page
+
+→ choisir catégorie
+
+→ choisir type
+
+→ importer fichier TXT
+
+→ analyser le fichier
+
+→ afficher aperçu
+
+→ publier
+
+Aucune IA n’est nécessaire pour cette étape.
+
+Utiliser un parser.
+
+==================================================
+13. MODIFIER UNE PAGE
+==================================================
+
+Chaque page possède :
+
+Lire
+Modifier
+Voir l’historique
+
+Le mode Modifier permet de changer :
+
+titre
+introduction
+texte
+sections
+sous-sections
+infobox
+tableaux
+images
+liens
+références
+catégories
+
+L’utilisateur peut modifier visuellement la page.
+
+==================================================
+14. METTRE À JOUR AVEC UN NOUVEAU FICHIER TXT
+==================================================
+
+Ajouter :
+
+« Mettre à jour depuis un fichier »
+
+Je peux réimporter un nouveau TXT.
+
+L’application relit le fichier.
+
+Elle compare les champs structurés avec la version existante.
+
+Afficher les différences avant validation.
+
+Exemple :
+
+Fondation
+ancien : 1684
+nouveau : 1686
+
+Population étudiante
+ancien : 52 000
+nouveau : 54 300
+
+Je choisis ensuite :
+
+Appliquer
+
+ou
+
+Ignorer.
+
+==================================================
+15. SUPPRESSION
+==================================================
+
+Je peux supprimer :
+
+une page
+une section
+une image
+un tableau
+une référence
+un champ d’infobox
+
+Une page supprimée doit aller dans une corbeille.
+
+==================================================
+16. AVANTAGE DU FORMAT TXT
+==================================================
+
+Le format TXT doit devenir le format principal du projet.
+
+Pourquoi :
+
+il est simple
+léger
+facile à écrire
+facile à générer
+facile à sauvegarder
+facile à parser
+indépendant de Word ou de PDF
+
+L’utilisateur peut créer une page entière uniquement avec un fichier texte.
+
+==================================================
+17. EXEMPLE DE FICHIER MINIMAL
+==================================================
+
+[TITRE]
+Université Exemple
+
+[INTRODUCTION]
+Université Exemple est une université située à Caledora.
+
+[INFOBOX]
+
+Fondation = 1985
+Ville = Caledora
+Étudiants = 12 000
+
+[SECTION]
+Histoire
+
+[TEXTE]
+L’université a été créée en 1985.
+
+[SECTION]
+Campus
+
+[TEXTE]
+Le campus principal se situe dans le nord de Caledora.
+
+[CATEGORIES]
+Université
+Caledora
+
+Ce fichier doit suffire pour créer immédiatement une page Wikipédia complète dans l’application.
+
+==================================================
+18. POINT IMPORTANT
+==================================================
+
+Ne pas utiliser un LLM pour parser le document.
+
+Le format est suffisamment structuré pour être traité de manière déterministe.
+
+Créer un parser qui lit les balises.
+
+Ainsi :
+
+même fichier
+=
+toujours exactement la même page.
+
+Aucune hallucination.
+Aucune reformulation.
+Aucune donnée inventée.

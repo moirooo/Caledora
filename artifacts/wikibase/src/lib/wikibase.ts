@@ -1,0 +1,209 @@
+export type KV = { key: string; value: string };
+export type WBImage = { filename: string; caption: string; alt: string; alignment: string; size: string; missing: boolean; src?: string };
+export type WBTable = { title: string; columns: string[]; rows: string[][] };
+export type WBBlock =
+  | { type: 'text'; content: string }
+  | { type: 'list' | 'numbered'; items: string[] }
+  | { type: 'image'; image: WBImage }
+  | { type: 'table'; table: WBTable };
+export type WBSection = { title: string; level: number; blocks: WBBlock[] };
+export type WBHistory = { timestamp: string; label: string; sourceText: string };
+export type WikiPage = {
+  id: string; title: string; subtitle: string; aliases: string[]; introduction: string;
+  infobox: KV[]; infoboxImage?: WBImage; sections: WBSection[]; links: string[];
+  references: KV[]; bibliography: string[]; categories: string[]; category: string;
+  type: string; sourceText: string; updatedAt: string; createdAt: string;
+  history: WBHistory[]; isTrashed: boolean;
+};
+
+const tags = new Set(['TITRE','SOUS-TITRE','ALIASES','INTRODUCTION','INFOBOX','IMAGE_INFOBOX','SECTION','SOUS-SECTION','SOUS-SOUS-SECTION','TEXTE','LISTE','LISTE_NUMEROTEE','IMAGE','TABLEAU','LIENS','REFERENCES','BIBLIOGRAPHIE','CATEGORIES']);
+const lines = (text: string) => text.replace(/\r/g, '').split('\n');
+const clean = (s: string) => s.trim();
+const field = (arr: string[], key: string) => {
+  const row = arr.find((line) => line.trim().toLowerCase().startsWith(`${key.toLowerCase()} =`));
+  return row ? row.split('=').slice(1).join('=').trim() : '';
+};
+const fields = (arr: string[]) => arr.filter((line) => line.includes('=')).map((line) => {
+  const ix = line.indexOf('=');
+  return { key: line.slice(0, ix).trim(), value: line.slice(ix + 1).trim() };
+});
+
+export function parseWikiText(sourceText: string, category = 'Non classé', type = 'Article'): WikiPage {
+  const buckets: { tag: string; content: string[] }[] = [];
+  let current: { tag: string; content: string[] } | null = null;
+  for (const line of lines(sourceText)) {
+    // Some supported French tags contain hyphens, such as SOUS-TITRE and
+    // SOUS-SOUS-SECTION. Keep the parser strict to tag-shaped lines while
+    // allowing those documented names.
+    const match = line.match(/^\[([A-Z_-]+)\]\s*$/);
+    if (match) {
+      if (current) buckets.push(current);
+      current = tags.has(match[1]) ? { tag: match[1], content: [] } : null;
+    } else if (current) current.content.push(line);
+  }
+  if (current) buckets.push(current);
+  const first = (tag: string) => buckets.find((b) => b.tag === tag)?.content ?? [];
+  const title = clean(first('TITRE').join('\n')) || 'Page sans titre';
+  const now = new Date().toISOString();
+  const sections: WBSection[] = [];
+  let active: WBSection | null = null;
+  const imageFrom = (arr: string[]): WBImage => ({
+    filename: field(arr, 'fichier'), caption: field(arr, 'légende') || field(arr, 'legende'),
+    alt: field(arr, 'alt'), alignment: field(arr, 'alignement') || 'droite', size: field(arr, 'taille') || '300', missing: true,
+  });
+  for (const bucket of buckets) {
+    const level = bucket.tag === 'SECTION' ? 2 : bucket.tag === 'SOUS-SECTION' ? 3 : bucket.tag === 'SOUS-SOUS-SECTION' ? 4 : 0;
+    if (level) { active = { title: clean(bucket.content.join('\n')), level, blocks: [] }; sections.push(active); continue; }
+    if (!active) continue;
+    if (bucket.tag === 'TEXTE' && clean(bucket.content.join('\n'))) active.blocks.push({ type: 'text', content: clean(bucket.content.join('\n')) });
+    if (bucket.tag === 'LISTE' || bucket.tag === 'LISTE_NUMEROTEE') active.blocks.push({ type: bucket.tag === 'LISTE' ? 'list' : 'numbered', items: bucket.content.map(clean).filter(Boolean) });
+    if (bucket.tag === 'IMAGE') active.blocks.push({ type: 'image', image: imageFrom(bucket.content) });
+    if (bucket.tag === 'TABLEAU') {
+      const columns = (field(bucket.content, 'colonnes') || '').split('|').map(clean).filter(Boolean);
+      const rows = bucket.content.filter((l) => l.toLowerCase().startsWith('ligne =')).map((l) => l.split('=').slice(1).join('=').split('|').map(clean));
+      active.blocks.push({ type: 'table', table: { title: field(bucket.content, 'titre'), columns, rows } });
+    }
+  }
+  const imageLines = first('IMAGE_INFOBOX');
+  return {
+    id: `page-${Date.now()}`, title, subtitle: clean(first('SOUS-TITRE').join('\n')), aliases: first('ALIASES').map(clean).filter(Boolean),
+    introduction: clean(first('INTRODUCTION').join('\n')), infobox: fields(first('INFOBOX')),
+    infoboxImage: imageLines.length ? imageFrom(imageLines) : undefined, sections, links: first('LIENS').map(clean).filter(Boolean),
+    references: fields(first('REFERENCES')), bibliography: first('BIBLIOGRAPHIE').map(clean).filter(Boolean),
+    categories: first('CATEGORIES').map(clean).filter(Boolean), category, type, sourceText, updatedAt: now, createdAt: now,
+    history: [{ timestamp: now, label: 'Import initial', sourceText }], isTrashed: false,
+  };
+}
+
+export const demoSource = `[TITRE]
+Universa Lacora
+
+[SOUS-TITRE]
+Université métropolitaine de Caledora
+
+[ALIASES]
+Université de Caledora
+Campus Lacora
+Universa
+
+[INTRODUCTION]
+Universa Lacora est le principal ensemble universitaire de Caledora.
+Elle accueille environ 52 000 étudiants sur son campus principal.
+
+[INFOBOX]
+Nom = Universa Lacora
+Nom original = Universa Metropolitana Lacora
+Type = Université publique
+Fondation = 1684
+Président = Mateo Ferran
+Ville = Caledora
+Étudiants = 52 000
+Enseignants = 4 800
+Budget = 1,8 milliard d’euros
+Site web = universa-lacora.cal
+
+[IMAGE_INFOBOX]
+fichier = universa_lacora.jpg
+légende = Vue du campus principal d’Universa Lacora
+alt = Campus d’Universa Lacora
+
+[SECTION]
+Histoire
+
+[TEXTE]
+Universa Lacora trouve son origine dans un collège fondé en 1684.
+
+[TEXTE]
+L’établissement est progressivement devenu l’une des principales universités de la région.
+
+[SOUS-SECTION]
+Création du campus moderne
+
+[TEXTE]
+Le campus actuel est développé à partir de 1958 autour du lac de Lacora.
+
+[SECTION]
+Organisation
+
+[TEXTE]
+L’université est organisée autour de plusieurs facultés et instituts.
+
+[LISTE]
+Faculté de droit
+Faculté de médecine
+Faculté des sciences
+Faculté d’économie
+
+[SECTION]
+Campus
+
+[TEXTE]
+Le campus principal se situe à Campus Aurea.
+
+[IMAGE]
+fichier = campus_aurea.jpg
+légende = Campus Aurea vu depuis le lac
+alignement = droite
+taille = 300
+alt = Bâtiments de Campus Aurea
+
+[SECTION]
+Recherche
+
+[TEXTE]
+Les activités de recherche couvrent notamment les sciences, la médecine et l’ingénierie.
+
+[TABLEAU]
+titre = Principaux instituts
+colonnes = Institut | Domaine | Chercheurs
+ligne = Sciencia Park | Sciences fondamentales | 850
+ligne = Technova | Ingénierie | 620
+ligne = Instituto Medica | Médecine | 410
+
+[SECTION]
+Voir aussi
+
+[LIENS]
+Caledora
+Sciencia Park
+Technova Lacora
+Campus Aurea
+
+[REFERENCES]
+1 = Archives de Caledora, Universa Lacora, 2025
+2 = Rapport annuel de l’université, 2026
+
+[BIBLIOGRAPHIE]
+Annuaire métropolitain de Caledora, édition 2026
+
+[CATEGORIES]
+Université
+Caledora
+Enseignement supérieur`;
+
+export function seedPages(): WikiPage[] {
+  const saved = localStorage.getItem('wikibase-pages');
+  if (saved) {
+    const pages = JSON.parse(saved) as WikiPage[];
+    // Migrate only the bundled demo created by the early parser. User-imported
+    // pages must remain untouched, even when the parser evolves.
+    const migrated = pages.map((page) => {
+      if (page.sourceText === demoSource && page.title.includes('[SOUS-TITRE]')) {
+        const next = parseWikiText(demoSource, page.category, page.type);
+        return { ...next, id: page.id, createdAt: page.createdAt, history: page.history };
+      }
+      return page;
+    });
+    if (migrated.some((page, index) => page !== pages[index])) {
+      localStorage.setItem('wikibase-pages', JSON.stringify(migrated));
+    }
+    return migrated;
+  }
+  const page = parseWikiText(demoSource, 'Éducation', 'Université');
+  page.id = 'universa-lacora';
+  localStorage.setItem('wikibase-pages', JSON.stringify([page]));
+  return [page];
+}
+export function savePages(pages: WikiPage[]) { localStorage.setItem('wikibase-pages', JSON.stringify(pages)); }
+export function formatDate(value: string) { return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value)); }
+export function allText(page: WikiPage) { return `${page.title} ${page.subtitle} ${page.introduction} ${page.categories.join(' ')}`.toLowerCase(); }
