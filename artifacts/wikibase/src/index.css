@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
@@ -26,71 +25,88 @@
   --font-sans: var(--app-font-sans);
   --font-serif: var(--app-font-serif);
   --font-mono: var(--app-font-mono);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
   --radius-xl: calc(var(--radius) + 4px);
 }
 
 :root {
-  --background: 40 33% 96%;
-  --foreground: 220 24% 17%;
-  --border: 37 22% 85%;
-  --input: 37 22% 80%;
-  --ring: 190 48% 38%;
-  --card: 42 40% 98%;
-  --card-foreground: 220 24% 17%;
-  --card-border: 38 26% 87%;
-  --primary: 190 48% 31%;
-  --primary-foreground: 42 40% 98%;
-  --secondary: 36 28% 91%;
-  --secondary-foreground: 220 24% 21%;
-  --muted: 37 22% 92%;
-  --muted-foreground: 220 11% 46%;
-  --accent: 8 52% 47%;
-  --accent-foreground: 42 40% 98%;
-  --destructive: 5 58% 45%;
-  --destructive-foreground: 42 40% 98%;
-  --app-font-sans: 'DM Sans', sans-serif;
-  --app-font-serif: 'Newsreader', Georgia, serif;
-  --app-font-mono: 'DM Mono', monospace;
-  --radius: 0.65rem;
-  --sidebar: 215 24% 19%;
-  --sidebar-foreground: 38 30% 91%;
-  --sidebar-border: 215 18% 28%;
-  --sidebar-accent: 190 35% 28%;
-  --sidebar-primary: 37 76% 66%;
-  --paper-shadow: 0 18px 50px rgba(50, 42, 32, .07);
+  --background: 0 0% 100%;
+  --foreground: 0 0% 13%;
+  --border: 0 0% 78%;
+  --input: 0 0% 78%;
+  --ring: 217 89% 42%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 13%;
+  --card-border: 0 0% 82%;
+  --primary: 217 89% 42%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 96%;
+  --secondary-foreground: 0 0% 13%;
+  --muted: 0 0% 96%;
+  --muted-foreground: 0 0% 38%;
+  --accent: 0 72% 40%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 72% 40%;
+  --destructive-foreground: 0 0% 100%;
+  --app-font-sans: Arial, Helvetica, 'Liberation Sans', sans-serif;
+  --app-font-serif: Georgia, 'Times New Roman', Times, serif;
+  --app-font-mono: 'Courier New', Courier, monospace;
+  --radius: 2px;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 0 0% 13%;
+  --sidebar-border: 0 0% 78%;
+  --sidebar-accent: 217 70% 96%;
+  --sidebar-primary: 217 89% 42%;
+  --paper-shadow: none;
+  --wiki-link: #3366cc;
+  --wiki-link-red: #cc3333;
+  --wiki-border: #a2a9b1;
+  --wiki-infobox-bg: #f8f9fa;
+  --wiki-infobox-header: #cee0f2;
+  --wiki-toc-bg: #f8f9fa;
 }
 
 .dark {
-  --background: 220 24% 12%;
-  --foreground: 38 30% 91%;
-  --border: 215 18% 28%;
-  --input: 215 18% 30%;
-  --card: 220 22% 16%;
-  --card-foreground: 38 30% 91%;
-  --card-border: 215 18% 28%;
-  --primary: 190 48% 54%;
-  --primary-foreground: 220 24% 12%;
-  --secondary: 215 18% 23%;
-  --secondary-foreground: 38 30% 91%;
-  --muted: 215 18% 22%;
-  --muted-foreground: 38 12% 64%;
-  --accent: 8 52% 58%;
-  --accent-foreground: 220 24% 12%;
-  --destructive: 5 58% 57%;
-  --destructive-foreground: 220 24% 12%;
-  --sidebar: 220 26% 9%;
-  --sidebar-foreground: 38 30% 91%;
-  --sidebar-border: 215 18% 20%;
-  --sidebar-accent: 215 18% 20%;
-  --sidebar-primary: 37 76% 66%;
+  --background: 220 13% 11%;
+  --foreground: 0 0% 87%;
+  --border: 220 10% 28%;
+  --input: 220 10% 30%;
+  --card: 220 13% 13%;
+  --card-foreground: 0 0% 87%;
+  --card-border: 220 10% 28%;
+  --primary: 213 100% 67%;
+  --primary-foreground: 220 13% 11%;
+  --secondary: 220 10% 18%;
+  --secondary-foreground: 0 0% 87%;
+  --muted: 220 10% 17%;
+  --muted-foreground: 0 0% 60%;
+  --accent: 0 80% 68%;
+  --accent-foreground: 220 13% 11%;
+  --destructive: 0 80% 68%;
+  --destructive-foreground: 220 13% 11%;
+  --sidebar: 220 13% 9%;
+  --sidebar-foreground: 0 0% 87%;
+  --sidebar-border: 220 10% 22%;
+  --sidebar-accent: 220 10% 18%;
+  --sidebar-primary: 213 100% 67%;
+  --wiki-link: #6ea7ff;
+  --wiki-link-red: #ff8080;
+  --wiki-border: #54595d;
+  --wiki-infobox-bg: #1e2124;
+  --wiki-infobox-header: #2a3f5f;
+  --wiki-toc-bg: #1e2124;
 }
 
 @layer base {
   * { @apply border-border; }
-  body { @apply bg-background text-foreground antialiased; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--app-font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+  }
   button, a, input, select, textarea { outline-color: hsl(var(--ring)); }
 }
 
@@ -98,17 +114,98 @@
   .font-editorial { font-family: var(--app-font-serif); }
   .font-mono-app { font-family: var(--app-font-mono); }
   .paper-shadow { box-shadow: var(--paper-shadow); }
-  .grain::after {
-    content: ''; position: fixed; inset: 0; pointer-events: none; opacity: .035;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.4'/%3E%3C/svg%3E");
-    z-index: 50;
+  /* Wikipedia link colours */
+  .wiki-link { color: var(--wiki-link); }
+  .wiki-link:hover { text-decoration: underline; }
+  .wiki-link-red { color: var(--wiki-link-red); }
+  .wiki-link-red:hover { text-decoration: underline; }
+  /* Wikipedia-style infobox */
+  .wiki-infobox {
+    background: var(--wiki-infobox-bg);
+    border: 1px solid var(--wiki-border);
+    font-size: 13px;
+    line-height: 1.5;
   }
+  .wiki-infobox-header {
+    background: var(--wiki-infobox-header);
+    border-bottom: 1px solid var(--wiki-border);
+    padding: 6px 8px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 13px;
+  }
+  /* Wikipedia-style TOC */
+  .wiki-toc {
+    background: var(--wiki-toc-bg);
+    border: 1px solid var(--wiki-border);
+    display: inline-block;
+    padding: 10px 18px 12px;
+    font-size: 13px;
+  }
+  .wiki-toc-title {
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 6px;
+  }
+  /* Wikipedia section heading underline */
+  .wiki-h2 {
+    font-family: var(--app-font-sans);
+    font-size: 1.5em;
+    font-weight: normal;
+    border-bottom: 1px solid var(--wiki-border);
+    margin: 1.2em 0 0.4em;
+    padding-bottom: 3px;
+  }
+  .wiki-h3 {
+    font-family: var(--app-font-sans);
+    font-size: 1.2em;
+    font-weight: bold;
+    margin: 1em 0 0.3em;
+  }
+  .wiki-h4 {
+    font-family: var(--app-font-sans);
+    font-size: 1em;
+    font-weight: bold;
+    margin: 0.8em 0 0.2em;
+  }
+  /* Wikipedia tab style */
+  .wiki-tab {
+    display: inline-block;
+    padding: 4px 12px 6px;
+    font-size: 13px;
+    color: var(--wiki-link);
+    border: 1px solid transparent;
+    border-bottom: none;
+    background: #f8f9fa;
+    margin-bottom: -1px;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .wiki-tab:hover { color: var(--wiki-link); text-decoration: none; background: #fff; }
+  .wiki-tab-active {
+    color: hsl(var(--foreground));
+    background: #fff;
+    border-color: var(--wiki-border);
+    border-bottom-color: #fff;
+    cursor: default;
+  }
+  .dark .wiki-tab { background: hsl(var(--secondary)); }
+  .dark .wiki-tab-active { background: hsl(var(--background)); border-bottom-color: hsl(var(--background)); }
 }
 
-@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes pulse-line { 0%, 100% { opacity: .4; } 50% { opacity: .9; } }
-.animate-rise { animation: rise .45s ease both; }
-.animate-rise-1 { animation-delay: .06s; }
-.animate-rise-2 { animation-delay: .12s; }
-.animate-rise-3 { animation-delay: .18s; }
+/* Wikipedia-style article text */
+.article-body p { margin-bottom: 0.6em; line-height: 1.7; }
+.article-body ul { list-style: disc; margin: 0.4em 0 0.6em 1.8em; }
+.article-body ol { list-style: decimal; margin: 0.4em 0 0.6em 1.8em; }
+.article-body li { margin-bottom: 0.2em; line-height: 1.7; }
+.article-body table { border-collapse: collapse; margin: 1em 0; font-size: 13px; }
+.article-body th { background: #eaecf0; border: 1px solid #a2a9b1; padding: 4px 8px; font-weight: bold; }
+.article-body td { border: 1px solid #a2a9b1; padding: 4px 8px; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.animate-rise { animation: rise .3s ease both; }
+.animate-rise-1 { animation-delay: .04s; }
+.animate-rise-2 { animation-delay: .08s; }
+.animate-rise-3 { animation-delay: .12s; }
 .skeleton { background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--secondary)) 50%, hsl(var(--muted)) 75%); background-size: 200% 100%; animation: pulse-line 1.6s ease infinite; }
+@keyframes pulse-line { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
