@@ -202,6 +202,60 @@
 .article-body th { background: #eaecf0; border: 1px solid #a2a9b1; padding: 4px 8px; font-weight: bold; }
 .article-body td { border: 1px solid #a2a9b1; padding: 4px 8px; }
 
+/* ── Appearance panel ───────────────────────────────────────────────────── */
+.appearance-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  width: 220px;
+  background: hsl(var(--card));
+  border: 1px solid var(--wiki-border);
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  font-size: 13px;
+}
+.dark .appearance-panel { border-color: hsl(var(--border)); box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+.appearance-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--wiki-border);
+  background: #f8f9fa;
+}
+.dark .appearance-panel-header { background: hsl(var(--secondary)); border-color: hsl(var(--border)); }
+.appearance-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: hsl(var(--muted-foreground));
+  border-radius: 2px;
+}
+.appearance-panel-close:hover { background: hsl(var(--secondary)); color: hsl(var(--foreground)); }
+.appearance-panel-section { padding: 10px 12px; border-bottom: 1px solid var(--wiki-border); }
+.dark .appearance-panel-section { border-color: hsl(var(--border)); }
+.appearance-panel-section:last-child { border-bottom: none; }
+.appearance-panel-label {
+  font-size: 11px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 6px;
+}
+.appearance-panel-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+  color: hsl(var(--foreground));
+}
+.appearance-panel-option:hover { color: var(--wiki-link); }
+.appearance-panel-radio { accent-color: var(--wiki-link); width: 14px; height: 14px; cursor: pointer; }
+
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 .animate-rise { animation: rise .3s ease both; }
 .animate-rise-1 { animation-delay: .04s; }

@@ -1,10 +1,76 @@
-import { useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
-import { Archive, ArrowLeft, Check, ChevronRight, Clock3, FileText, GitCompare, Image as ImageIcon, Menu, Pencil, Plus, RotateCcw, Search, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { Archive, ArrowLeft, Check, ChevronRight, Clock3, FileText, GitCompare, Image as ImageIcon, Menu, Pencil, Plus, RotateCcw, Search, Settings2, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { allText, demoSource, formatDate, parseWikiText, savePages, seedPages, type WBBlock, type WBImage, type WikiPage } from '@/lib/wikibase';
+
+/* ─── Appearance context ─────────────────────────────────────────────────── */
+
+type Theme = 'auto' | 'light' | 'dark';
+type Width = 'standard' | 'large';
+interface Appearance { theme: Theme; width: Width }
+interface AppearanceCtx { appearance: Appearance; setAppearance: (a: Appearance) => void }
+
+const AppearanceContext = createContext<AppearanceCtx>({
+  appearance: { theme: 'auto', width: 'standard' },
+  setAppearance: () => {},
+});
+const useAppearance = () => useContext(AppearanceContext);
+
+function AppearanceProvider({ children }: { children: ReactNode }) {
+  const [appearance, setAppearanceState] = useState<Appearance>(() => {
+    try {
+      const saved = localStorage.getItem('wikibase-appearance');
+      if (saved) return JSON.parse(saved) as Appearance;
+    } catch {}
+    return { theme: 'auto', width: 'standard' };
+  });
+
+  // Apply dark class to <html>
+  useEffect(() => {
+    const root = document.documentElement;
+    if (appearance.theme === 'dark') {
+      root.classList.add('dark');
+      return;
+    }
+    if (appearance.theme === 'light') {
+      root.classList.remove('dark');
+      return;
+    }
+    // auto: follow system preference
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = (e: MediaQueryList | MediaQueryListEvent) =>
+      e.matches ? root.classList.add('dark') : root.classList.remove('dark');
+    apply(mq);
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, [appearance.theme]);
+
+  const setAppearance = (a: Appearance) => {
+    setAppearanceState(a);
+    localStorage.setItem('wikibase-appearance', JSON.stringify(a));
+  };
+
+  return <AppearanceContext.Provider value={{ appearance, setAppearance }}>{children}</AppearanceContext.Provider>;
+}
+
+/* ─── Category accent colours ───────────────────────────────────────────── */
+
+const CATEGORY_COLORS: Record<string, string> = {
+  'Géographie': '#c8e6c9',
+  'Histoire': '#ffe0b2',
+  'Culture': '#e1bee7',
+  'Sciences': '#b2dfdb',
+  'Politique': '#bbdefb',
+  'Économie': '#fff9c4',
+  'Éducation': '#cee0f2',
+  'Transports': '#eeeeee',
+  'Monuments & Lieux': '#f9e4b7',
+  'Personnes & Organisations': '#fce4ec',
+};
+const categoryColor = (cat: string) => CATEGORY_COLORS[cat] ?? '#cee0f2';
 
 /* ─── Category & type catalogue ─────────────────────────────────────────── */
 
@@ -26,7 +92,7 @@ const CATEGORY_TYPES: Record<string, string[]> = {
     'Œuvre littéraire', 'Roman', 'Poème', 'Pièce de théâtre', 'Essai',
     'Film', 'Court-métrage', 'Documentaire', 'Série télévisée', 'Émission',
     'Album musical', 'Chanson', 'Symphonie', 'Opéra',
-    'Tableau', 'Sculpture', 'Photographie', 'Œuvre d\'art',
+    'Tableau', 'Sculpture', 'Photographie', "Œuvre d'art",
     'Jeu vidéo', 'Bande dessinée', 'Manga', 'Animation',
     'Festival', 'Prix culturel', 'Mouvement artistique',
   ],
@@ -70,7 +136,7 @@ const CATEGORY_TYPES: Record<string, string[]> = {
     'Parc', 'Jardin public', 'Place publique',
   ],
   'Personnes & Organisations': [
-    'Personnalité politique', 'Chef d\'État', 'Monarque',
+    'Personnalité politique', "Chef d'État", 'Monarque',
     'Scientifique', 'Explorateur', 'Inventeur',
     'Écrivain', 'Poète', 'Philosophe',
     'Artiste', 'Peintre', 'Sculpteur', 'Photographe',
@@ -82,23 +148,67 @@ const CATEGORY_TYPES: Record<string, string[]> = {
     'Article général',
   ],
 };
-
 const ALL_CATEGORIES = Object.keys(CATEGORY_TYPES);
+
+/* ─── Appearance panel ───────────────────────────────────────────────────── */
+
+function AppearancePanel({ onClose }: { onClose: () => void }) {
+  const { appearance, setAppearance } = useAppearance();
+  const set = (patch: Partial<Appearance>) => setAppearance({ ...appearance, ...patch });
+
+  const themeOptions: { value: Theme; label: string; desc: string }[] = [
+    { value: 'auto', label: 'Automatique', desc: 'Suit le système' },
+    { value: 'light', label: 'Clair', desc: '' },
+    { value: 'dark', label: 'Sombre', desc: '' },
+  ];
+  const widthOptions: { value: Width; label: string; desc: string }[] = [
+    { value: 'standard', label: 'Standard', desc: '~960 px' },
+    { value: 'large', label: 'Large', desc: 'Pleine largeur' },
+  ];
+
+  return (
+    <div className="appearance-panel">
+      <div className="appearance-panel-header">
+        <span className="font-bold text-sm">Apparence</span>
+        <button onClick={onClose} className="appearance-panel-close" aria-label="Fermer"><X size={14} /></button>
+      </div>
+
+      <div className="appearance-panel-section">
+        <div className="appearance-panel-label">Couleur</div>
+        {themeOptions.map(({ value, label, desc }) => (
+          <label key={value} className="appearance-panel-option">
+            <input type="radio" name="theme" value={value} checked={appearance.theme === value} onChange={() => set({ theme: value })} className="appearance-panel-radio" />
+            <span className="flex-1 text-sm">{label}</span>
+            {desc && <span className="text-[11px] text-muted-foreground">{desc}</span>}
+          </label>
+        ))}
+      </div>
+
+      <div className="appearance-panel-section">
+        <div className="appearance-panel-label">Largeur</div>
+        {widthOptions.map(({ value, label, desc }) => (
+          <label key={value} className="appearance-panel-option">
+            <input type="radio" name="width" value={value} checked={appearance.width === value} onChange={() => set({ width: value })} className="appearance-panel-radio" />
+            <span className="flex-1 text-sm">{label}</span>
+            <span className="text-[11px] text-muted-foreground">{desc}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /* ─── Shared UI primitives ──────────────────────────────────────────────── */
 
 function Button({ children, className = '', variant = 'default', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'outline' | 'ghost' | 'danger' }) {
   const variants = {
     default: 'bg-primary text-primary-foreground hover:brightness-110',
-    outline: 'border border-[var(--wiki-border)] bg-[#f8f9fa] hover:bg-[#eaecf0] text-foreground dark:bg-secondary dark:hover:bg-muted',
+    outline: 'border border-[var(--wiki-border)] bg-[#f8f9fa] hover:bg-[#eaecf0] text-foreground dark:bg-secondary dark:hover:bg-muted dark:border-border',
     ghost: 'hover:bg-secondary text-foreground',
     danger: 'border border-destructive/30 text-destructive hover:bg-destructive/10',
   };
   return (
-    <button
-      className={`inline-flex items-center justify-center gap-1.5 rounded-sm px-3 py-1.5 text-sm transition duration-150 disabled:pointer-events-none disabled:opacity-50 ${variants[variant]} ${className}`}
-      {...props}
-    >
+    <button className={`inline-flex items-center justify-center gap-1.5 rounded-sm px-3 py-1.5 text-sm transition duration-150 disabled:pointer-events-none disabled:opacity-50 ${variants[variant]} ${className}`} {...props}>
       {children}
     </button>
   );
@@ -106,7 +216,7 @@ function Button({ children, className = '', variant = 'default', ...props }: But
 
 function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted' | 'green' | 'rust' }) {
   return (
-    <span className={`inline-flex items-center rounded-sm px-2 py-0.5 text-[11px] ${tone === 'green' ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950 dark:text-blue-300' : tone === 'rust' ? 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950 dark:text-red-300' : 'bg-[#f8f9fa] border border-[var(--wiki-border)] text-muted-foreground'}`}>
+    <span className={`inline-flex items-center rounded-sm px-2 py-0.5 text-[11px] ${tone === 'green' ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800' : tone === 'rust' ? 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800' : 'bg-[#f8f9fa] border border-[var(--wiki-border)] text-muted-foreground dark:bg-secondary dark:border-border'}`}>
       {children}
     </span>
   );
@@ -114,7 +224,7 @@ function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?: 'mute
 
 function Empty({ title, text, action }: { title: string; text: string; action?: ReactNode }) {
   return (
-    <div className="flex min-h-[260px] flex-col items-center justify-center rounded border border-dashed bg-[#f8f9fa] dark:bg-secondary px-6 text-center">
+    <div className="flex min-h-[260px] flex-col items-center justify-center rounded border border-dashed border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary px-6 text-center">
       <Archive size={20} className="mb-3 text-muted-foreground" />
       <h3 className="font-bold text-base">{title}</h3>
       <p className="mt-1 max-w-sm text-sm text-muted-foreground">{text}</p>
@@ -123,74 +233,91 @@ function Empty({ title, text, action }: { title: string; text: string; action?: 
   );
 }
 
-/* ─── Wikipedia-style Shell ─────────────────────────────────────────────── */
+/* ─── Shell ─────────────────────────────────────────────────────────────── */
 
 function Shell({ children }: { children: ReactNode }) {
   const [mobile, setMobile] = useState(false);
+  const [showAppearance, setShowAppearance] = useState(false);
   const [query, setQuery] = useState('');
   const [, setLocation] = useLocation();
+  const { appearance } = useAppearance();
 
   const doSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (query.trim()) setLocation(`/?q=${encodeURIComponent(query.trim())}`);
   };
 
+  const maxW = appearance.width === 'large' ? 'max-w-[1300px]' : 'max-w-[960px]';
+
   return (
     <div className="min-h-[100dvh] bg-white dark:bg-background">
-      {/* Top header — matches Wikipedia's compact bar */}
-      <header className="border-b border-[var(--wiki-border)] bg-white dark:bg-background dark:border-border">
-        <div className="mx-auto flex max-w-[1300px] items-center gap-4 px-4 py-2">
-          {/* Logo */}
-          <button className="md:hidden text-muted-foreground mr-1" onClick={() => setMobile(!mobile)}>
+      {/* Top header */}
+      <header className="border-b border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background sticky top-0 z-30">
+        <div className={`${maxW} mx-auto flex items-center gap-3 px-4 py-2`}>
+          <button className="md:hidden text-muted-foreground" onClick={() => setMobile(!mobile)} aria-label="Menu">
             <Menu size={18} />
           </button>
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--wiki-border)] bg-white dark:bg-secondary overflow-hidden">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary overflow-hidden">
               <svg viewBox="0 0 60 60" className="h-7 w-7" aria-hidden>
-                <circle cx="30" cy="30" r="28" fill="#fff" stroke="#a2a9b1" strokeWidth="2"/>
-                <text x="30" y="38" textAnchor="middle" fontSize="28" fontFamily="Georgia,serif" fill="#202122" fontWeight="bold">W</text>
+                <circle cx="30" cy="30" r="28" fill="transparent" stroke="#a2a9b1" strokeWidth="2"/>
+                <text x="30" y="38" textAnchor="middle" fontSize="28" fontFamily="Georgia,serif" fill="currentColor" fontWeight="bold">W</text>
               </svg>
             </div>
             <div className="leading-tight">
-              <div className="font-bold text-[16px] text-foreground leading-none">WikiBase</div>
+              <div className="font-bold text-[16px] leading-none">WikiBase</div>
               <div className="text-[10px] text-muted-foreground">L'encyclopédie libre locale</div>
             </div>
           </Link>
 
-          {/* Search */}
-          <form onSubmit={doSearch} className="flex flex-1 max-w-xl items-center gap-0">
+          <form onSubmit={doSearch} className="flex flex-1 min-w-0 items-center">
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Rechercher sur WikiBase"
-              className="h-8 flex-1 rounded-l border border-r-0 border-[var(--wiki-border)] bg-white dark:bg-secondary px-3 text-sm outline-none focus:border-primary"
+              className="h-8 flex-1 min-w-0 rounded-l border border-r-0 border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-3 text-sm outline-none focus:border-primary"
             />
-            <button type="submit" className="h-8 rounded-r border border-[var(--wiki-border)] bg-[#f8f9fa] dark:bg-muted px-3 hover:bg-[#eaecf0] dark:hover:bg-secondary text-sm">
+            <button type="submit" className="h-8 rounded-r border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-muted px-3 hover:bg-[#eaecf0] dark:hover:bg-secondary shrink-0">
               <Search size={14} />
             </button>
           </form>
 
-          {/* Right actions */}
           <nav className="hidden md:flex items-center gap-3 text-xs shrink-0">
             <Link href="/create" className="wiki-link flex items-center gap-1">
-              <Plus size={13} /> Créer une page
+              <Plus size={13} /> Créer
             </Link>
             <Link href="/trash" className="wiki-link">Corbeille</Link>
           </nav>
+
+          {/* Appearance toggle */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setShowAppearance((v) => !v)}
+              aria-label="Apparence"
+              title="Apparence"
+              className={`flex h-8 w-8 items-center justify-center rounded border border-[var(--wiki-border)] dark:border-border text-sm font-bold transition hover:bg-[#eaecf0] dark:hover:bg-secondary ${showAppearance ? 'bg-[#eaecf0] dark:bg-secondary' : 'bg-white dark:bg-background'}`}
+            >
+              <Settings2 size={15} />
+            </button>
+            {showAppearance && <AppearancePanel onClose={() => setShowAppearance(false)} />}
+          </div>
         </div>
       </header>
 
-      {/* Mobile drawer */}
+      {/* Mobile nav */}
       {mobile && (
-        <div className="border-b border-[var(--wiki-border)] bg-[#f8f9fa] dark:bg-secondary px-4 py-3 text-sm md:hidden">
+        <div className="border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary px-4 py-3 text-sm">
           <Link href="/" onClick={() => setMobile(false)} className="wiki-link block py-1">Tableau de bord</Link>
           <Link href="/create" onClick={() => setMobile(false)} className="wiki-link block py-1">Créer une page</Link>
           <Link href="/trash" onClick={() => setMobile(false)} className="wiki-link block py-1">Corbeille</Link>
         </div>
       )}
 
-      {/* Page body */}
-      <main className="mx-auto max-w-[1300px] px-4 py-4">
+      {/* Overlay to close appearance panel */}
+      {showAppearance && <div className="fixed inset-0 z-20" onClick={() => setShowAppearance(false)} />}
+
+      {/* Content — width controlled by appearance */}
+      <main className={`${maxW} mx-auto px-4 py-4`}>
         {children}
       </main>
     </div>
@@ -213,16 +340,12 @@ function Dashboard() {
 
   return (
     <div className="animate-rise">
-      {/* Page title */}
       <h1 className="font-editorial text-[2em] font-normal mb-1">Toutes les pages</h1>
-      <div className="border-b border-[var(--wiki-border)] pb-3 mb-5 text-sm text-muted-foreground flex flex-wrap items-center justify-between gap-3">
+      <div className="border-b border-[var(--wiki-border)] dark:border-border pb-3 mb-5 text-sm text-muted-foreground flex flex-wrap items-center justify-between gap-3">
         <span>{visible.length} page{visible.length !== 1 ? 's' : ''} · stockage local</span>
-        <Link href="/create" className="wiki-link flex items-center gap-1 text-sm">
-          <Plus size={13} /> Créer une nouvelle page
-        </Link>
+        <Link href="/create" className="wiki-link flex items-center gap-1 text-sm"><Plus size={13} /> Créer une nouvelle page</Link>
       </div>
 
-      {/* Filters */}
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <label className="relative block max-w-md flex-1">
           <Search className="absolute left-2.5 top-2 text-muted-foreground" size={14} />
@@ -231,7 +354,7 @@ function Dashboard() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Filtrer les pages..."
-            className="h-8 w-full rounded border border-[var(--wiki-border)] bg-white dark:bg-secondary pl-8 pr-3 text-sm outline-none focus:border-primary"
+            className="h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary pl-8 pr-3 text-sm outline-none focus:border-primary"
           />
         </label>
         <div className="flex flex-wrap gap-1">
@@ -248,7 +371,6 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* Stats bar */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           { label: 'Pages actives', value: String(visible.length) },
@@ -256,69 +378,63 @@ function Dashboard() {
           { label: 'Format source', value: 'TXT' },
           { label: 'Stockage', value: 'Local' },
         ].map(({ label, value }) => (
-          <div key={label} className="rounded border border-[var(--wiki-border)] bg-[#f8f9fa] dark:bg-secondary p-3">
+          <div key={label} className="rounded border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-3">
             <div className="text-[11px] text-muted-foreground">{label}</div>
             <div data-testid={`stat-${label.toLowerCase().replaceAll(' ', '-')}`} className="text-xl font-bold mt-0.5">{value}</div>
           </div>
         ))}
       </div>
 
-      {/* Page list */}
       {visible.length ? (
         <div className="grid gap-3 lg:grid-cols-2">
-          {visible.map((page, i) => (
-            <Link
-              href={`/page/${page.id}`}
-              data-testid={`card-page-${page.id}`}
-              key={page.id}
-              className={`group block rounded border border-[var(--wiki-border)] bg-white dark:bg-card p-4 hover:border-primary/50 hover:bg-[#f8f9fa] dark:hover:bg-secondary transition ${i === 0 ? 'lg:col-span-2' : ''}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <Badge tone="green">Publié</Badge>
-                    <span>{page.category}</span>
-                    <span>·</span>
-                    <span>{page.type}</span>
-                    <span>·</span>
-                    <span>{formatDate(page.updatedAt)}</span>
+          {visible.map((page, i) => {
+            const color = page.accentColor ?? categoryColor(page.category);
+            return (
+              <Link
+                href={`/page/${page.id}`}
+                data-testid={`card-page-${page.id}`}
+                key={page.id}
+                className={`group block rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4 hover:border-primary/50 transition ${i === 0 ? 'lg:col-span-2' : ''}`}
+                style={{ borderTopWidth: 3, borderTopColor: color }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <Badge tone="green">Publié</Badge>
+                      <span>{page.category}</span>
+                      <span>·</span>
+                      <span>{page.type}</span>
+                      <span>·</span>
+                      <span>{formatDate(page.updatedAt)}</span>
+                    </div>
+                    <h2 data-testid={`text-page-title-${page.id}`} className={`wiki-link font-editorial ${i === 0 ? 'text-[1.6em]' : 'text-[1.3em]'} group-hover:underline`}>{page.title}</h2>
+                    {page.subtitle && <p className="text-sm text-muted-foreground mt-0.5 italic">{page.subtitle}</p>}
+                    <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{page.introduction}</p>
                   </div>
-                  <h2 data-testid={`text-page-title-${page.id}`} className={`wiki-link font-editorial ${i === 0 ? 'text-[1.6em]' : 'text-[1.3em]'} group-hover:underline`}>
-                    {page.title}
-                  </h2>
-                  {page.subtitle && <p className="text-sm text-muted-foreground mt-0.5">{page.subtitle}</p>}
-                  <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{page.introduction}</p>
+                  <ChevronRight size={15} className="shrink-0 text-muted-foreground mt-1" />
                 </div>
-                <ChevronRight size={15} className="shrink-0 text-muted-foreground mt-1" />
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[var(--wiki-border)] pt-2">
-                {page.categories.slice(0, 4).map((c) => (
-                  <span key={c} className="text-[11px] wiki-link">{c}</span>
-                ))}
-                <span className="ml-auto text-[11px] text-muted-foreground">
-                  {page.sections.length} sections
-                </span>
-              </div>
-            </Link>
-          ))}
+                <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[var(--wiki-border)] dark:border-border pt-2">
+                  {page.categories.slice(0, 4).map((c) => <span key={c} className="text-[11px] wiki-link">{c}</span>)}
+                  <span className="ml-auto text-[11px] text-muted-foreground">{page.sections.length} sections</span>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       ) : (
-        <Empty
-          title="Aucune page trouvée"
-          text="Modifiez votre recherche ou importez un nouveau fichier TXT."
-          action={<Link href="/create" className="wiki-link text-sm">Créer une page</Link>}
-        />
+        <Empty title="Aucune page trouvée" text="Modifiez votre recherche ou importez un nouveau fichier TXT." action={<Link href="/create" className="wiki-link text-sm">Créer une page</Link>} />
       )}
     </div>
   );
 }
 
-/* ─── CreatePage ────────────────────────────────────────────────────────── */
+/* ─── CreatePage ─────────────────────────────────────────────────────────── */
 
 function SourcePreview({ page }: { page: WikiPage }) {
+  const color = page.accentColor ?? categoryColor(page.category);
   return (
-    <div className="rounded border border-[var(--wiki-border)] bg-white dark:bg-card p-5">
-      <div className="mb-4 flex items-center justify-between border-b border-[var(--wiki-border)] pb-4">
+    <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-5">
+      <div className="mb-4 flex items-center justify-between border-b border-[var(--wiki-border)] dark:border-border pb-4">
         <div>
           <Badge tone="green">Analyse réussie</Badge>
           <h2 className="mt-2 font-editorial text-[1.5em]">{page.title}</h2>
@@ -326,13 +442,13 @@ function SourcePreview({ page }: { page: WikiPage }) {
         </div>
         <ShieldCheck className="text-primary" size={22} />
       </div>
-      <div className="grid gap-5 lg:grid-cols-[1fr_240px]">
+      <div className="grid gap-5 lg:grid-cols-[1fr_220px]">
         <div>
           <p className="text-sm leading-6">{page.introduction}</p>
-          <div className="mt-5 space-y-4">
+          <div className="mt-4 space-y-3">
             {page.sections.slice(0, 2).map((s) => (
               <div key={s.title}>
-                <h3 className="font-bold text-sm border-b border-[var(--wiki-border)] pb-1">{s.title}</h3>
+                <h3 className="font-bold text-sm border-b border-[var(--wiki-border)] dark:border-border pb-1">{s.title}</h3>
                 {s.blocks.slice(0, 1).map((b, i) =>
                   b.type === 'text' ? <p key={i} className="mt-1 text-xs text-muted-foreground line-clamp-3">{b.content}</p> : null
                 )}
@@ -341,10 +457,10 @@ function SourcePreview({ page }: { page: WikiPage }) {
           </div>
         </div>
         <div className="wiki-infobox h-fit">
-          <div className="wiki-infobox-header">{page.title}</div>
+          <div className="wiki-infobox-header" style={{ background: color }}>{page.title}</div>
           <div className="p-2">
             {page.infobox.slice(0, 6).map((r) => (
-              <div key={r.key} className="grid grid-cols-[45%_55%] border-b border-[var(--wiki-border)] py-1 text-xs last:border-0">
+              <div key={r.key} className="grid grid-cols-[45%_55%] border-b border-[var(--wiki-border)] dark:border-border py-1 text-xs last:border-0">
                 <span className="font-bold">{r.key}</span>
                 <span className="text-muted-foreground">{r.value}</span>
               </div>
@@ -362,12 +478,17 @@ function CreatePage() {
   const [source, setSource] = useState(demoSource);
   const [category, setCategory] = useState('Éducation');
   const [type, setType] = useState('Université');
+  const [accentColor, setAccentColor] = useState(categoryColor('Éducation'));
   const [parsed, setParsed] = useState<WikiPage | null>(null);
   const [filename, setFilename] = useState('exemple_universa_lacora.txt');
 
   const typeOptions = CATEGORY_TYPES[category] ?? CATEGORY_TYPES['Personnes & Organisations'];
 
-  const analyze = () => setParsed(parseWikiText(source, category, type));
+  const analyze = () => {
+    const p = parseWikiText(source, category, type);
+    p.accentColor = accentColor;
+    setParsed(p);
+  };
   const onFile = (file?: File) => {
     if (!file) return;
     setFilename(file.name);
@@ -378,7 +499,7 @@ function CreatePage() {
   const publish = () => {
     if (!parsed) return;
     const pages = seedPages().filter((p) => p.id !== parsed.id);
-    savePages([...pages, parsed]);
+    savePages([...pages, { ...parsed, accentColor }]);
     setLocation(`/page/${parsed.id}`);
   };
 
@@ -386,19 +507,16 @@ function CreatePage() {
     <div className="animate-rise">
       <div className="flex items-center justify-between mb-3">
         <h1 className="font-editorial text-[2em] font-normal">Créer une page</h1>
-        <Link href="/" className="wiki-link text-sm flex items-center gap-1">
-          <ArrowLeft size={13} /> Retour
-        </Link>
+        <Link href="/" className="wiki-link text-sm flex items-center gap-1"><ArrowLeft size={13} /> Retour</Link>
       </div>
-      <div className="border-b border-[var(--wiki-border)] mb-5 pb-3 text-sm text-muted-foreground">
+      <div className="border-b border-[var(--wiki-border)] dark:border-border mb-5 pb-3 text-sm text-muted-foreground">
         Importez un fichier TXT balisé. WikiBase l'analyse de façon déterministe, sans reformulation.
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(400px,1fr)]">
-        {/* Left column */}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(380px,1fr)]">
         <div className="space-y-4">
-          {/* Step 1: classification */}
-          <div className="rounded border border-[var(--wiki-border)] bg-white dark:bg-card p-4">
+          {/* Step 1 */}
+          <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
             <div className="mb-3 font-bold text-sm flex items-center gap-2">
               <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-white">1</span>
               Classer la page
@@ -409,8 +527,13 @@ function CreatePage() {
                 <select
                   data-testid="select-category"
                   value={category}
-                  onChange={(e) => { setCategory(e.target.value); setType(CATEGORY_TYPES[e.target.value]?.[0] ?? ''); }}
-                  className="mt-1 h-9 w-full rounded border border-[var(--wiki-border)] bg-white dark:bg-secondary px-2 text-sm font-normal"
+                  onChange={(e) => {
+                    const cat = e.target.value;
+                    setCategory(cat);
+                    setType(CATEGORY_TYPES[cat]?.[0] ?? '');
+                    setAccentColor(categoryColor(cat));
+                  }}
+                  className="mt-1 h-9 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-2 text-sm font-normal"
                 >
                   {ALL_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                 </select>
@@ -421,16 +544,29 @@ function CreatePage() {
                   data-testid="select-type"
                   value={type}
                   onChange={(e) => setType(e.target.value)}
-                  className="mt-1 h-9 w-full rounded border border-[var(--wiki-border)] bg-white dark:bg-secondary px-2 text-sm font-normal"
+                  className="mt-1 h-9 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-2 text-sm font-normal"
                 >
                   {typeOptions.map((t) => <option key={t}>{t}</option>)}
                 </select>
               </label>
             </div>
+            {/* Accent colour */}
+            <div className="mt-3 flex items-center gap-3">
+              <label className="text-xs font-bold shrink-0">Couleur de l'infobox</label>
+              <input
+                type="color"
+                value={accentColor}
+                onChange={(e) => setAccentColor(e.target.value)}
+                className="h-8 w-14 cursor-pointer rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary p-0.5"
+                title="Couleur d'en-tête de l'infobox"
+              />
+              <span className="font-mono-app text-[11px] text-muted-foreground">{accentColor}</span>
+              <button onClick={() => setAccentColor(categoryColor(category))} className="wiki-link text-[11px]">Réinitialiser</button>
+            </div>
           </div>
 
-          {/* Step 2: import */}
-          <div className="rounded border border-[var(--wiki-border)] bg-white dark:bg-card p-4">
+          {/* Step 2 */}
+          <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
             <div className="mb-3 font-bold text-sm flex items-center gap-2">
               <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-white">2</span>
               Importer la source TXT
@@ -438,7 +574,7 @@ function CreatePage() {
             <button
               data-testid="button-upload-txt"
               onClick={() => inputRef.current?.click()}
-              className="flex w-full flex-col items-center rounded border border-dashed border-primary/40 bg-[#f8f9fa] dark:bg-secondary px-4 py-7 text-center hover:bg-[#eaecf0] dark:hover:bg-muted transition"
+              className="flex w-full flex-col items-center rounded border border-dashed border-primary/40 bg-[#f8f9fa] dark:bg-secondary px-4 py-6 text-center hover:bg-[#eaecf0] dark:hover:bg-muted transition"
             >
               <Upload size={20} className="mb-2 text-primary" />
               <span className="text-sm font-bold">{filename}</span>
@@ -449,19 +585,17 @@ function CreatePage() {
               data-testid="textarea-source"
               value={source}
               onChange={(e) => { setSource(e.target.value); setParsed(null); }}
-              className="mt-3 min-h-[260px] w-full resize-y rounded border border-[var(--wiki-border)] bg-white dark:bg-secondary p-3 font-mono-app text-xs leading-5 outline-none focus:border-primary"
+              className="mt-3 min-h-[240px] w-full resize-y rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary p-3 font-mono-app text-xs leading-5 outline-none focus:border-primary"
             />
             <div className="mt-3 flex items-center justify-between">
               <span className="text-[11px] text-muted-foreground font-mono-app">{source.split('\n').length} lignes · {source.length} car.</span>
-              <Button data-testid="button-analyze-source" onClick={analyze}>
-                <ShieldCheck size={14} /> Analyser
-              </Button>
+              <Button data-testid="button-analyze-source" onClick={analyze}><ShieldCheck size={14} /> Analyser</Button>
             </div>
           </div>
         </div>
 
-        {/* Right column */}
-        <div className="xl:sticky xl:top-4 xl:self-start">
+        {/* Preview column */}
+        <div className="xl:sticky xl:top-16 xl:self-start">
           {parsed ? (
             <>
               <SourcePreview page={parsed} />
@@ -470,12 +604,10 @@ function CreatePage() {
               </Button>
             </>
           ) : (
-            <div className="flex min-h-[420px] flex-col items-center justify-center rounded border border-dashed border-[var(--wiki-border)] bg-[#f8f9fa] dark:bg-secondary p-8 text-center">
+            <div className="flex min-h-[380px] flex-col items-center justify-center rounded border border-dashed border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-8 text-center">
               <FileText size={28} className="text-muted-foreground" />
               <h2 className="mt-4 font-bold text-base">Aperçu en attente</h2>
-              <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                Cliquez sur « Analyser » pour prévisualiser le résultat avant publication.
-              </p>
+              <p className="mt-1 max-w-xs text-sm text-muted-foreground">Cliquez sur « Analyser » pour prévisualiser le résultat avant publication.</p>
             </div>
           )}
         </div>
@@ -484,7 +616,7 @@ function CreatePage() {
   );
 }
 
-/* ─── ReaderPage ────────────────────────────────────────────────────────── */
+/* ─── ReaderPage ─────────────────────────────────────────────────────────── */
 
 function InternalText({ text, pages }: { text: string; pages: WikiPage[] }) {
   const parts = text.split(/(\[\[[^\]]+\]\])/g);
@@ -504,20 +636,22 @@ function InternalText({ text, pages }: { text: string; pages: WikiPage[] }) {
 }
 
 function Infobox({ page }: { page: WikiPage }) {
+  const accentColor = page.accentColor ?? categoryColor(page.category);
+  // In dark mode, we darken the accent colour slightly for readability
   return (
-    <aside data-testid="content-infobox" className="wiki-infobox float-right clear-right ml-5 mb-4 w-[280px] shrink-0 hidden lg:block">
-      <div className="wiki-infobox-header">{page.title}</div>
+    <aside data-testid="content-infobox" className="wiki-infobox w-full lg:float-right lg:clear-right lg:ml-5 lg:mb-4 lg:w-[280px] lg:shrink-0 mb-4">
+      <div className="wiki-infobox-header" style={{ background: accentColor }}>{page.title}</div>
       {page.infoboxImage && (
-        <div className="flex items-center justify-center border-b border-[var(--wiki-border)] bg-[#f8f9fa] dark:bg-secondary py-2 text-center text-xs text-muted-foreground h-40 overflow-hidden">
+        <div className="flex items-center justify-center border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-muted py-2 text-center text-xs text-muted-foreground overflow-hidden" style={{ minHeight: 140 }}>
           {page.infoboxImage.src
-            ? <img src={page.infoboxImage.src} alt={page.infoboxImage.alt} className="max-h-full max-w-full object-contain" />
+            ? <img src={page.infoboxImage.src} alt={page.infoboxImage.alt} className="max-h-40 max-w-full object-contain" />
             : <><ImageIcon size={16} className="mr-1" />Image manquante · {page.infoboxImage.filename}</>
           }
         </div>
       )}
       <div className="p-1">
         {page.infobox.map((r) => (
-          <div key={r.key} className="grid grid-cols-[44%_56%] border-b border-[var(--wiki-border)] py-1 px-1 text-xs last:border-0">
+          <div key={r.key} className="grid grid-cols-[44%_56%] border-b border-[var(--wiki-border)] dark:border-border py-1 px-1 text-xs last:border-0">
             <span className="font-bold">{r.key}</span>
             <span>{r.value}</span>
           </div>
@@ -539,9 +673,9 @@ function BlockView({ block, pages }: { block: WBBlock; pages: WikiPage[] }) {
   }
   if (block.type === 'image') {
     const img = block.image;
-    const alignClass = img.alignment === 'droite' ? 'float-right clear-right ml-4 mb-2' : img.alignment === 'gauche' ? 'float-left clear-left mr-4 mb-2' : 'mx-auto my-3';
+    const alignClass = img.alignment === 'droite' ? 'lg:float-right lg:clear-right lg:ml-4 lg:mb-2' : img.alignment === 'gauche' ? 'lg:float-left lg:clear-left lg:mr-4 lg:mb-2' : 'mx-auto my-3';
     return (
-      <figure data-testid={`image-block-${img.filename}`} className={`${alignClass} w-[220px] border border-[var(--wiki-border)] bg-[#f8f9fa] dark:bg-secondary p-1 text-center`}>
+      <figure data-testid={`image-block-${img.filename}`} className={`${alignClass} w-full lg:w-[220px] border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-1 text-center mb-3`}>
         <div className="flex h-32 items-center justify-center overflow-hidden bg-[#eaecf0] dark:bg-muted text-xs text-muted-foreground">
           {img.src
             ? <img src={img.src} alt={img.alt} className="max-h-full max-w-full object-contain" />
@@ -558,12 +692,12 @@ function BlockView({ block, pages }: { block: WBBlock; pages: WikiPage[] }) {
         {block.table.title && <div className="text-sm font-bold mb-1">{block.table.title}</div>}
         <table className="border-collapse text-sm">
           <thead>
-            <tr>{block.table.columns.map((c) => <th key={c} className="border border-[#a2a9b1] bg-[#eaecf0] dark:bg-muted px-3 py-1.5 font-bold text-left">{c}</th>)}</tr>
+            <tr>{block.table.columns.map((c) => <th key={c} className="border border-[#a2a9b1] dark:border-border bg-[#eaecf0] dark:bg-muted px-3 py-1.5 font-bold text-left">{c}</th>)}</tr>
           </thead>
           <tbody>
             {block.table.rows.map((row, i) => (
               <tr key={i} className="even:bg-[#f8f9fa] dark:even:bg-secondary/30">
-                {row.map((cell, j) => <td key={j} className="border border-[#a2a9b1] px-3 py-1.5">{cell}</td>)}
+                {row.map((cell, j) => <td key={j} className="border border-[#a2a9b1] dark:border-border px-3 py-1.5">{cell}</td>)}
               </tr>
             ))}
           </tbody>
@@ -583,18 +717,18 @@ function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; lab
   };
   const set = (key: keyof WBImage, value: string) => onChange({ ...image, [key]: value });
   return (
-    <div className="rounded border border-[var(--wiki-border)] bg-[#f8f9fa] dark:bg-secondary p-3">
+    <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-3">
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2"><ImageIcon size={14} className="text-primary" /><span className="text-sm font-bold truncate">{label}</span></div>
         <button data-testid={`button-delete-image-${label}`} onClick={onDelete} className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 size={14} /></button>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        <label className="text-xs font-bold">Fichier<input data-testid={`input-image-file-${label}`} value={image.filename} onChange={(e) => set('filename', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] bg-white dark:bg-background px-2 text-xs font-normal" /></label>
-        <label className="text-xs font-bold">Légende<input data-testid={`input-image-caption-${label}`} value={image.caption} onChange={(e) => set('caption', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] bg-white dark:bg-background px-2 text-xs font-normal" /></label>
-        <label className="text-xs font-bold">Texte alt<input data-testid={`input-image-alt-${label}`} value={image.alt} onChange={(e) => set('alt', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] bg-white dark:bg-background px-2 text-xs font-normal" /></label>
+        <label className="text-xs font-bold">Fichier<input data-testid={`input-image-file-${label}`} value={image.filename} onChange={(e) => set('filename', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background px-2 text-xs font-normal" /></label>
+        <label className="text-xs font-bold">Légende<input data-testid={`input-image-caption-${label}`} value={image.caption} onChange={(e) => set('caption', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background px-2 text-xs font-normal" /></label>
+        <label className="text-xs font-bold">Texte alt<input data-testid={`input-image-alt-${label}`} value={image.alt} onChange={(e) => set('alt', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background px-2 text-xs font-normal" /></label>
         <div className="grid grid-cols-2 gap-1">
-          <label className="text-xs font-bold">Alignement<select data-testid={`select-image-alignment-${label}`} value={image.alignment} onChange={(e) => set('alignment', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] bg-white dark:bg-background px-2 text-xs font-normal"><option>gauche</option><option>centre</option><option>droite</option></select></label>
-          <label className="text-xs font-bold">Taille<input data-testid={`input-image-size-${label}`} value={image.size} onChange={(e) => set('size', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] bg-white dark:bg-background px-2 text-xs font-normal" /></label>
+          <label className="text-xs font-bold">Alignement<select data-testid={`select-image-alignment-${label}`} value={image.alignment} onChange={(e) => set('alignment', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background px-2 text-xs font-normal"><option>gauche</option><option>centre</option><option>droite</option></select></label>
+          <label className="text-xs font-bold">Taille<input data-testid={`input-image-size-${label}`} value={image.size} onChange={(e) => set('size', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background px-2 text-xs font-normal" /></label>
         </div>
       </div>
       <label className="mt-2 flex cursor-pointer items-center justify-center rounded border border-dashed border-primary/40 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/5">
@@ -628,17 +762,15 @@ function ReaderPage() {
         <span>{page.title}</span>
       </div>
 
-      {/* Article title */}
-      <h1 className="font-editorial text-[2em] font-normal leading-tight mb-1">{page.title}</h1>
+      <h1 className="font-editorial text-[2em] font-normal leading-tight mb-0.5">{page.title}</h1>
       {page.subtitle && <p className="text-base text-muted-foreground mb-2 italic">{page.subtitle}</p>}
 
-      {/* Tab bar — Article / Discussion */}
-      <div className="flex items-end border-b border-[var(--wiki-border)] mb-0 mt-3">
+      {/* Tab bar */}
+      <div className="flex items-end border-b border-[var(--wiki-border)] dark:border-border mb-0 mt-3">
         <div className="flex gap-0 -mb-px">
           <span className="wiki-tab wiki-tab-active">Article</span>
           <span className="wiki-tab">Discussion</span>
         </div>
-        {/* Actions right side */}
         <div className="ml-auto flex items-end gap-0 -mb-px text-[13px]">
           <span className="wiki-tab wiki-tab-active">Lire</span>
           <Link href={`/page/${page.id}/edit`} data-testid="link-edit-page" className="wiki-tab">Modifier</Link>
@@ -649,7 +781,7 @@ function ReaderPage() {
       </div>
 
       {/* Meta line */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--wiki-border)] py-2 mb-4 text-[12px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--wiki-border)] dark:border-border py-2 mb-4 text-[12px] text-muted-foreground">
         <Badge tone="muted">{page.category}</Badge>
         <Badge tone="muted">{page.type}</Badge>
         <span>Créé le {formatDate(page.createdAt)}</span>
@@ -658,23 +790,20 @@ function ReaderPage() {
         <Link href="/" className="ml-auto wiki-link flex items-center gap-1"><ArrowLeft size={11} /> Retour</Link>
       </div>
 
-      {/* Article body — infobox floats right via CSS */}
+      {/* Article body */}
       <div className="article-body clearfix" data-testid="article-page-content">
         <Infobox page={page} />
 
-        {/* Aliases */}
         {page.aliases.length > 0 && (
           <p className="text-sm italic text-muted-foreground mb-3">
             Également connu sous le nom de : {page.aliases.join(', ')}.
           </p>
         )}
 
-        {/* Introduction */}
         <p className="text-sm leading-7 mb-4">
           <InternalText text={page.introduction} pages={pages} />
         </p>
 
-        {/* Table of contents */}
         {page.sections.length > 2 && (
           <div className="wiki-toc mb-5 clear-right" style={{ minWidth: 200, maxWidth: 340 }}>
             <div className="wiki-toc-title">Sommaire</div>
@@ -691,9 +820,8 @@ function ReaderPage() {
           </div>
         )}
 
-        {/* Sections */}
         {page.sections.map((section, i) => (
-          <section data-testid={`section-${i}`} id={`section-${i}`} key={`${section.title}-${i}`} className="mb-6 scroll-mt-4">
+          <section data-testid={`section-${i}`} id={`section-${i}`} key={`${section.title}-${i}`} className="mb-6 scroll-mt-16">
             {section.level === 2 && <h2 className="wiki-h2">{section.title}</h2>}
             {section.level === 3 && <h3 className="wiki-h3">{section.title}</h3>}
             {section.level === 4 && <h4 className="wiki-h4">{section.title}</h4>}
@@ -703,9 +831,8 @@ function ReaderPage() {
           </section>
         ))}
 
-        {/* Voir aussi */}
         {page.links.length > 0 && (
-          <div className="mt-8 border-t border-[var(--wiki-border)] pt-5 clear-both">
+          <div className="mt-8 border-t border-[var(--wiki-border)] dark:border-border pt-5 clear-both">
             <h2 className="wiki-h2">Voir aussi</h2>
             <div className="mt-2 flex flex-wrap gap-2">
               {page.links.map((l) => {
@@ -718,9 +845,8 @@ function ReaderPage() {
           </div>
         )}
 
-        {/* Notes et références */}
         {page.references.length > 0 && (
-          <div className="mt-6 border-t border-[var(--wiki-border)] pt-4 clear-both">
+          <div className="mt-6 border-t border-[var(--wiki-border)] dark:border-border pt-4 clear-both">
             <h2 className="wiki-h2">Notes et références</h2>
             <ol className="mt-2 list-decimal pl-5 space-y-1 text-sm text-muted-foreground">
               {page.references.map((r) => <li key={r.key}>{r.value}</li>)}
@@ -728,17 +854,15 @@ function ReaderPage() {
           </div>
         )}
 
-        {/* Bibliographie */}
         {page.bibliography.length > 0 && (
-          <div className="mt-6 border-t border-[var(--wiki-border)] pt-4 clear-both">
+          <div className="mt-6 border-t border-[var(--wiki-border)] dark:border-border pt-4 clear-both">
             <h2 className="wiki-h2">Bibliographie</h2>
             {page.bibliography.map((b) => <p key={b} className="text-sm text-muted-foreground mt-1">{b}</p>)}
           </div>
         )}
 
-        {/* Categories */}
         {page.categories.length > 0 && (
-          <div className="mt-8 border-t border-[var(--wiki-border)] pt-3 clear-both">
+          <div className="mt-8 border-t border-[var(--wiki-border)] dark:border-border pt-3 clear-both">
             <span className="text-sm font-bold mr-2">Catégories :</span>
             {page.categories.map((c, i) => (
               <span key={c}>
@@ -753,7 +877,7 @@ function ReaderPage() {
   );
 }
 
-/* ─── EditPage ──────────────────────────────────────────────────────────── */
+/* ─── EditPage ───────────────────────────────────────────────────────────── */
 
 function EditPage() {
   const { id } = useParams<{ id: string }>();
@@ -775,32 +899,52 @@ function EditPage() {
   const updateSectionBlock = (si: number, bi: number, block: WBBlock) =>
     update('sections', page.sections.map((s, i) => i === si ? { ...s, blocks: s.blocks.map((b, j) => j === bi ? block : b) } : s));
 
+  const currentColor = page.accentColor ?? categoryColor(page.category);
+
   return (
     <div className="animate-rise">
       <div className="flex items-center justify-between mb-3">
         <h1 className="font-editorial text-[1.8em] font-normal">Modifier : {page.title}</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <Link href={`/page/${page.id}`} data-testid="link-cancel-edit" className="wiki-link text-sm">Annuler</Link>
           <Button data-testid="button-save-page" onClick={save}><Check size={14} /> Enregistrer</Button>
         </div>
       </div>
-      <div className="border-b border-[var(--wiki-border)] mb-5 pb-2 text-xs text-muted-foreground">
-        Chaque sauvegarde ajoute une version à l'historique. La source TXT d'origine reste conservée.
+      <div className="border-b border-[var(--wiki-border)] dark:border-border mb-5 pb-2 text-xs text-muted-foreground">
+        Chaque sauvegarde ajoute une version à l'historique.
       </div>
 
       <div className="mx-auto max-w-3xl space-y-4">
         {/* Identity */}
-        <div className="rounded border border-[var(--wiki-border)] bg-white dark:bg-card p-4">
+        <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
           <div className="mb-3 font-bold">Identité</div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-xs font-bold">Titre<input data-testid="input-edit-title" value={page.title} onChange={(e) => update('title', e.target.value)} className="mt-1 h-9 w-full rounded border border-[var(--wiki-border)] bg-white dark:bg-secondary px-2 text-sm font-normal" /></label>
-            <label className="text-xs font-bold">Sous-titre<input data-testid="input-edit-subtitle" value={page.subtitle} onChange={(e) => update('subtitle', e.target.value)} className="mt-1 h-9 w-full rounded border border-[var(--wiki-border)] bg-white dark:bg-secondary px-2 text-sm font-normal" /></label>
+            <label className="text-xs font-bold">Titre<input data-testid="input-edit-title" value={page.title} onChange={(e) => update('title', e.target.value)} className="mt-1 h-9 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-2 text-sm font-normal" /></label>
+            <label className="text-xs font-bold">Sous-titre<input data-testid="input-edit-subtitle" value={page.subtitle} onChange={(e) => update('subtitle', e.target.value)} className="mt-1 h-9 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-2 text-sm font-normal" /></label>
           </div>
-          <label className="mt-3 block text-xs font-bold">Introduction<textarea data-testid="textarea-edit-introduction" value={page.introduction} onChange={(e) => update('introduction', e.target.value)} className="mt-1 min-h-24 w-full rounded border border-[var(--wiki-border)] bg-white dark:bg-secondary p-2 text-sm font-normal leading-6" /></label>
+          <label className="mt-3 block text-xs font-bold">Introduction<textarea data-testid="textarea-edit-introduction" value={page.introduction} onChange={(e) => update('introduction', e.target.value)} className="mt-1 min-h-24 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary p-2 text-sm font-normal leading-6" /></label>
         </div>
 
-        {/* Infobox */}
-        <div className="rounded border border-[var(--wiki-border)] bg-white dark:bg-card p-4">
+        {/* Infobox colour */}
+        <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
+          <div className="mb-3 font-bold">Couleur de l'infobox</div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <input
+              type="color"
+              value={currentColor}
+              onChange={(e) => update('accentColor', e.target.value)}
+              className="h-10 w-16 cursor-pointer rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary p-0.5"
+            />
+            <span className="font-mono-app text-xs text-muted-foreground">{currentColor}</span>
+            <button onClick={() => update('accentColor', categoryColor(page.category))} className="wiki-link text-xs">Réinitialiser selon la catégorie</button>
+            <div className="h-8 flex-1 min-w-[120px] rounded border border-[var(--wiki-border)] dark:border-border text-center text-xs font-bold flex items-center justify-center" style={{ background: currentColor }}>
+              Aperçu en-tête
+            </div>
+          </div>
+        </div>
+
+        {/* Infobox fields */}
+        <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
           <div className="mb-3 flex items-center justify-between font-bold">
             Infobox
             <Button data-testid="button-add-infobox-field" variant="outline" onClick={() => update('infobox', [...page.infobox, { key: 'Nouveau champ', value: '' }])}>
@@ -810,39 +954,37 @@ function EditPage() {
           <div className="space-y-1.5">
             {page.infobox.map((row, i) => (
               <div key={i} className="flex gap-1.5">
-                <input data-testid={`input-infobox-key-${i}`} value={row.key} onChange={(e) => updateInfo(i, e.target.value, 'key')} className="w-2/5 rounded border border-[var(--wiki-border)] bg-white dark:bg-secondary px-2 py-1.5 text-sm" />
-                <input data-testid={`input-infobox-value-${i}`} value={row.value} onChange={(e) => updateInfo(i, e.target.value, 'value')} className="flex-1 rounded border border-[var(--wiki-border)] bg-white dark:bg-secondary px-2 py-1.5 text-sm" />
+                <input data-testid={`input-infobox-key-${i}`} value={row.key} onChange={(e) => updateInfo(i, e.target.value, 'key')} className="w-2/5 rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-2 py-1.5 text-sm" />
+                <input data-testid={`input-infobox-value-${i}`} value={row.value} onChange={(e) => updateInfo(i, e.target.value, 'value')} className="flex-1 rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-2 py-1.5 text-sm" />
                 <button data-testid={`button-delete-infobox-${i}`} onClick={() => update('infobox', page.infobox.filter((_, j) => j !== i))} className="rounded p-1.5 text-muted-foreground hover:text-destructive"><X size={13} /></button>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Infobox image */}
         {page.infoboxImage && (
-          <div className="rounded border border-[var(--wiki-border)] bg-white dark:bg-card p-4">
+          <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
             <div className="mb-3 font-bold">Image de l'infobox</div>
             <ImageEditor label="infobox" image={page.infoboxImage} onChange={(img) => update('infoboxImage', img)} onDelete={() => update('infoboxImage', undefined)} />
           </div>
         )}
 
         {/* Sections */}
-        <div className="rounded border border-[var(--wiki-border)] bg-white dark:bg-card p-4">
+        <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
           <div className="mb-3 flex items-center justify-between font-bold">
-            Sections
-            <Badge>{page.sections.length}</Badge>
+            Sections <Badge>{page.sections.length}</Badge>
           </div>
           {page.sections.map((section, i) => (
-            <div key={`${section.title}-${i}`} className="mb-3 rounded border border-[var(--wiki-border)] bg-[#f8f9fa] dark:bg-secondary p-3">
+            <div key={`${section.title}-${i}`} className="mb-3 rounded border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-3">
               <div className="flex items-center gap-2">
-                <input data-testid={`input-section-title-${i}`} value={section.title} onChange={(e) => update('sections', page.sections.map((s, j) => j === i ? { ...s, title: e.target.value } : s))} className="flex-1 border-b border-[var(--wiki-border)] bg-transparent px-1 py-0.5 font-bold text-sm outline-none focus:border-primary" />
+                <input data-testid={`input-section-title-${i}`} value={section.title} onChange={(e) => update('sections', page.sections.map((s, j) => j === i ? { ...s, title: e.target.value } : s))} className="flex-1 border-b border-[var(--wiki-border)] dark:border-border bg-transparent px-1 py-0.5 font-bold text-sm outline-none focus:border-primary" />
                 <button data-testid={`button-delete-section-${i}`} onClick={() => update('sections', page.sections.filter((_, j) => j !== i))} className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 size={13} /></button>
               </div>
               <div className="mt-2 space-y-1.5">
                 {section.blocks.map((block, j) =>
                   block.type === 'text'
                     ? <div key={j} className="flex gap-1.5">
-                        <textarea data-testid={`textarea-block-${i}-${j}`} value={block.content} onChange={(e) => updateSectionBlock(i, j, { ...block, content: e.target.value })} className="min-h-16 flex-1 rounded border border-[var(--wiki-border)] bg-white dark:bg-background p-2 text-sm leading-5" />
+                        <textarea data-testid={`textarea-block-${i}-${j}`} value={block.content} onChange={(e) => updateSectionBlock(i, j, { ...block, content: e.target.value })} className="min-h-16 flex-1 rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background p-2 text-sm leading-5" />
                         <button data-testid={`button-delete-block-${i}-${j}`} onClick={() => update('sections', page.sections.map((s, si) => si === i ? { ...s, blocks: s.blocks.filter((_, bi) => bi !== j) } : s))} className="h-8 rounded p-1 text-muted-foreground hover:text-destructive"><X size={13} /></button>
                       </div>
                     : block.type === 'image'
@@ -861,11 +1003,10 @@ function EditPage() {
   );
 }
 
-/* ─── ComparePage ───────────────────────────────────────────────────────── */
+/* ─── ComparePage ────────────────────────────────────────────────────────── */
 
 function ComparePage() {
   const { id } = useParams<{ id: string }>();
-  const [, setLocation] = useLocation();
   const pages = seedPages();
   const page = pages.find((p) => p.id === id) ?? pages[0];
   const [source, setSource] = useState('');
@@ -896,12 +1037,12 @@ function ComparePage() {
         <h1 className="font-editorial text-[1.8em] font-normal">Comparer une source</h1>
         <Link href={`/page/${page.id}`} data-testid="link-back-reader" className="wiki-link text-sm flex items-center gap-1"><ArrowLeft size={13} /> Retour</Link>
       </div>
-      <div className="border-b border-[var(--wiki-border)] mb-5 pb-2 text-sm text-muted-foreground">
+      <div className="border-b border-[var(--wiki-border)] dark:border-border mb-5 pb-2 text-sm text-muted-foreground">
         Comparer un nouveau TXT avec « {page.title} ». Rien ne sera appliqué sans votre décision.
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <div className="rounded border border-[var(--wiki-border)] bg-white dark:bg-card p-4">
+        <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
           <div className="mb-3 flex items-center justify-between font-bold">
             Nouvelle source
             <Button data-testid="button-choose-compare-file" variant="outline" onClick={() => inputRef.current?.click()}>
@@ -909,13 +1050,13 @@ function ComparePage() {
             </Button>
           </div>
           <input ref={inputRef} type="file" accept=".txt,text/plain" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => setSource(String(r.result)); r.readAsText(f); } }} />
-          <textarea data-testid="textarea-compare-source" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Collez un TXT ou choisissez un fichier..." className="min-h-[360px] w-full rounded border border-[var(--wiki-border)] bg-white dark:bg-secondary p-3 font-mono-app text-xs leading-5" />
+          <textarea data-testid="textarea-compare-source" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Collez un TXT ou choisissez un fichier..." className="min-h-[340px] w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary p-3 font-mono-app text-xs leading-5" />
           <Button data-testid="button-analyze-compare" onClick={analyze} className="mt-3 w-full">
             <GitCompare size={14} /> Analyser les différences
           </Button>
         </div>
 
-        <div className="rounded border border-[var(--wiki-border)] bg-white dark:bg-card p-4">
+        <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
           {candidate ? (
             <>
               <div className="mb-4 flex items-center justify-between">
@@ -928,7 +1069,7 @@ function ComparePage() {
               {changed.length ? (
                 <div className="space-y-2">
                   {changed.map((d) => (
-                    <div key={d.label} className="rounded border border-[var(--wiki-border)] p-3">
+                    <div key={d.label} className="rounded border border-[var(--wiki-border)] dark:border-border p-3">
                       <div className="mb-1 text-xs font-bold">{d.label}</div>
                       <div className="grid gap-2 text-xs sm:grid-cols-2">
                         <div className="border-l-2 border-muted-foreground/40 pl-2 text-muted-foreground"><span className="mb-1 block font-bold">Ancien</span>{d.old}</div>
@@ -949,7 +1090,7 @@ function ComparePage() {
               }
             </>
           ) : (
-            <div className="flex min-h-[440px] flex-col items-center justify-center text-center">
+            <div className="flex min-h-[400px] flex-col items-center justify-center text-center">
               <GitCompare size={26} className="text-muted-foreground" />
               <h2 className="mt-3 font-bold">Aucune comparaison</h2>
               <p className="mt-1 max-w-xs text-sm text-muted-foreground">Importez une nouvelle source pour voir uniquement les champs qui changent.</p>
@@ -961,7 +1102,7 @@ function ComparePage() {
   );
 }
 
-/* ─── HistoryPage ───────────────────────────────────────────────────────── */
+/* ─── HistoryPage ────────────────────────────────────────────────────────── */
 
 function HistoryPage() {
   const { id } = useParams<{ id: string }>();
@@ -972,12 +1113,12 @@ function HistoryPage() {
         <h1 className="font-editorial text-[1.8em] font-normal">Historique : {page.title}</h1>
         <Link href={`/page/${page.id}`} data-testid="link-history-back" className="wiki-link text-sm flex items-center gap-1"><ArrowLeft size={13} /> Retour</Link>
       </div>
-      <div className="border-b border-[var(--wiki-border)] mb-5 pb-2 text-sm text-muted-foreground">
+      <div className="border-b border-[var(--wiki-border)] dark:border-border mb-5 pb-2 text-sm text-muted-foreground">
         Chaque version conserve la source TXT exacte qui a produit la page.
       </div>
       <div className="max-w-2xl space-y-2">
         {[...page.history].reverse().map((item, i) => (
-          <div data-testid={`history-row-${i}`} key={item.timestamp} className="flex gap-3 rounded border border-[var(--wiki-border)] bg-white dark:bg-card p-4">
+          <div data-testid={`history-row-${i}`} key={item.timestamp} className="flex gap-3 rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
             <Clock3 size={16} className="mt-0.5 shrink-0 text-primary" />
             <div className="flex-1">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -994,7 +1135,7 @@ function HistoryPage() {
   );
 }
 
-/* ─── TrashPage ─────────────────────────────────────────────────────────── */
+/* ─── TrashPage ──────────────────────────────────────────────────────────── */
 
 function TrashPage() {
   const [pages, setPages] = useState(seedPages);
@@ -1007,13 +1148,13 @@ function TrashPage() {
         <h1 className="font-editorial text-[2em] font-normal">Corbeille</h1>
         <Link href="/" data-testid="link-trash-back" className="wiki-link text-sm flex items-center gap-1"><ArrowLeft size={13} /> Retour</Link>
       </div>
-      <div className="border-b border-[var(--wiki-border)] mb-5 pb-2 text-sm text-muted-foreground">
+      <div className="border-b border-[var(--wiki-border)] dark:border-border mb-5 pb-2 text-sm text-muted-foreground">
         Les pages supprimées restent ici jusqu'à leur suppression définitive locale.
       </div>
       {trashed.length ? (
         <div className="space-y-2 max-w-2xl">
           {trashed.map((p) => (
-            <div key={p.id} data-testid={`trash-row-${p.id}`} className="flex flex-col justify-between gap-3 rounded border border-[var(--wiki-border)] bg-white dark:bg-card p-4 sm:flex-row sm:items-center">
+            <div key={p.id} data-testid={`trash-row-${p.id}`} className="flex flex-col justify-between gap-3 rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4 sm:flex-row sm:items-center">
               <div>
                 <h2 className="font-editorial text-[1.3em]">{p.title}</h2>
                 <p className="text-xs text-muted-foreground">{p.type} · supprimée le {formatDate(p.updatedAt)}</p>
@@ -1032,7 +1173,7 @@ function TrashPage() {
   );
 }
 
-/* ─── Root ──────────────────────────────────────────────────────────────── */
+/* ─── Root ───────────────────────────────────────────────────────────────── */
 
 function NotFound() {
   return (
@@ -1065,10 +1206,12 @@ function App() {
   return (
     <ErrorBoundary>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
+        <AppearanceProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+            <Router />
+          </WouterRouter>
+          <Toaster />
+        </AppearanceProvider>
       </TooltipProvider>
     </ErrorBoundary>
   );

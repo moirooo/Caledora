@@ -13,10 +13,10 @@ export type WikiPage = {
   infobox: KV[]; infoboxImage?: WBImage; sections: WBSection[]; links: string[];
   references: KV[]; bibliography: string[]; categories: string[]; category: string;
   type: string; sourceText: string; updatedAt: string; createdAt: string;
-  history: WBHistory[]; isTrashed: boolean;
+  history: WBHistory[]; isTrashed: boolean; accentColor?: string;
 };
 
-const tags = new Set(['TITRE','SOUS-TITRE','ALIASES','INTRODUCTION','INFOBOX','IMAGE_INFOBOX','SECTION','SOUS-SECTION','SOUS-SOUS-SECTION','TEXTE','LISTE','LISTE_NUMEROTEE','IMAGE','TABLEAU','LIENS','REFERENCES','BIBLIOGRAPHIE','CATEGORIES']);
+const tags = new Set(['TITRE','SOUS-TITRE','ALIASES','INTRODUCTION','INFOBOX','IMAGE_INFOBOX','SECTION','SOUS-SECTION','SOUS-SOUS-SECTION','TEXTE','LISTE','LISTE_NUMEROTEE','IMAGE','TABLEAU','LIENS','REFERENCES','BIBLIOGRAPHIE','CATEGORIES','COULEUR']);
 const lines = (text: string) => text.replace(/\r/g, '').split('\n');
 const clean = (s: string) => s.trim();
 const field = (arr: string[], key: string) => {
@@ -72,6 +72,7 @@ export function parseWikiText(sourceText: string, category = 'Non classé', type
     references: fields(first('REFERENCES')), bibliography: first('BIBLIOGRAPHIE').map(clean).filter(Boolean),
     categories: first('CATEGORIES').map(clean).filter(Boolean), category, type, sourceText, updatedAt: now, createdAt: now,
     history: [{ timestamp: now, label: 'Import initial', sourceText }], isTrashed: false,
+    accentColor: clean(first('COULEUR').join('')) || undefined,
   };
 }
 
