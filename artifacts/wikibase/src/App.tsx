@@ -673,7 +673,8 @@ function TableOfContents({ sections }: { sections: WBSection[] }) {
     setActiveIdx(idx);
   };
 
-  if (sections.length < 3) return null;
+  const topLevel = sections.filter((s) => s.level === 2);
+  if (topLevel.length < 3) return null;
 
   return (
     <nav className="wiki-toc-sidebar" aria-label="Sommaire">
@@ -691,24 +692,20 @@ function TableOfContents({ sections }: { sections: WBSection[] }) {
 
       {open && (
         <ol className="wiki-toc-list">
-          {sections.map((s, i) => (
-            <li
-              key={`${s.title}-${i}`}
-              className={[
-                'wiki-toc-item',
-                s.level === 3 ? 'wiki-toc-item--l3' : '',
-                s.level === 4 ? 'wiki-toc-item--l4' : '',
-                activeIdx === i ? 'wiki-toc-item--active' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-            >
-              <a href={`#section-${i}`} onClick={(e) => scrollTo(e, i)}>
-                <span className="wiki-toc-num">{numbers[i]}</span>
-                {s.title}
-              </a>
-            </li>
-          ))}
+          {sections.map((s, i) => {
+            if (s.level !== 2) return null;
+            return (
+              <li
+                key={`${s.title}-${i}`}
+                className={['wiki-toc-item', activeIdx === i ? 'wiki-toc-item--active' : ''].filter(Boolean).join(' ')}
+              >
+                <a href={`#section-${i}`} onClick={(e) => scrollTo(e, i)}>
+                  <span className="wiki-toc-num">{numbers[i]}</span>
+                  {s.title}
+                </a>
+              </li>
+            );
+          })}
         </ol>
       )}
     </nav>
