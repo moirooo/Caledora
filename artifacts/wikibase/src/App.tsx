@@ -4,7 +4,7 @@ import { Archive, ArrowLeft, Check, ChevronRight, Clock3, FileText, GitCompare, 
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
-import { allText, demoSource, formatDate, parseWikiText, savePages, seedPages, type WBBlock, type WBImage, type WikiPage } from '@/lib/wikibase';
+import { allText, demoSource, formatDate, parseWikiText, savePages, seedPages, type WBBlock, type WBImage, type WBSection, type WikiPage } from '@/lib/wikibase';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
 
@@ -616,6 +616,105 @@ function CreatePage() {
   );
 }
 
+/* ─── TableOfContents ───────────────────────────────────────────────────── */
+
+/** Compute hierarchical numbering: level-2 → "1", level-3 → "1.1", level-4 → "1.1.1" */
+function computeTocNumbers(sections: WBSection[]): string[] {
+  let l2 = 0, l3 = 0, l4 = 0;
+  return sections.map((s) => {
+    if (s.level === 2) { l2++; l3 = 0; l4 = 0; return `${l2}`; }
+    if (s.level === 3) { l3++; l4 = 0; return `${l2}.${l3}`; }
+    if (s.level === 4) { l4++; return `${l2}.${l3}.${l4}`; }
+    return '';
+  });
+}
+
+function TableOfContents({ sections }: { sections: WBSection[] }) {
+  const [open, setOpen] = useState(true);
+  const [activeIdx, setActiveIdx] = useState<number>(-1);
+  const visibleRef = useRef<Set<number>>(new Set());
+  const numbers = computeTocNumbers(sections);
+
+  /* ScrollSpy: observe each section and highlight the topmost visible one */
+  useEffect(() => {
+    if (sections.length === 0) return;
+    const els = sections
+      .map((_, i) => document.getElementById(`section-${i}`))
+      .filter(Boolean) as HTMLElement[];
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const idx = parseInt(entry.target.id.replace('section-', ''), 10);
+          if (entry.isIntersecting) {
+            visibleRef.current.add(idx);
+          } else {
+            visibleRef.current.delete(idx);
+          }
+        });
+        if (visibleRef.current.size > 0) {
+          setActiveIdx(Math.min(...visibleRef.current));
+        }
+      },
+      /* Intersection zone: top of viewport down to 20 % height — sections that
+         enter this band become "active". Adjust rootMargin to taste. */
+      { rootMargin: '0px 0px -78% 0px', threshold: 0 },
+    );
+
+    els.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [sections]);
+
+  /* Smooth-scroll to section on click */
+  const scrollTo = (e: React.MouseEvent<HTMLAnchorElement>, idx: number) => {
+    e.preventDefault();
+    const el = document.getElementById(`section-${idx}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setActiveIdx(idx);
+  };
+
+  if (sections.length < 3) return null;
+
+  return (
+    <nav className="wiki-toc-sidebar" aria-label="Sommaire">
+      <div className="wiki-toc-sidebar-header">
+        <span className="wiki-toc-sidebar-title">Sommaire</span>
+        <button
+          className="wiki-toc-toggle"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          title={open ? 'Masquer le sommaire' : 'Afficher le sommaire'}
+        >
+          {open ? 'masquer' : 'afficher'}
+        </button>
+      </div>
+
+      {open && (
+        <ol className="wiki-toc-list">
+          {sections.map((s, i) => (
+            <li
+              key={`${s.title}-${i}`}
+              className={[
+                'wiki-toc-item',
+                s.level === 3 ? 'wiki-toc-item--l3' : '',
+                s.level === 4 ? 'wiki-toc-item--l4' : '',
+                activeIdx === i ? 'wiki-toc-item--active' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+            >
+              <a href={`#section-${i}`} onClick={(e) => scrollTo(e, i)}>
+                <span className="wiki-toc-num">{numbers[i]}</span>
+                {s.title}
+              </a>
+            </li>
+          ))}
+        </ol>
+      )}
+    </nav>
+  );
+}
+
 /* ─── ReaderPage ─────────────────────────────────────────────────────────── */
 
 function InternalText({ text, pages }: { text: string; pages: WikiPage[] }) {
@@ -790,8 +889,12 @@ function ReaderPage() {
         <Link href="/" className="ml-auto wiki-link flex items-center gap-1"><ArrowLeft size={11} /> Retour</Link>
       </div>
 
-      {/* Article body */}
-      <div className="article-body clearfix" data-testid="article-page-content">
+      {/* Two-column layout: TOC sidebar + article body */}
+      <div className="reader-layout">
+        <TableOfContents sections={page.sections} />
+
+        <div className="reader-main" data-testid="article-page-content">
+        <div className="article-body clearfix">
         <Infobox page={page} />
 
         {page.aliases.length > 0 && (
@@ -803,22 +906,6 @@ function ReaderPage() {
         <p className="text-sm leading-7 mb-4">
           <InternalText text={page.introduction} pages={pages} />
         </p>
-
-        {page.sections.length > 2 && (
-          <div className="wiki-toc mb-5 clear-right" style={{ minWidth: 200, maxWidth: 340 }}>
-            <div className="wiki-toc-title">Sommaire</div>
-            <ol className="list-none space-y-0.5">
-              {page.sections.map((s, i) => (
-                <li key={`${s.title}-${i}`} className={s.level === 3 ? 'pl-4' : s.level === 4 ? 'pl-8' : ''}>
-                  <a href={`#section-${i}`} className="wiki-link text-[13px]">
-                    <span className="mr-1">{s.level === 2 ? `${i + 1}` : '·'}</span>
-                    {s.title}
-                  </a>
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
 
         {page.sections.map((section, i) => (
           <section data-testid={`section-${i}`} id={`section-${i}`} key={`${section.title}-${i}`} className="mb-6 scroll-mt-16">
@@ -872,7 +959,9 @@ function ReaderPage() {
             ))}
           </div>
         )}
-      </div>
+        </div>{/* /article-body */}
+        </div>{/* /reader-main */}
+      </div>{/* /reader-layout */}
     </div>
   );
 }
