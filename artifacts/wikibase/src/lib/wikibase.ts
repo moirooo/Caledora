@@ -232,29 +232,63 @@ Université
 Caledora
 Enseignement supérieur`;
 
-export function seedPages(): WikiPage[] {
-  const saved = localStorage.getItem('wikibase-pages');
-  if (saved) {
-    const pages = JSON.parse(saved) as WikiPage[];
-    // Migrate only the bundled demo created by the early parser. User-imported
-    // pages must remain untouched, even when the parser evolves.
-    const migrated = pages.map((page) => {
-      if (page.sourceText === demoSource && page.title.includes('[SOUS-TITRE]')) {
-        const next = parseWikiText(demoSource, page.category, page.type);
-        return { ...next, id: page.id, createdAt: page.createdAt, history: page.history };
-      }
-      return page;
-    });
-    if (migrated.some((page, index) => page !== pages[index])) {
-      localStorage.setItem('wikibase-pages', JSON.stringify(migrated));
-    }
-    return migrated;
+// ─── Persistence (IndexedDB via idb-keyval) ──────────────────────────────────
+
+const IDB_KEY = 'wikibase-pages';
+
+/**
+ * Strip transient blob-URL src values from every image in a page before
+ * persisting. Images are NEVER stored as base64 — only their filename is kept.
+ */
+function stripSrc(page: WikiPage): WikiPage {
+  const noSrc = (img?: WBImage): WBImage | undefined =>
+    img ? { ...img, src: undefined } : undefined;
+  return {
+    ...page,
+    infoboxImage: noSrc(page.infoboxImage),
+    sections: page.sections.map((s) => ({
+      ...s,
+      blocks: s.blocks.map((b) =>
+        b.type === 'image' ? { ...b, image: noSrc(b.image)! } : b
+      ),
+    })),
+  };
+}
+
+/** Load all pages from IndexedDB, migrating from localStorage on first run. */
+export async function loadPages(): Promise<WikiPage[]> {
+  const { get, set } = await import('idb-keyval');
+
+  // 1. IndexedDB is the primary store
+  const idb = await get<WikiPage[]>(IDB_KEY);
+  if (idb && idb.length > 0) return idb;
+
+  // 2. One-time migration from localStorage → IndexedDB
+  const ls = localStorage.getItem(IDB_KEY);
+  if (ls) {
+    try {
+      const pages = (JSON.parse(ls) as WikiPage[]).map(stripSrc);
+      await set(IDB_KEY, pages);
+      localStorage.removeItem(IDB_KEY);
+      return pages;
+    } catch { /* corrupt data — fall through to seed */ }
   }
+
+  // 3. First-ever run: seed with the built-in demo page
   const page = parseWikiText(demoSource, 'Éducation', 'Université');
   page.id = 'universa-lacora';
-  localStorage.setItem('wikibase-pages', JSON.stringify([page]));
+  await set(IDB_KEY, [page]);
   return [page];
 }
-export function savePages(pages: WikiPage[]) { localStorage.setItem('wikibase-pages', JSON.stringify(pages)); }
+
+/**
+ * Persist pages to IndexedDB (fire-and-forget — never blocks the UI).
+ * Image `src` blob URLs are always stripped before writing.
+ */
+export function savePages(pages: WikiPage[]): void {
+  import('idb-keyval')
+    .then(({ set }) => set(IDB_KEY, pages.map(stripSrc)))
+    .catch((err) => console.error('[WikiBase] savePages failed:', err));
+}
 export function formatDate(value: string) { return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value)); }
 export function allText(page: WikiPage) { return `${page.title} ${page.subtitle} ${page.introduction} ${page.categories.join(' ')}`.toLowerCase(); }

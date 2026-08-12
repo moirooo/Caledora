@@ -5,7 +5,7 @@ import { Archive, ArrowLeft, Check, ChevronRight, Clock3, Download, FileText, Gi
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
-import { allText, demoSource, formatDate, parseWikiText, savePages, seedPages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
+import { allText, demoSource, formatDate, loadPages, parseWikiText, savePages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
 
@@ -224,22 +224,22 @@ function ExportButton() {
   const [done, setDone] = useState(false);
 
   function exportWiki() {
-    const raw = localStorage.getItem('wikibase-pages');
-    const pages: WikiPage[] = raw ? (JSON.parse(raw) as WikiPage[]) : [];
-    const payload = {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      pages: pages.filter((p) => !p.isTrashed),
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `wikibase-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setDone(true);
-    setTimeout(() => setDone(false), 2500);
+    loadPages().then((pages) => {
+      const payload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        pages: pages.filter((p) => !p.isTrashed),
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wikibase-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setDone(true);
+      setTimeout(() => setDone(false), 2500);
+    });
   }
 
   return (
@@ -382,13 +382,29 @@ function Shell({ children }: { children: ReactNode }) {
   );
 }
 
+/* ─── usePages hook ─────────────────────────────────────────────────────── */
+
+/**
+ * Async page store hook. Loads from IndexedDB on mount; exposes a `save`
+ * helper that updates state + persists without base64 blobs.
+ */
+function usePages() {
+  const [pages, setPagesState] = useState<WikiPage[]>([]);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    loadPages().then((p) => { setPagesState(p); setReady(true); });
+  }, []);
+  const setPages = (next: WikiPage[]) => { setPagesState(next); savePages(next); };
+  return { pages, setPages, ready };
+}
+
 /* ─── Dashboard ─────────────────────────────────────────────────────────── */
 
 function Dashboard() {
   const [location] = useLocation();
   const qs = new URLSearchParams(location.includes('?') ? location.split('?')[1] : '');
   const urlQ = qs.get('q') ?? '';
-  const [pages, setPages] = useState(seedPages);
+  const { pages } = usePages();
   const [query, setQuery] = useState(urlQ);
   const [filter, setFilter] = useState('Toutes');
   const visible = pages.filter(
@@ -749,9 +765,11 @@ function CreatePage() {
   };
   const publish = () => {
     if (!parsed) return;
-    const pages = seedPages().filter((p) => p.id !== parsed.id);
-    savePages([...pages, { ...parsed, accentColor }]);
-    setLocation(`/page/${parsed.id}`);
+    loadPages().then((existing) => {
+      const next = [...existing.filter((p) => p.id !== parsed.id), { ...parsed, accentColor }];
+      savePages(next);
+      setLocation(`/page/${parsed.id}`);
+    });
   };
 
   return (
@@ -1178,9 +1196,9 @@ function BlockView({ block, pages }: { block: WBBlock; pages: WikiPage[] }) {
 function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; label: string; onChange: (image: WBImage) => void; onDelete: () => void }) {
   const replace = (file?: File) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => onChange({ ...image, filename: file.name, src: String(reader.result), missing: false });
-    reader.readAsDataURL(file);
+    // Use an in-memory blob URL for preview; src is NEVER persisted (stripped before save).
+    const blobUrl = URL.createObjectURL(file);
+    onChange({ ...image, filename: file.name, src: blobUrl, missing: false });
   };
   const set = (key: keyof WBImage, value: string) => onChange({ ...image, [key]: value });
   return (
@@ -1208,15 +1226,18 @@ function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; lab
 
 function ReaderPage() {
   const { id } = useParams<{ id: string }>();
-  const [pages, setPages] = useState(seedPages);
+  const { pages, setPages, ready } = usePages();
   const page = pages.find((p) => p.id === id) ?? pages[0];
   const [, setLocation] = useLocation();
 
   const remove = () => {
     if (!window.confirm('Déplacer cette page dans la corbeille ?')) return;
     const next = pages.map((p) => p.id === page.id ? { ...p, isTrashed: true, updatedAt: new Date().toISOString() } : p);
-    setPages(next); savePages(next); setLocation('/');
+    setPages(next); setLocation('/');
   };
+
+  if (!ready) return <div className="animate-rise p-6 text-sm text-muted-foreground">Chargement…</div>;
+  if (!page) return <div className="animate-rise p-6 text-sm text-muted-foreground">Page introuvable.</div>;
 
   return (
     <div className="animate-rise">
@@ -1339,18 +1360,25 @@ function ReaderPage() {
 function EditPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const [pages, setPages] = useState(seedPages);
+  const { pages, setPages, ready } = usePages();
   const original = pages.find((p) => p.id === id) ?? pages[0];
-  const [page, setPage] = useState<WikiPage>(() => structuredClone(original));
+  const [page, setPage] = useState<WikiPage | null>(null);
 
-  const update = (key: keyof WikiPage, value: unknown) => setPage((p) => ({ ...p, [key]: value }));
+  useEffect(() => {
+    if (ready && original && !page) setPage(structuredClone(original));
+  }, [ready, original?.id]);
+
+  const update = (key: keyof WikiPage, value: unknown) => setPage((p) => p ? { ...p, [key]: value } : p);
   const save = () => {
+    if (!page) return;
     const next = pages.map((p) => p.id === page.id
       ? { ...page, updatedAt: new Date().toISOString(), history: [...p.history, { timestamp: new Date().toISOString(), label: 'Modification visuelle', sourceText: page.sourceText }] }
       : p
     );
-    setPages(next); savePages(next); setLocation(`/page/${page.id}`);
+    setPages(next); setLocation(`/page/${page.id}`);
   };
+
+  if (!ready || !page) return <div className="animate-rise p-6 text-sm text-muted-foreground">Chargement…</div>;
   const updateInfo = (index: number, value: string, key: 'key' | 'value') =>
     update('infobox', page.infobox.map((r, i) => i === index ? { ...r, [key]: value } : r));
   const updateSectionBlock = (si: number, bi: number, block: WBBlock) =>
@@ -1464,15 +1492,15 @@ function EditPage() {
 
 function ComparePage() {
   const { id } = useParams<{ id: string }>();
-  const pages = seedPages();
+  const { pages, setPages, ready } = usePages();
   const page = pages.find((p) => p.id === id) ?? pages[0];
   const [source, setSource] = useState('');
   const [candidate, setCandidate] = useState<WikiPage | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState('');
 
-  const analyze = () => setCandidate(parseWikiText(source || demoSource, page.category, page.type));
-  const changed = candidate
+  const analyze = () => page && setCandidate(parseWikiText(source || demoSource, page.category, page.type));
+  const changed = candidate && page
     ? [
         { label: 'Titre', old: page.title, next: candidate.title },
         { label: 'Introduction', old: page.introduction, next: candidate.introduction },
@@ -1480,13 +1508,15 @@ function ComparePage() {
       ].filter((d) => d.old !== d.next)
     : [];
   const apply = () => {
-    if (!candidate) return;
-    savePages(pages.map((p) => p.id === page.id
+    if (!candidate || !page) return;
+    setPages(pages.map((p) => p.id === page.id
       ? { ...candidate, id: page.id, history: [...page.history, { timestamp: new Date().toISOString(), label: 'Mise à jour depuis un TXT', sourceText: candidate.sourceText }] }
       : p
     ));
     setStatus('Mise à jour appliquée');
   };
+
+  if (!ready) return <div className="animate-rise p-6 text-sm text-muted-foreground">Chargement…</div>;
 
   return (
     <div className="animate-rise">
@@ -1563,7 +1593,9 @@ function ComparePage() {
 
 function HistoryPage() {
   const { id } = useParams<{ id: string }>();
-  const page = seedPages().find((p) => p.id === id) ?? seedPages()[0];
+  const { pages, ready } = usePages();
+  const page = pages.find((p) => p.id === id) ?? pages[0];
+  if (!ready || !page) return <div className="animate-rise p-6 text-sm text-muted-foreground">Chargement…</div>;
   return (
     <div className="animate-rise">
       <div className="flex items-center justify-between mb-3">
@@ -1595,10 +1627,10 @@ function HistoryPage() {
 /* ─── TrashPage ──────────────────────────────────────────────────────────── */
 
 function TrashPage() {
-  const [pages, setPages] = useState(seedPages);
+  const { pages, setPages } = usePages();
   const trashed = pages.filter((p) => p.isTrashed);
-  const restore = (id: string) => { const n = pages.map((p) => p.id === id ? { ...p, isTrashed: false } : p); setPages(n); savePages(n); };
-  const destroy = (id: string) => { const n = pages.filter((p) => p.id !== id); setPages(n); savePages(n); };
+  const restore = (id: string) => { const n = pages.map((p) => p.id === id ? { ...p, isTrashed: false } : p); setPages(n); };
+  const destroy = (id: string) => { const n = pages.filter((p) => p.id !== id); setPages(n); };
   return (
     <div className="animate-rise">
       <div className="flex items-center justify-between mb-3">
