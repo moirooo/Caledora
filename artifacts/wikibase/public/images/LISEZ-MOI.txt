@@ -1,0 +1,28 @@
+══════════════════════════════════════════════════════
+  WIKIBASE — Dossier d'images locales
+══════════════════════════════════════════════════════
+
+Comment afficher une image locale dans vos articles :
+
+1. Copiez votre image (PNG, JPG, WebP, SVG…) dans CE dossier
+   Exemple :  public/images/logo_caledora_fc.png
+
+2. Dans l'éditeur WikiBase, champ "Fichier", tapez simplement :
+   images/logo_caledora_fc.png
+
+3. Enregistrez → l'image s'affiche immédiatement.
+
+─────────────────────────────────────────────────────
+Sur Replit   : glissez le fichier ici via le panneau Fichiers
+En local     : copiez le fichier dans ce dossier depuis
+               l'explorateur Windows/Finder, puis lancez
+               npm run dev — le serveur le sert automatiquement
+─────────────────────────────────────────────────────
+
+Formats acceptés : .png .jpg .jpeg .gif .webp .svg .avif
+Taille conseillée : < 2 Mo par image pour de bonnes performances
+
+PAS BESOIN de chemin complet ("C:\Users\...") — le site
+ne peut pas lire le disque dur directement (sécurité navigateur).
+Utilisez ce dossier comme pont entre votre PC et le wiki.
+══════════════════════════════════════════════════════

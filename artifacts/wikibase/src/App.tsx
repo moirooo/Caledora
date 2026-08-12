@@ -1111,8 +1111,8 @@ function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
       {/* Optional image */}
       {page.infoboxImage && (
         <div className="flex items-center justify-center border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-muted py-2 text-center text-xs text-muted-foreground overflow-hidden" style={{ minHeight: 140 }}>
-          {page.infoboxImage.src
-            ? <img src={page.infoboxImage.src} alt={page.infoboxImage.alt} className="max-h-40 max-w-full object-contain" />
+          {resolveImageSrc(page.infoboxImage)
+            ? <img src={resolveImageSrc(page.infoboxImage)} alt={page.infoboxImage.alt} className="max-h-40 max-w-full object-contain" />
             : <LogoPlaceholder initial={page.title[0]?.toUpperCase() ?? '?'} color={accentColor} />
           }
         </div>
@@ -1146,6 +1146,18 @@ function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
   );
 }
 
+/**
+ * Resolve the display URL for a WBImage.
+ * Priority: blob URL from current session → filename treated as a
+ * site-relative path (e.g. "images/logo.png" served from public/images/).
+ * Returns undefined when nothing is available.
+ */
+function resolveImageSrc(img: WBImage): string | undefined {
+  if (img.src) return img.src;
+  const f = img.filename.trim();
+  return f || undefined;
+}
+
 function BlockView({ block, pages }: { block: WBBlock; pages: WikiPage[] }) {
   if (block.type === 'text') return <p className="text-sm leading-7"><InternalText text={block.content} pages={pages} /></p>;
   if (block.type === 'list' || block.type === 'numbered') {
@@ -1162,8 +1174,8 @@ function BlockView({ block, pages }: { block: WBBlock; pages: WikiPage[] }) {
     return (
       <figure data-testid={`image-block-${img.filename}`} className={`${alignClass} w-full lg:w-[220px] border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-1 text-center mb-3`}>
         <div className="flex h-32 items-center justify-center overflow-hidden bg-[#eaecf0] dark:bg-muted text-xs text-muted-foreground">
-          {img.src
-            ? <img src={img.src} alt={img.alt} className="max-h-full max-w-full object-contain" />
+          {resolveImageSrc(img)
+            ? <img src={resolveImageSrc(img)} alt={img.alt} className="max-h-full max-w-full object-contain" />
             : <><ImageIcon size={14} className="mr-1" />Image manquante</>
           }
         </div>
@@ -1194,21 +1206,44 @@ function BlockView({ block, pages }: { block: WBBlock; pages: WikiPage[] }) {
 }
 
 function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; label: string; onChange: (image: WBImage) => void; onDelete: () => void }) {
-  const replace = (file?: File) => {
+  const previewSrc = resolveImageSrc(image);
+
+  const pickFile = (file?: File) => {
     if (!file) return;
-    // Use an in-memory blob URL for preview; src is NEVER persisted (stripped before save).
-    const blobUrl = URL.createObjectURL(file);
-    onChange({ ...image, filename: file.name, src: blobUrl, missing: false });
+    // Blob URL stays in memory this session only — src is stripped before saving.
+    onChange({ ...image, filename: file.name, src: URL.createObjectURL(file), missing: false });
   };
   const set = (key: keyof WBImage, value: string) => onChange({ ...image, [key]: value });
+
   return (
     <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-3">
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2"><ImageIcon size={14} className="text-primary" /><span className="text-sm font-bold truncate">{label}</span></div>
         <button data-testid={`button-delete-image-${label}`} onClick={onDelete} className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 size={14} /></button>
       </div>
+
+      {/* Live preview */}
+      <div className="mb-2 flex h-24 items-center justify-center rounded border border-[var(--wiki-border)] dark:border-border bg-[#eaecf0] dark:bg-muted overflow-hidden text-xs text-muted-foreground">
+        {previewSrc
+          ? <img src={previewSrc} alt={image.alt || label} className="max-h-full max-w-full object-contain" onError={(e) => (e.currentTarget.style.display = 'none')} />
+          : <span className="flex flex-col items-center gap-1 text-center px-3"><ImageIcon size={18} className="opacity-40" />Aucune image</span>
+        }
+      </div>
+
       <div className="grid gap-2 sm:grid-cols-2">
-        <label className="text-xs font-bold">Fichier<input data-testid={`input-image-file-${label}`} value={image.filename} onChange={(e) => set('filename', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background px-2 text-xs font-normal" /></label>
+        <label className="text-xs font-bold col-span-full">
+          Chemin du fichier
+          <input
+            data-testid={`input-image-file-${label}`}
+            value={image.filename}
+            onChange={(e) => set('filename', e.target.value)}
+            placeholder="images/mon-logo.png"
+            className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background px-2 text-xs font-normal font-mono"
+          />
+          <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">
+            Placez votre image dans <code className="bg-muted px-1 rounded">public/images/</code> et tapez <code className="bg-muted px-1 rounded">images/nom.png</code>
+          </span>
+        </label>
         <label className="text-xs font-bold">Légende<input data-testid={`input-image-caption-${label}`} value={image.caption} onChange={(e) => set('caption', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background px-2 text-xs font-normal" /></label>
         <label className="text-xs font-bold">Texte alt<input data-testid={`input-image-alt-${label}`} value={image.alt} onChange={(e) => set('alt', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background px-2 text-xs font-normal" /></label>
         <div className="grid grid-cols-2 gap-1">
@@ -1216,9 +1251,11 @@ function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; lab
           <label className="text-xs font-bold">Taille<input data-testid={`input-image-size-${label}`} value={image.size} onChange={(e) => set('size', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background px-2 text-xs font-normal" /></label>
         </div>
       </div>
-      <label className="mt-2 flex cursor-pointer items-center justify-center rounded border border-dashed border-primary/40 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/5">
-        <Upload size={12} className="mr-1" /> Remplacer
-        <input data-testid={`input-replace-image-${label}`} type="file" accept="image/*" className="hidden" onChange={(e) => replace(e.target.files?.[0])} />
+
+      {/* Session-only quick preview via file picker */}
+      <label className="mt-2 flex cursor-pointer items-center justify-center rounded border border-dashed border-primary/40 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/5" title="Aperçu immédiat cette session — non sauvegardé">
+        <Upload size={12} className="mr-1" /> Aperçu rapide (session)
+        <input data-testid={`input-replace-image-${label}`} type="file" accept="image/*" className="hidden" onChange={(e) => pickFile(e.target.files?.[0])} />
       </label>
     </div>
   );
