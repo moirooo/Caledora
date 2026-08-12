@@ -69,6 +69,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Transports': '#eeeeee',
   'Monuments & Lieux': '#f9e4b7',
   'Personnes & Organisations': '#fce4ec',
+  'Sports & Football': '#dceefb',
 };
 const categoryColor = (cat: string) => CATEGORY_COLORS[cat] ?? '#cee0f2';
 
@@ -134,6 +135,19 @@ const CATEGORY_TYPES: Record<string, string[]> = {
     'Musée', 'Bibliothèque', 'Théâtre', 'Opéra', 'Stade',
     'Site classé', 'Patrimoine mondial UNESCO',
     'Parc', 'Jardin public', 'Place publique',
+  ],
+  'Sports & Football': [
+    'Club de football',
+    'Saison de club',
+    'Stade / Arena',
+    "Centre d'entraînement / Académie",
+    'Effectif / Joueur',
+    'Entraîneur / Staff',
+    'Mascotte officielle',
+    'Groupe de supporters / Ultras',
+    'Derby / Rivalité sportive',
+    'Compétition / Trophée',
+    'Équipementier / Sponsor',
   ],
   'Personnes & Organisations': [
     'Personnalité politique', "Chef d'État", 'Monarque',
