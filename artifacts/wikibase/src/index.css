@@ -231,9 +231,12 @@
     font-family: var(--app-font-sans);
     font-size: 1.5em;
     font-weight: normal;
-    border-bottom: 2px solid var(--page-accent, var(--wiki-border));
+    border-bottom: 1px solid #a2a9b1;
     margin: 1.2em 0 0.4em;
     padding-bottom: 3px;
+  }
+  .dark .wiki-h2 {
+    border-bottom-color: hsl(var(--border));
   }
   .wiki-h3 {
     font-family: var(--app-font-sans);

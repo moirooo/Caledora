@@ -74,6 +74,25 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 const categoryColor = (cat: string) => CATEGORY_COLORS[cat] ?? '#cee0f2';
 
+/**
+ * Returns '#ffffff' for dark backgrounds or '#000000' for light ones,
+ * using WCAG relative luminance (threshold L = 0.179).
+ * Falls back to '#000000' on any parse error.
+ */
+function getContrastingColor(hex: string): '#ffffff' | '#000000' {
+  try {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.slice(0, 2), 16) / 255;
+    const g = parseInt(h.slice(2, 4), 16) / 255;
+    const b = parseInt(h.slice(4, 6), 16) / 255;
+    const lin = (c: number) => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    return L > 0.179 ? '#000000' : '#ffffff';
+  } catch {
+    return '#000000';
+  }
+}
+
 /* ─── Category & type catalogue ─────────────────────────────────────────── */
 
 const CATEGORY_TYPES: Record<string, string[]> = {
@@ -1088,10 +1107,16 @@ function JerseyKit({ jersey }: { jersey: WBJersey }) {
 }
 
 /** A titled sub-section of key-value rows within the infobox. */
-function InfoboxSection({ section, pages }: { section: WBInfoboxSection; pages: WikiPage[] }) {
+function InfoboxSection({ section, pages, accentColor }: { section: WBInfoboxSection; pages: WikiPage[]; accentColor: string }) {
+  const textColor = getContrastingColor(accentColor);
   return (
     <>
-      <div className="infobox-section-title">{section.title}</div>
+      <div
+        className="infobox-section-title"
+        style={{ background: accentColor, color: textColor }}
+      >
+        {section.title}
+      </div>
       {section.fields.map((r) => (
         <div key={r.key} className="grid grid-cols-[44%_56%] border-b border-[var(--wiki-border)] dark:border-border py-1 px-1 text-xs last:border-0">
           <span className="font-bold">{r.key}</span>
@@ -1104,9 +1129,10 @@ function InfoboxSection({ section, pages }: { section: WBInfoboxSection; pages: 
 
 function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
   const accentColor = page.accentColor ?? categoryColor(page.category);
+  const headerTextColor = getContrastingColor(accentColor);
   return (
     <aside data-testid="content-infobox" className="wiki-infobox w-full lg:float-right lg:clear-right lg:ml-5 lg:mb-4 lg:w-[280px] lg:shrink-0 mb-4">
-      <div className="wiki-infobox-header" style={{ background: accentColor }}>{page.title}</div>
+      <div className="wiki-infobox-header" style={{ background: accentColor, color: headerTextColor }}>{page.title}</div>
 
       {/* Optional image */}
       {page.infoboxImage && (
@@ -1141,18 +1167,30 @@ function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
         </div>
       )}
 
-      {/* Base infobox key-value fields */}
+      {/* Base infobox key-value fields (rows with value='' are banner headers) */}
       <div className="p-1">
-        {page.infobox.map((r) => (
-          <div key={r.key} className="grid grid-cols-[44%_56%] border-b border-[var(--wiki-border)] dark:border-border py-1 px-1 text-xs last:border-0">
-            <span className="font-bold">{r.key}</span>
-            <span><InternalText text={r.value} pages={pages} /></span>
-          </div>
-        ))}
+        {page.infobox.map((r, i) =>
+          r.value === '' ? (
+            /* Banner / section header row */
+            <div
+              key={`${r.key}-${i}`}
+              className="col-span-2 text-center font-bold text-xs py-1 px-2"
+              style={{ background: accentColor, color: headerTextColor }}
+            >
+              {r.key}
+            </div>
+          ) : (
+            /* Normal key-value row */
+            <div key={`${r.key}-${i}`} className="grid grid-cols-[44%_56%] border-b border-[var(--wiki-border)] dark:border-border py-1 px-1 text-xs last:border-0">
+              <span className="font-bold">{r.key}</span>
+              <span><InternalText text={r.value} pages={pages} /></span>
+            </div>
+          )
+        )}
 
         {/* Optional sub-sections — only rendered when [INFOBOX_SECTION] blocks are in the source */}
         {page.infoboxSections?.map((s) => (
-          <InfoboxSection key={s.title} section={s} pages={pages} />
+          <InfoboxSection key={s.title} section={s} pages={pages} accentColor={accentColor} />
         ))}
       </div>
     </aside>

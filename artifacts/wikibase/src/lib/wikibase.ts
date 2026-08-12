@@ -82,9 +82,19 @@ export function parseWikiText(sourceText: string, category = 'Non classé', type
   // value as accentColor when the dedicated [COULEUR] block is absent.
   const infoboxLines = first('INFOBOX');
   const couleurAccentInline = field(infoboxLines, 'couleur_accent');
-  const infoboxFields = fields(infoboxLines).filter(
-    (r) => r.key.toLowerCase() !== 'couleur_accent',
-  );
+  // Parse infobox lines: lines without '=' become header/banner rows (value='').
+  const infoboxFields: KV[] = infoboxLines
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return null;
+      if (!trimmed.includes('=')) return { key: trimmed, value: '' }; // banner row
+      const ix = trimmed.indexOf('=');
+      const key = trimmed.slice(0, ix).trim();
+      const value = trimmed.slice(ix + 1).trim();
+      if (key.toLowerCase() === 'couleur_accent') return null;
+      return { key, value };
+    })
+    .filter((r): r is KV => r !== null);
 
   // ── [MAILLOTS] ────────────────────────────────────────────────────────────
   // Each non-empty line inside a [MAILLOTS] block: "Domicile = #FFF | #00F"
