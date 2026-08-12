@@ -1112,9 +1112,22 @@ function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
       {page.infoboxImage && (
         <div className="flex items-center justify-center border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-muted py-2 text-center text-xs text-muted-foreground overflow-hidden" style={{ minHeight: 140 }}>
           {resolveImageSrc(page.infoboxImage)
-            ? <img src={resolveImageSrc(page.infoboxImage)} alt={page.infoboxImage.alt} className="max-h-40 max-w-full object-contain" />
-            : <LogoPlaceholder initial={page.title[0]?.toUpperCase() ?? '?'} color={accentColor} />
+            ? <img
+                src={resolveImageSrc(page.infoboxImage)}
+                alt={page.infoboxImage.alt}
+                className="max-h-40 max-w-full object-contain"
+                onError={(e) => {
+                  console.error('[WikiBase] Image introuvable :', e.currentTarget.src);
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling?.removeAttribute('hidden');
+                }}
+              />
+            : null
           }
+          {/* Placeholder shown when img fails or no src */}
+          <span hidden={!!resolveImageSrc(page.infoboxImage)}>
+            <LogoPlaceholder initial={page.title[0]?.toUpperCase() ?? '?'} color={accentColor} />
+          </span>
         </div>
       )}
 
@@ -1148,14 +1161,27 @@ function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
 
 /**
  * Resolve the display URL for a WBImage.
- * Priority: blob URL from current session → filename treated as a
- * site-relative path (e.g. "images/logo.png" served from public/images/).
- * Returns undefined when nothing is available.
+ *
+ * Priority:
+ *  1. blob URL from the current session (set by the file-picker, never saved)
+ *  2. filename treated as an app-root-relative path, correctly prefixed with
+ *     import.meta.env.BASE_URL so it works on Replit (/wikibase/) and locally (/)
+ *
+ * Examples (BASE_URL = "/wikibase/"):
+ *   "images/logo.png"   → "/wikibase/images/logo.png"   ✅
+ *   "/images/logo.png"  → "/wikibase/images/logo.png"   ✅
+ *   "https://…"         → unchanged                      ✅
  */
 function resolveImageSrc(img: WBImage): string | undefined {
   if (img.src) return img.src;
   const f = img.filename.trim();
-  return f || undefined;
+  if (!f) return undefined;
+  // Absolute URLs and data URIs pass through unchanged
+  if (/^(https?:\/\/|data:|\/\/)/.test(f)) return f;
+  // Strip any leading slashes so we never double them
+  const clean = f.replace(/^\/+/, '');
+  // BASE_URL always ends with "/" (guaranteed by Vite)
+  return import.meta.env.BASE_URL + clean;
 }
 
 function BlockView({ block, pages }: { block: WBBlock; pages: WikiPage[] }) {
@@ -1225,7 +1251,15 @@ function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; lab
       {/* Live preview */}
       <div className="mb-2 flex h-24 items-center justify-center rounded border border-[var(--wiki-border)] dark:border-border bg-[#eaecf0] dark:bg-muted overflow-hidden text-xs text-muted-foreground">
         {previewSrc
-          ? <img src={previewSrc} alt={image.alt || label} className="max-h-full max-w-full object-contain" onError={(e) => (e.currentTarget.style.display = 'none')} />
+          ? <img
+              src={previewSrc}
+              alt={image.alt || label}
+              className="max-h-full max-w-full object-contain"
+              onError={(e) => {
+                console.error('[WikiBase] Aperçu image introuvable :', e.currentTarget.src);
+                e.currentTarget.style.display = 'none';
+              }}
+            />
           : <span className="flex flex-col items-center gap-1 text-center px-3"><ImageIcon size={18} className="opacity-40" />Aucune image</span>
         }
       </div>
