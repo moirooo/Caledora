@@ -231,7 +231,7 @@
     font-family: var(--app-font-sans);
     font-size: 1.5em;
     font-weight: normal;
-    border-bottom: 1px solid var(--wiki-border);
+    border-bottom: 2px solid var(--page-accent, var(--wiki-border));
     margin: 1.2em 0 0.4em;
     padding-bottom: 3px;
   }
@@ -355,6 +355,17 @@
   margin: 0;
 }
 .dark .syntax-guide-code { background: hsl(var(--secondary)); }
+
+/* Inline flag images from flagcdn.com — [flag: code] syntax */
+.inline-flag {
+  display: inline;
+  height: 13px;
+  width: auto;
+  vertical-align: middle;
+  margin-right: 4px;
+  border-radius: 1px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.12);
+}
 
 .syntax-guide-tip {
   font-size: 11px;

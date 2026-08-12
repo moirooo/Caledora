@@ -77,6 +77,15 @@ export function parseWikiText(sourceText: string, category = 'Non classé', type
   }
   const imageLines = first('IMAGE_INFOBOX');
 
+  // ── couleur_accent inside [INFOBOX] ───────────────────────────────────────
+  // Filter the directive out so it never appears as a table row, and use its
+  // value as accentColor when the dedicated [COULEUR] block is absent.
+  const infoboxLines = first('INFOBOX');
+  const couleurAccentInline = field(infoboxLines, 'couleur_accent');
+  const infoboxFields = fields(infoboxLines).filter(
+    (r) => r.key.toLowerCase() !== 'couleur_accent',
+  );
+
   // ── [MAILLOTS] ────────────────────────────────────────────────────────────
   // Each non-empty line inside a [MAILLOTS] block: "Domicile = #FFF | #00F"
   const jerseyLines = buckets.filter((b) => b.tag === 'MAILLOTS').flatMap((b) => b.content);
@@ -105,12 +114,13 @@ export function parseWikiText(sourceText: string, category = 'Non classé', type
 
   return {
     id: `page-${Date.now()}`, title, subtitle: clean(first('SOUS-TITRE').join('\n')), aliases: first('ALIASES').map(clean).filter(Boolean),
-    introduction: clean(first('INTRODUCTION').join('\n')), infobox: fields(first('INFOBOX')),
+    introduction: clean(first('INTRODUCTION').join('\n')), infobox: infoboxFields,
     infoboxImage: imageLines.length ? imageFrom(imageLines) : undefined, sections, links: first('LIENS').map(clean).filter(Boolean),
     references: fields(first('REFERENCES')), bibliography: first('BIBLIOGRAPHIE').map(clean).filter(Boolean),
     categories: first('CATEGORIES').map(clean).filter(Boolean), category, type, sourceText, updatedAt: now, createdAt: now,
     history: [{ timestamp: now, label: 'Import initial', sourceText }], isTrashed: false,
-    accentColor: clean(first('COULEUR').join('')) || undefined,
+    // Priority: [COULEUR] block > couleur_accent in [INFOBOX] > undefined
+    accentColor: clean(first('COULEUR').join('')) || couleurAccentInline || undefined,
     infoboxJerseys: infoboxJerseys.length > 0 ? infoboxJerseys : undefined,
     infoboxSections: infoboxSections.length > 0 ? infoboxSections : undefined,
   };

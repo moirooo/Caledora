@@ -924,7 +924,7 @@ function TableOfContents({ sections }: { sections: WBSection[] }) {
 
 /* ─── ReaderPage ─────────────────────────────────────────────────────────── */
 
-/** Convert a 2-letter ISO country code to its flag emoji. */
+/** Convert a 2-letter ISO country code to its flag emoji (for {{flag:xx}} syntax). */
 function flagEmoji(code: string): string {
   return code.toUpperCase().split('').map((c) =>
     String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)
@@ -932,11 +932,12 @@ function flagEmoji(code: string): string {
 }
 
 function InternalText({ text, pages }: { text: string; pages: WikiPage[] }) {
-  // Matches both [[Wiki links]] and {{flag:xx}} inline syntax
-  const parts = text.split(/(\[\[[^\]]+\]\]|\{\{flag:[a-zA-Z]{2,3}\}\})/g);
+  // Matches: [[Wiki links]], {{flag:xx}} (emoji), [flag: gb-eng] (image)
+  const parts = text.split(/(\[\[[^\]]+\]\]|\{\{flag:[a-zA-Z]{2,3}\}\}|\[flag:\s*[a-zA-Z0-9-]+\])/g);
   return (
     <>
       {parts.map((part, i) => {
+        // [[Internal link]]
         const wikiMatch = part.match(/^\[\[([^\]]+)\]\]$/);
         if (wikiMatch) {
           const name = wikiMatch[1];
@@ -945,14 +946,50 @@ function InternalText({ text, pages }: { text: string; pages: WikiPage[] }) {
             ? <Link data-testid={`link-internal-${name}`} key={i} href={`/page/${target.id}`} className="wiki-link">{name}</Link>
             : <span data-testid={`link-missing-${name}`} key={i} className="wiki-link-red">{name}</span>;
         }
-        const flagMatch = part.match(/^\{\{flag:([a-zA-Z]{2,3})\}\}$/);
-        if (flagMatch) {
-          const code = flagMatch[1];
+        // {{flag:xx}} → emoji
+        const flagEmojiMatch = part.match(/^\{\{flag:([a-zA-Z]{2,3})\}\}$/);
+        if (flagEmojiMatch) {
+          const code = flagEmojiMatch[1];
           return <span key={i} title={code.toUpperCase()} aria-label={`Drapeau ${code.toUpperCase()}`}>{flagEmoji(code)}</span>;
+        }
+        // [flag: gb-eng] → <img> from flagcdn.com
+        const flagImgMatch = part.match(/^\[flag:\s*([a-zA-Z0-9-]+)\]$/);
+        if (flagImgMatch) {
+          const code = flagImgMatch[1].toLowerCase();
+          return (
+            <img
+              key={i}
+              src={`https://flagcdn.com/w20/${code}.png`}
+              srcSet={`https://flagcdn.com/w40/${code}.png 2x`}
+              alt={code}
+              title={code.toUpperCase()}
+              className="inline-flag"
+            />
+          );
         }
         return <span key={i}>{part}</span>;
       })}
     </>
+  );
+}
+
+/** SVG logo placeholder shown when an infobox image file is missing. */
+function LogoPlaceholder({ initial, color }: { initial: string; color: string }) {
+  return (
+    <svg viewBox="0 0 80 80" width="72" height="72" aria-label="Logo manquant" role="img">
+      <circle cx="40" cy="40" r="38" fill={color} fillOpacity="0.15" stroke={color} strokeOpacity="0.35" strokeWidth="2" />
+      <text
+        x="40" y="53"
+        textAnchor="middle"
+        fontSize="34"
+        fontFamily="Arial, Helvetica, sans-serif"
+        fontWeight="bold"
+        fill={color}
+        fillOpacity="0.6"
+      >
+        {initial}
+      </text>
+    </svg>
   );
 }
 
@@ -1015,7 +1052,7 @@ function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
         <div className="flex items-center justify-center border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-muted py-2 text-center text-xs text-muted-foreground overflow-hidden" style={{ minHeight: 140 }}>
           {page.infoboxImage.src
             ? <img src={page.infoboxImage.src} alt={page.infoboxImage.alt} className="max-h-40 max-w-full object-contain" />
-            : <><ImageIcon size={16} className="mr-1" />Image manquante · {page.infoboxImage.filename}</>
+            : <LogoPlaceholder initial={page.title[0]?.toUpperCase() ?? '?'} color={accentColor} />
           }
         </div>
       )}
@@ -1182,7 +1219,7 @@ function ReaderPage() {
         <TableOfContents sections={page.sections} />
 
         <div className="reader-main" data-testid="article-page-content">
-        <div className="article-body clearfix">
+        <div className="article-body clearfix" style={{ '--page-accent': page.accentColor ?? categoryColor(page.category) } as React.CSSProperties}>
         <Infobox page={page} pages={pages} />
 
         {page.aliases.length > 0 && (
