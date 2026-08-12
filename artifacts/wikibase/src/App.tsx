@@ -1,5 +1,5 @@
 import 'flag-icons/css/flag-icons.min.css';
-import { createContext, useContext, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
 import { Archive, ArrowLeft, Check, ChevronRight, Clock3, Download, FileText, GitCompare, Image as ImageIcon, Menu, Pencil, Plus, RotateCcw, Search, Settings2, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
@@ -922,46 +922,57 @@ function computeTocNumbers(sections: WBSection[]): string[] {
 
 function TableOfContents({ sections }: { sections: WBSection[] }) {
   const [open, setOpen] = useState(true);
-  const [activeIdx, setActiveIdx] = useState<number>(-1);
-  const visibleRef = useRef<Set<number>>(new Set());
+  const [activeH2Idx, setActiveH2Idx] = useState<number>(-1);
   const numbers = computeTocNumbers(sections);
 
-  /* ScrollSpy: observe each section and highlight the topmost visible one */
+  /**
+   * Pre-compute parentH2[i] = index of the nearest H2 ancestor for section i.
+   * If section i IS an H2, parentH2[i] === i.
+   * If no H2 has been seen yet, parentH2[i] === -1.
+   */
+  const parentH2 = useMemo(() => {
+    let currentH2 = -1;
+    return sections.map((s) => {
+      if (s.level === 2) currentH2 = sections.indexOf(s);
+      return currentH2;
+    });
+  }, [sections]);
+
+  /**
+   * ScrollSpy — reliable "last heading above reading line" strategy.
+   *
+   * Instead of IntersectionObserver (which loses track when the heading has
+   * scrolled above the viewport and no section title is currently visible),
+   * we listen to scroll events and find the last section element whose top
+   * edge is at or above the reading threshold (120 px from the viewport top).
+   * That index is mapped to its parent H2 via parentH2[].
+   */
   useEffect(() => {
     if (sections.length === 0) return;
-    const els = sections
-      .map((_, i) => document.getElementById(`section-${i}`))
-      .filter(Boolean) as HTMLElement[];
+    const THRESHOLD = 120; // px from top of viewport
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          const idx = parseInt(entry.target.id.replace('section-', ''), 10);
-          if (entry.isIntersecting) {
-            visibleRef.current.add(idx);
-          } else {
-            visibleRef.current.delete(idx);
-          }
-        });
-        if (visibleRef.current.size > 0) {
-          setActiveIdx(Math.min(...visibleRef.current));
-        }
-      },
-      /* Intersection zone: top of viewport down to 20 % height — sections that
-         enter this band become "active". Adjust rootMargin to taste. */
-      { rootMargin: '0px 0px -78% 0px', threshold: 0 },
-    );
+    const update = () => {
+      let bestIdx = -1;
+      for (let i = 0; i < sections.length; i++) {
+        const el = document.getElementById(`section-${i}`);
+        if (!el) continue;
+        if (el.getBoundingClientRect().top <= THRESHOLD) bestIdx = i;
+      }
+      setActiveH2Idx(bestIdx >= 0 ? parentH2[bestIdx] : -1);
+    };
 
-    els.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
-  }, [sections]);
+    // `document` captures scroll on any scrollable ancestor, incl. body / html.
+    document.addEventListener('scroll', update, { passive: true });
+    update(); // initial paint
+    return () => document.removeEventListener('scroll', update);
+  }, [sections, parentH2]);
 
   /* Smooth-scroll to section on click */
   const scrollTo = (e: React.MouseEvent<HTMLAnchorElement>, idx: number) => {
     e.preventDefault();
     const el = document.getElementById(`section-${idx}`);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    setActiveIdx(idx);
+    setActiveH2Idx(idx);
   };
 
   const topLevel = sections.filter((s) => s.level === 2);
@@ -988,7 +999,7 @@ function TableOfContents({ sections }: { sections: WBSection[] }) {
             return (
               <li
                 key={`${s.title}-${i}`}
-                className={['wiki-toc-item', activeIdx === i ? 'wiki-toc-item--active' : ''].filter(Boolean).join(' ')}
+                className={['wiki-toc-item', activeH2Idx === i ? 'wiki-toc-item--active' : ''].filter(Boolean).join(' ')}
               >
                 <a href={`#section-${i}`} onClick={(e) => scrollTo(e, i)}>
                   <span className="wiki-toc-num">{numbers[i]}</span>
