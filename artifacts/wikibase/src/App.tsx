@@ -4,7 +4,7 @@ import { Archive, ArrowLeft, Check, ChevronRight, Clock3, FileText, GitCompare, 
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
-import { allText, demoSource, formatDate, parseWikiText, savePages, seedPages, type WBBlock, type WBImage, type WBSection, type WikiPage } from '@/lib/wikibase';
+import { allText, demoSource, formatDate, parseWikiText, savePages, seedPages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
 
@@ -714,29 +714,93 @@ function TableOfContents({ sections }: { sections: WBSection[] }) {
 
 /* ─── ReaderPage ─────────────────────────────────────────────────────────── */
 
+/** Convert a 2-letter ISO country code to its flag emoji. */
+function flagEmoji(code: string): string {
+  return code.toUpperCase().split('').map((c) =>
+    String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)
+  ).join('');
+}
+
 function InternalText({ text, pages }: { text: string; pages: WikiPage[] }) {
-  const parts = text.split(/(\[\[[^\]]+\]\])/g);
+  // Matches both [[Wiki links]] and {{flag:xx}} inline syntax
+  const parts = text.split(/(\[\[[^\]]+\]\]|\{\{flag:[a-zA-Z]{2,3}\}\})/g);
   return (
     <>
       {parts.map((part, i) => {
-        const match = part.match(/^\[\[([^\]]+)\]\]$/);
-        if (!match) return <span key={i}>{part}</span>;
-        const name = match[1];
-        const target = pages.find((p) => p.title.toLowerCase() === name.toLowerCase());
-        return target
-          ? <Link data-testid={`link-internal-${name}`} key={i} href={`/page/${target.id}`} className="wiki-link">{name}</Link>
-          : <span data-testid={`link-missing-${name}`} key={i} className="wiki-link-red">{name}</span>;
+        const wikiMatch = part.match(/^\[\[([^\]]+)\]\]$/);
+        if (wikiMatch) {
+          const name = wikiMatch[1];
+          const target = pages.find((p) => p.title.toLowerCase() === name.toLowerCase());
+          return target
+            ? <Link data-testid={`link-internal-${name}`} key={i} href={`/page/${target.id}`} className="wiki-link">{name}</Link>
+            : <span data-testid={`link-missing-${name}`} key={i} className="wiki-link-red">{name}</span>;
+        }
+        const flagMatch = part.match(/^\{\{flag:([a-zA-Z]{2,3})\}\}$/);
+        if (flagMatch) {
+          const code = flagMatch[1];
+          return <span key={i} title={code.toUpperCase()} aria-label={`Drapeau ${code.toUpperCase()}`}>{flagEmoji(code)}</span>;
+        }
+        return <span key={i}>{part}</span>;
       })}
+    </>
+  );
+}
+
+/** Renders a single jersey kit as vertical color stripes in a jersey silhouette. */
+function JerseyKit({ jersey }: { jersey: WBJersey }) {
+  const cols = jersey.colors.slice(0, 5);
+  const stripeW = 100 / cols.length;
+  return (
+    <div className="infobox-jersey-kit">
+      <svg viewBox="0 0 40 46" width="36" height="42" aria-hidden="true">
+        {/* jersey body clip path */}
+        <defs>
+          <clipPath id={`jersey-clip-${jersey.name}`}>
+            {/* sleeves + body silhouette */}
+            <path d="M10,5 L0,18 L7,21 L7,46 L33,46 L33,21 L40,18 L30,5 Q25,2 20,2 Q15,2 10,5Z" />
+          </clipPath>
+        </defs>
+        {/* color stripes clipped to jersey shape */}
+        <g clipPath={`url(#jersey-clip-${jersey.name})`}>
+          {cols.map((color, i) => (
+            <rect key={i} x={i * stripeW * 0.4} y="0" width={stripeW * 0.4} height="46" fill={color} />
+          ))}
+          {/* fallback full fill for first color behind stripes */}
+          <rect x="0" y="0" width="40" height="46" fill={cols[0]} style={{ zIndex: -1 }} />
+          {cols.map((color, i) => (
+            <rect key={`s-${i}`} x={i * (40 / cols.length)} y="0" width={40 / cols.length} height="46" fill={color} />
+          ))}
+        </g>
+        {/* collar */}
+        <path d="M15,5 Q20,10 25,5" fill="none" stroke="rgba(0,0,0,0.25)" strokeWidth="1.5" />
+      </svg>
+      <span className="infobox-jersey-label">{jersey.name}</span>
+    </div>
+  );
+}
+
+/** A titled sub-section of key-value rows within the infobox. */
+function InfoboxSection({ section, pages }: { section: WBInfoboxSection; pages: WikiPage[] }) {
+  return (
+    <>
+      <div className="infobox-section-title">{section.title}</div>
+      {section.fields.map((r) => (
+        <div key={r.key} className="grid grid-cols-[44%_56%] border-b border-[var(--wiki-border)] dark:border-border py-1 px-1 text-xs last:border-0">
+          <span className="font-bold">{r.key}</span>
+          <span><InternalText text={r.value} pages={pages} /></span>
+        </div>
+      ))}
     </>
   );
 }
 
 function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
   const accentColor = page.accentColor ?? categoryColor(page.category);
-  // In dark mode, we darken the accent colour slightly for readability
   return (
     <aside data-testid="content-infobox" className="wiki-infobox w-full lg:float-right lg:clear-right lg:ml-5 lg:mb-4 lg:w-[280px] lg:shrink-0 mb-4">
       <div className="wiki-infobox-header" style={{ background: accentColor }}>{page.title}</div>
+
+      {/* Optional image */}
       {page.infoboxImage && (
         <div className="flex items-center justify-center border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-muted py-2 text-center text-xs text-muted-foreground overflow-hidden" style={{ minHeight: 140 }}>
           {page.infoboxImage.src
@@ -745,12 +809,29 @@ function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
           }
         </div>
       )}
+
+      {/* Optional jersey kits — only rendered when [MAILLOTS] is in the source */}
+      {page.infoboxJerseys && page.infoboxJerseys.length > 0 && (
+        <div className="infobox-jerseys border-b border-[var(--wiki-border)] dark:border-border">
+          <div className="infobox-section-title">Maillots</div>
+          <div className="infobox-jerseys-row">
+            {page.infoboxJerseys.map((j) => <JerseyKit key={j.name} jersey={j} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Base infobox key-value fields */}
       <div className="p-1">
         {page.infobox.map((r) => (
           <div key={r.key} className="grid grid-cols-[44%_56%] border-b border-[var(--wiki-border)] dark:border-border py-1 px-1 text-xs last:border-0">
             <span className="font-bold">{r.key}</span>
             <span><InternalText text={r.value} pages={pages} /></span>
           </div>
+        ))}
+
+        {/* Optional sub-sections — only rendered when [INFOBOX_SECTION] blocks are in the source */}
+        {page.infoboxSections?.map((s) => (
+          <InfoboxSection key={s.title} section={s} pages={pages} />
         ))}
       </div>
     </aside>

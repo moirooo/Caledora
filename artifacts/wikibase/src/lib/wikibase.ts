@@ -8,15 +8,26 @@ export type WBBlock =
   | { type: 'table'; table: WBTable };
 export type WBSection = { title: string; level: number; blocks: WBBlock[] };
 export type WBHistory = { timestamp: string; label: string; sourceText: string };
+
+/** One jersey kit: a name (e.g. "Domicile") and an ordered list of hex colors. */
+export type WBJersey = { name: string; colors: string[] };
+
+/** A titled sub-group of key-value fields inside the infobox. */
+export type WBInfoboxSection = { title: string; fields: KV[] };
+
 export type WikiPage = {
   id: string; title: string; subtitle: string; aliases: string[]; introduction: string;
   infobox: KV[]; infoboxImage?: WBImage; sections: WBSection[]; links: string[];
   references: KV[]; bibliography: string[]; categories: string[]; category: string;
   type: string; sourceText: string; updatedAt: string; createdAt: string;
   history: WBHistory[]; isTrashed: boolean; accentColor?: string;
+  /** Conditional — only present when [MAILLOTS] is declared in the source. */
+  infoboxJerseys?: WBJersey[];
+  /** Conditional — only present when [INFOBOX_SECTION] blocks are declared. */
+  infoboxSections?: WBInfoboxSection[];
 };
 
-const tags = new Set(['TITRE','SOUS-TITRE','ALIASES','INTRODUCTION','INFOBOX','IMAGE_INFOBOX','SECTION','SOUS-SECTION','SOUS-SOUS-SECTION','TEXTE','LISTE','LISTE_NUMEROTEE','IMAGE','TABLEAU','LIENS','REFERENCES','BIBLIOGRAPHIE','CATEGORIES','COULEUR']);
+const tags = new Set(['TITRE','SOUS-TITRE','ALIASES','INTRODUCTION','INFOBOX','IMAGE_INFOBOX','SECTION','SOUS-SECTION','SOUS-SOUS-SECTION','TEXTE','LISTE','LISTE_NUMEROTEE','IMAGE','TABLEAU','LIENS','REFERENCES','BIBLIOGRAPHIE','CATEGORIES','COULEUR','MAILLOTS','INFOBOX_SECTION']);
 const lines = (text: string) => text.replace(/\r/g, '').split('\n');
 const clean = (s: string) => s.trim();
 const field = (arr: string[], key: string) => {
@@ -65,6 +76,33 @@ export function parseWikiText(sourceText: string, category = 'Non classé', type
     }
   }
   const imageLines = first('IMAGE_INFOBOX');
+
+  // ── [MAILLOTS] ────────────────────────────────────────────────────────────
+  // Each non-empty line inside a [MAILLOTS] block: "Domicile = #FFF | #00F"
+  const jerseyLines = buckets.filter((b) => b.tag === 'MAILLOTS').flatMap((b) => b.content);
+  const infoboxJerseys: WBJersey[] = jerseyLines
+    .filter((l) => l.includes('='))
+    .map((l) => {
+      const ix = l.indexOf('=');
+      const name = l.slice(0, ix).trim();
+      const colors = l.slice(ix + 1).split('|').map(clean).filter(Boolean);
+      return { name, colors };
+    })
+    .filter((j) => j.colors.length > 0);
+
+  // ── [INFOBOX_SECTION] ─────────────────────────────────────────────────────
+  // Multiple [INFOBOX_SECTION] blocks are supported; each has a "titre =" line
+  // followed by "Clé = Valeur" pairs.
+  const infoboxSections: WBInfoboxSection[] = buckets
+    .filter((b) => b.tag === 'INFOBOX_SECTION')
+    .map((b) => ({
+      title: field(b.content, 'titre') || field(b.content, 'title') || 'Section',
+      fields: b.content
+        .filter((l) => l.includes('=') && !l.trim().toLowerCase().startsWith('titre =') && !l.trim().toLowerCase().startsWith('title ='))
+        .map((l) => { const ix = l.indexOf('='); return { key: l.slice(0, ix).trim(), value: l.slice(ix + 1).trim() }; }),
+    }))
+    .filter((s) => s.fields.length > 0);
+
   return {
     id: `page-${Date.now()}`, title, subtitle: clean(first('SOUS-TITRE').join('\n')), aliases: first('ALIASES').map(clean).filter(Boolean),
     introduction: clean(first('INTRODUCTION').join('\n')), infobox: fields(first('INFOBOX')),
@@ -73,6 +111,8 @@ export function parseWikiText(sourceText: string, category = 'Non classé', type
     categories: first('CATEGORIES').map(clean).filter(Boolean), category, type, sourceText, updatedAt: now, createdAt: now,
     history: [{ timestamp: now, label: 'Import initial', sourceText }], isTrashed: false,
     accentColor: clean(first('COULEUR').join('')) || undefined,
+    infoboxJerseys: infoboxJerseys.length > 0 ? infoboxJerseys : undefined,
+    infoboxSections: infoboxSections.length > 0 ? infoboxSections : undefined,
   };
 }
 
