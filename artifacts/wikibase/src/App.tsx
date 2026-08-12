@@ -731,7 +731,7 @@ function InternalText({ text, pages }: { text: string; pages: WikiPage[] }) {
   );
 }
 
-function Infobox({ page }: { page: WikiPage }) {
+function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
   const accentColor = page.accentColor ?? categoryColor(page.category);
   // In dark mode, we darken the accent colour slightly for readability
   return (
@@ -749,7 +749,7 @@ function Infobox({ page }: { page: WikiPage }) {
         {page.infobox.map((r) => (
           <div key={r.key} className="grid grid-cols-[44%_56%] border-b border-[var(--wiki-border)] dark:border-border py-1 px-1 text-xs last:border-0">
             <span className="font-bold">{r.key}</span>
-            <span>{r.value}</span>
+            <span><InternalText text={r.value} pages={pages} /></span>
           </div>
         ))}
       </div>
@@ -892,7 +892,7 @@ function ReaderPage() {
 
         <div className="reader-main" data-testid="article-page-content">
         <div className="article-body clearfix">
-        <Infobox page={page} />
+        <Infobox page={page} pages={pages} />
 
         {page.aliases.length > 0 && (
           <p className="text-sm italic text-muted-foreground mb-3">
