@@ -356,15 +356,15 @@
 }
 .dark .syntax-guide-code { background: hsl(var(--secondary)); }
 
-/* Inline flag images from flagcdn.com — [flag: code] syntax */
-.inline-flag {
-  display: inline;
-  height: 13px;
-  width: auto;
-  vertical-align: middle;
-  margin-right: 4px;
+/* Inline flag spans via flag-icons CSS — [flag: code] syntax */
+.inline-flag.fi {
+  display: inline-block;
+  font-size: 1em;           /* scales with surrounding text */
+  line-height: 1;
+  vertical-align: -0.15em;
+  margin-right: 3px;
   border-radius: 1px;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.12);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.10);
 }
 
 .syntax-guide-tip {

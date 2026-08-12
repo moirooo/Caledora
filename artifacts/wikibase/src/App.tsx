@@ -1,6 +1,7 @@
+import 'flag-icons/css/flag-icons.min.css';
 import { createContext, useContext, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
-import { Archive, ArrowLeft, Check, ChevronRight, Clock3, FileText, GitCompare, Image as ImageIcon, Menu, Pencil, Plus, RotateCcw, Search, Settings2, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { Archive, ArrowLeft, Check, ChevronRight, Clock3, Download, FileText, GitCompare, Image as ImageIcon, Menu, Pencil, Plus, RotateCcw, Search, Settings2, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -208,7 +209,50 @@ function AppearancePanel({ onClose }: { onClose: () => void }) {
           </label>
         ))}
       </div>
+
+      {/* ── Export / sauvegarde ─────────────────────── */}
+      <div className="appearance-panel-section">
+        <div className="appearance-panel-label">Données</div>
+        <ExportButton />
+      </div>
     </div>
+  );
+}
+
+/** Télécharge toutes les pages (hors corbeille) sous forme de fichier JSON. */
+function ExportButton() {
+  const [done, setDone] = useState(false);
+
+  function exportWiki() {
+    const raw = localStorage.getItem('wikibase-pages');
+    const pages: WikiPage[] = raw ? (JSON.parse(raw) as WikiPage[]) : [];
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      pages: pages.filter((p) => !p.isTrashed),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `wikibase-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setDone(true);
+    setTimeout(() => setDone(false), 2500);
+  }
+
+  return (
+    <button
+      onClick={exportWiki}
+      className="appearance-panel-option justify-between text-sm hover:bg-secondary rounded-sm px-1 py-1 w-full text-left transition"
+    >
+      <span className="flex items-center gap-1.5">
+        {done ? <Check size={14} className="text-green-600" /> : <Download size={14} />}
+        {done ? 'Sauvegarde téléchargée !' : 'Exporter la sauvegarde'}
+      </span>
+      <span className="text-[10px] text-muted-foreground">.json</span>
+    </button>
   );
 }
 
@@ -952,18 +996,17 @@ function InternalText({ text, pages }: { text: string; pages: WikiPage[] }) {
           const code = flagEmojiMatch[1];
           return <span key={i} title={code.toUpperCase()} aria-label={`Drapeau ${code.toUpperCase()}`}>{flagEmoji(code)}</span>;
         }
-        // [flag: gb-eng] → <img> from flagcdn.com
+        // [flag: gb-eng] → flag-icons span (bundled, no network needed)
         const flagImgMatch = part.match(/^\[flag:\s*([a-zA-Z0-9-]+)\]$/);
         if (flagImgMatch) {
           const code = flagImgMatch[1].toLowerCase();
           return (
-            <img
+            <span
               key={i}
-              src={`https://flagcdn.com/w20/${code}.png`}
-              srcSet={`https://flagcdn.com/w40/${code}.png 2x`}
-              alt={code}
+              className={`fi fi-${code} inline-flag`}
               title={code.toUpperCase()}
-              className="inline-flag"
+              aria-label={`Drapeau ${code.toUpperCase()}`}
+              role="img"
             />
           );
         }
