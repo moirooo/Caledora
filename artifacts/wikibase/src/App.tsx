@@ -1016,6 +1016,41 @@ function TableOfContents({ sections }: { sections: WBSection[] }) {
 
 /* ─── ReaderPage ─────────────────────────────────────────────────────────── */
 
+/* ─── Medal icons ────────────────────────────────────────────────────────── */
+
+const MEDAL_CONFIG = {
+  or:      { fill: '#FFD700', stroke: '#B8960C', label: 'Médaille d\'or' },
+  argent:  { fill: '#C0C0C0', stroke: '#808080', label: 'Médaille d\'argent' },
+  bronze:  { fill: '#CD7F32', stroke: '#8C5A1E', label: 'Médaille de bronze' },
+} as const;
+
+type MedalType = keyof typeof MEDAL_CONFIG;
+
+/** Circular medal icon, inline-aligned, purely SVG — no external dependency. */
+function MedalIcon({ type }: { type: MedalType }) {
+  const { fill, stroke, label } = MEDAL_CONFIG[type];
+  return (
+    <span title={label} aria-label={label} style={{ display: 'inline-block', lineHeight: 1 }}>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 16 16"
+        width="15"
+        height="15"
+        className="inline-block shrink-0"
+        aria-hidden="true"
+        style={{ verticalAlign: '-0.15em', marginInline: '0.15em' }}
+      >
+        {/* SVG title for screen readers / tooltip fallback */}
+        <title>{label}</title>
+        {/* Medal body */}
+        <circle cx="8" cy="8" r="7" fill={fill} stroke={stroke} strokeWidth="1.2" />
+        {/* Subtle shine */}
+        <ellipse cx="6.2" cy="5.4" rx="2.4" ry="1.4" fill="white" fillOpacity="0.28" />
+      </svg>
+    </span>
+  );
+}
+
 /** Convert a 2-letter ISO country code to its flag emoji (for {{flag:xx}} syntax). */
 function flagEmoji(code: string): string {
   return code.toUpperCase().split('').map((c) =>
@@ -1024,8 +1059,8 @@ function flagEmoji(code: string): string {
 }
 
 function InternalText({ text, pages }: { text: string; pages: WikiPage[] }) {
-  // Matches: [[Wiki links]], {{flag:xx}} (emoji), [flag: gb-eng] (image)
-  const parts = text.split(/(\[\[[^\]]+\]\]|\{\{flag:[a-zA-Z]{2,3}\}\}|\[flag:\s*[a-zA-Z0-9-]+\])/g);
+  // Matches: [[Wiki links]], {{flag:xx}} (emoji), [flag: gb-eng] (image), {{or/argent/bronze}} (medals)
+  const parts = text.split(/(\[\[[^\]]+\]\]|\{\{flag:[a-zA-Z]{2,3}\}\}|\[flag:\s*[a-zA-Z0-9-]+\]|\{\{(?:or|argent|bronze)\}\})/gi);
   return (
     <>
       {parts.map((part, i) => {
@@ -1057,6 +1092,12 @@ function InternalText({ text, pages }: { text: string; pages: WikiPage[] }) {
               role="img"
             />
           );
+        }
+        // {{or}}, {{argent}}, {{bronze}} → inline medal SVG
+        const medalMatch = part.match(/^\{\{(or|argent|bronze)\}\}$/i);
+        if (medalMatch) {
+          const type = medalMatch[1].toLowerCase() as MedalType;
+          return <MedalIcon key={i} type={type} />;
         }
         return <span key={i}>{part}</span>;
       })}
