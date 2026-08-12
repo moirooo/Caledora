@@ -272,6 +272,98 @@
   .dark .wiki-tab-active { background: hsl(var(--background)); border-bottom-color: hsl(var(--background)); }
 }
 
+/* ── Syntax guide (CreatePage) ───────────────────────────────────────────── */
+.syntax-guide { overflow: hidden; }
+
+.syntax-guide-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: hsl(var(--foreground));
+}
+.syntax-guide-toggle:hover { background: var(--wiki-toc-bg); }
+.dark .syntax-guide-toggle:hover { background: hsl(var(--secondary)); }
+
+.syntax-guide-body {
+  border-top: 1px solid var(--wiki-border);
+  padding: 0 0 8px;
+}
+.syntax-guide-section {
+  padding: 10px 14px 4px;
+}
+.syntax-guide-section + .syntax-guide-section {
+  border-top: 1px solid var(--wiki-border);
+}
+.syntax-guide-section--sport {
+  background: #f0f7ff;
+}
+.dark .syntax-guide-section--sport { background: hsl(217 40% 12%); }
+
+.syntax-guide-section-title {
+  font-size: 11px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 10px;
+}
+.syntax-guide-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+  align-items: start;
+}
+@media (max-width: 700px) {
+  .syntax-guide-row { grid-template-columns: 1fr; }
+}
+.syntax-guide-label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  padding-top: 2px;
+}
+.syntax-guide-label strong { font-size: 12px; }
+.syntax-guide-label span { color: hsl(var(--muted-foreground)); font-size: 11px; line-height: 1.5; }
+.syntax-guide-label code {
+  font-family: var(--app-font-mono);
+  font-size: 10px;
+  background: var(--wiki-toc-bg);
+  border: 1px solid var(--wiki-border);
+  border-radius: 2px;
+  padding: 0 3px;
+}
+
+.syntax-guide-code {
+  font-family: var(--app-font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  background: var(--wiki-toc-bg);
+  border: 1px solid var(--wiki-border);
+  border-radius: 3px;
+  padding: 8px 10px;
+  white-space: pre;
+  overflow-x: auto;
+  color: hsl(var(--foreground));
+  margin: 0;
+}
+.dark .syntax-guide-code { background: hsl(var(--secondary)); }
+
+.syntax-guide-tip {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  padding: 6px 14px 2px;
+  border-top: 1px solid var(--wiki-border);
+  margin-top: 4px;
+}
+
 /* ── Infobox sub-sections & jersey kits ─────────────────────────────────── */
 .infobox-section-title {
   font-size: 11px;

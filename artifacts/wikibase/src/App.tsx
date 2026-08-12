@@ -442,6 +442,199 @@ function Dashboard() {
   );
 }
 
+/* ─── SyntaxGuide ────────────────────────────────────────────────────────── */
+
+function CodeSnippet({ children }: { children: string }) {
+  return (
+    <pre className="syntax-guide-code">{children.trim()}</pre>
+  );
+}
+
+function SyntaxGuide({ category }: { category: string }) {
+  const [open, setOpen] = useState(false);
+  const isSport = category === 'Sports & Football';
+
+  return (
+    <div className="syntax-guide rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card">
+      <button
+        className="syntax-guide-toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-2">
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--wiki-toc-bg)] dark:bg-secondary border border-[var(--wiki-border)] dark:border-border text-[10px]">?</span>
+          <span className="font-bold text-sm">Référence de syntaxe</span>
+          {isSport && (
+            <span className="rounded-full bg-[#dceefb] dark:bg-primary/20 text-[10px] font-bold px-2 py-0.5 text-primary">⚽ Sports & Football</span>
+          )}
+        </span>
+        <span className="text-xs text-muted-foreground">{open ? 'masquer ▲' : 'afficher ▼'}</span>
+      </button>
+
+      {open && (
+        <div className="syntax-guide-body">
+
+          {/* ── Sport-specific (shown first when category matches) ── */}
+          {isSport && (
+            <div className="syntax-guide-section syntax-guide-section--sport">
+              <div className="syntax-guide-section-title">⚽ Fonctionnalités Sports & Football</div>
+
+              <div className="syntax-guide-row">
+                <div className="syntax-guide-label">
+                  <strong>Maillots</strong>
+                  <span>Silhouettes colorées (max 5 couleurs par kit, séparées par <code>|</code>)</span>
+                </div>
+                <CodeSnippet>{`
+[MAILLOTS]
+Domicile  = #FFFFFF | #003399 | #FF0000
+Extérieur = #000000 | #FFFFFF
+3ème      = #FF6600 | #FFFFFF
+                `}</CodeSnippet>
+              </div>
+
+              <div className="syntax-guide-row">
+                <div className="syntax-guide-label">
+                  <strong>Drapeaux inline</strong>
+                  <span>Dans n'importe quelle valeur d'infobox ou texte — code ISO 2 lettres</span>
+                </div>
+                <CodeSnippet>{`
+[INFOBOX]
+Pays    = {{flag:fr}} France
+Ligue   = {{flag:eu}} Ligue des champions
+Fondé   = 1899 · {{flag:es}} Barcelone
+                `}</CodeSnippet>
+              </div>
+
+              <div className="syntax-guide-row">
+                <div className="syntax-guide-label">
+                  <strong>Sous-sections infobox</strong>
+                  <span>Palmarès, statistiques… Plusieurs blocs possibles. Le champ <code>titre</code> est obligatoire.</span>
+                </div>
+                <CodeSnippet>{`
+[INFOBOX_SECTION]
+titre        = Palmarès
+Championnat  = 27 titres
+Coupe nat.   = 3 titres
+Europe       = 1 titre (2018)
+
+[INFOBOX_SECTION]
+titre    = Stade
+Nom      = Stade Lacora
+Capacité = 45 000 places
+                `}</CodeSnippet>
+              </div>
+
+              <div className="syntax-guide-row">
+                <div className="syntax-guide-label">
+                  <strong>Couleur d'accent</strong>
+                  <span>Remplace la couleur de l'en-tête de l'infobox (peut aussi être défini via le sélecteur ci-dessus)</span>
+                </div>
+                <CodeSnippet>{`
+[COULEUR]
+#003399
+                `}</CodeSnippet>
+              </div>
+            </div>
+          )}
+
+          {/* ── Universal tags ── */}
+          <div className="syntax-guide-section">
+            <div className="syntax-guide-section-title">Balises universelles</div>
+
+            <div className="syntax-guide-row">
+              <div className="syntax-guide-label">
+                <strong>Structure de base</strong>
+                <span>Chaque balise <code>[TAG]</code> ouvre un bloc. Les lignes qui suivent sont son contenu.</span>
+              </div>
+              <CodeSnippet>{`
+[TITRE]
+Nom de la page
+
+[SOUS-TITRE]
+Description courte
+
+[INTRODUCTION]
+Texte d'introduction…
+
+[INFOBOX]
+Clé 1 = Valeur
+Clé 2 = [[Lien interne]]
+              `}</CodeSnippet>
+            </div>
+
+            <div className="syntax-guide-row">
+              <div className="syntax-guide-label">
+                <strong>Sections du texte</strong>
+                <span>3 niveaux de titres disponibles</span>
+              </div>
+              <CodeSnippet>{`
+[SECTION]
+Titre principal (niveau 1)
+
+[SOUS-SECTION]
+Sous-titre (niveau 2)
+
+[SOUS-SOUS-SECTION]
+Sous-sous-titre (niveau 3)
+
+[TEXTE]
+Paragraphe de texte normal.
+
+[LISTE]
+Premier élément
+Deuxième élément
+
+[LISTE_NUMEROTEE]
+Étape 1
+Étape 2
+              `}</CodeSnippet>
+            </div>
+
+            <div className="syntax-guide-row">
+              <div className="syntax-guide-label">
+                <strong>Liens & références</strong>
+                <span><code>[[Titre]]</code> crée un lien interne vers une autre page WikiBase</span>
+              </div>
+              <CodeSnippet>{`
+[LIENS]
+Nom d'une autre page
+Caledora
+
+[REFERENCES]
+1 = Source, Auteur, 2026
+
+[BIBLIOGRAPHIE]
+Titre du livre, Auteur, Éditeur, 2026
+
+[CATEGORIES]
+Football
+Espagne
+              `}</CodeSnippet>
+            </div>
+
+            <div className="syntax-guide-row">
+              <div className="syntax-guide-label">
+                <strong>Image dans l'infobox</strong>
+              </div>
+              <CodeSnippet>{`
+[IMAGE_INFOBOX]
+fichier    = nom_du_fichier.jpg
+légende    = Description de l'image
+alt        = Texte alternatif
+              `}</CodeSnippet>
+            </div>
+          </div>
+
+          {/* ── Tip ── */}
+          <p className="syntax-guide-tip">
+            💡 Les balises inconnues ou mal orthographiées sont silencieusement ignorées par le parser — votre page reste valide.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── CreatePage ─────────────────────────────────────────────────────────── */
 
 function SourcePreview({ page }: { page: WikiPage }) {
@@ -578,6 +771,9 @@ function CreatePage() {
               <button onClick={() => setAccentColor(categoryColor(category))} className="wiki-link text-[11px]">Réinitialiser</button>
             </div>
           </div>
+
+          {/* Syntax guide — adapts to the selected category */}
+          <SyntaxGuide category={category} />
 
           {/* Step 2 */}
           <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
