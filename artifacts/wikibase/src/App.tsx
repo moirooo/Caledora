@@ -404,12 +404,7 @@ function Shell({ children }: { children: ReactNode }) {
             <Menu size={18} />
           </button>
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary overflow-hidden">
-              <svg viewBox="0 0 60 60" className="h-7 w-7" aria-hidden>
-                <circle cx="30" cy="30" r="28" fill="transparent" stroke="#a2a9b1" strokeWidth="2"/>
-                <text x="30" y="38" textAnchor="middle" fontSize="28" fontFamily="Georgia,serif" fill="currentColor" fontWeight="bold">W</text>
-              </svg>
-            </div>
+            <SiteLogo />
             <div className="leading-tight">
               <div className="font-bold text-[16px] leading-none">WikiBase</div>
               <div className="text-[10px] text-muted-foreground">L'encyclopédie libre locale</div>
@@ -1195,6 +1190,34 @@ function InternalText({ text, pages }: { text: string; pages: WikiPage[] }) {
         return <span key={i}>{part}</span>;
       })}
     </>
+  );
+}
+
+/**
+ * Site logo shown in the top-left header.
+ * Tries public/images/site_logo.png first; falls back to the SVG "W" monogram.
+ * In dark mode, applies brightness-0 + invert so a dark logo turns white.
+ */
+function SiteLogo() {
+  const [failed, setFailed] = useState(false);
+  const src = `${import.meta.env.BASE_URL}images/site_logo.png`;
+  if (failed) {
+    return (
+      <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary overflow-hidden shrink-0">
+        <svg viewBox="0 0 60 60" className="h-7 w-7" aria-hidden>
+          <circle cx="30" cy="30" r="28" fill="transparent" stroke="#a2a9b1" strokeWidth="2" />
+          <text x="30" y="38" textAnchor="middle" fontSize="28" fontFamily="Georgia,serif" fill="currentColor" fontWeight="bold">W</text>
+        </svg>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt="WikiBase"
+      className="h-8 w-auto object-contain shrink-0 dark:brightness-0 dark:invert"
+      onError={() => setFailed(true)}
+    />
   );
 }
 
