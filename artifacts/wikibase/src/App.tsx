@@ -1051,6 +1051,36 @@ function MedalIcon({ type }: { type: MedalType }) {
   );
 }
 
+/**
+ * Inline flag image.
+ * Strategy: try public/flags/{code}.png first (supports custom/fictional flags).
+ * If the image fails to load, fall back to the bundled flag-icons CSS class.
+ */
+function FlagImg({ code }: { code: string }) {
+  const [useCss, setUseCss] = useState(false);
+  const src = `${import.meta.env.BASE_URL}flags/${code}.png`;
+  if (useCss) {
+    return (
+      <span
+        className={`fi fi-${code} inline-flag`}
+        title={code.toUpperCase()}
+        aria-label={`Drapeau ${code.toUpperCase()}`}
+        role="img"
+      />
+    );
+  }
+  return (
+    <img
+      src={src}
+      onError={() => setUseCss(true)}
+      className="inline-block object-cover"
+      style={{ height: '0.875rem', width: '1.3rem', verticalAlign: '-0.12em', marginInline: '0.1em' }}
+      alt={`Drapeau ${code.toUpperCase()}`}
+      title={code.toUpperCase()}
+    />
+  );
+}
+
 /** Convert a 2-letter ISO country code to its flag emoji (for {{flag:xx}} syntax). */
 function flagEmoji(code: string): string {
   return code.toUpperCase().split('').map((c) =>
@@ -1079,19 +1109,11 @@ function InternalText({ text, pages }: { text: string; pages: WikiPage[] }) {
           const code = flagEmojiMatch[1];
           return <span key={i} title={code.toUpperCase()} aria-label={`Drapeau ${code.toUpperCase()}`}>{flagEmoji(code)}</span>;
         }
-        // [flag: gb-eng] → flag-icons span (bundled, no network needed)
+        // [flag: xx] → tries public/flags/xx.png first, falls back to flag-icons CSS
         const flagImgMatch = part.match(/^\[flag:\s*([a-zA-Z0-9-]+)\]$/);
         if (flagImgMatch) {
           const code = flagImgMatch[1].toLowerCase();
-          return (
-            <span
-              key={i}
-              className={`fi fi-${code} inline-flag`}
-              title={code.toUpperCase()}
-              aria-label={`Drapeau ${code.toUpperCase()}`}
-              role="img"
-            />
-          );
+          return <FlagImg key={i} code={code} />;
         }
         // {{or}}, {{argent}}, {{bronze}} → inline medal SVG
         const medalMatch = part.match(/^\{\{(or|argent|bronze)\}\}$/i);
@@ -1158,6 +1180,74 @@ function JerseyKit({ jersey }: { jersey: WBJersey }) {
   );
 }
 
+/* ─── Infobox row grouping ───────────────────────────────────────────────── */
+
+type GroupedRow =
+  | { kind: 'kv'; key: string; value: string }
+  | { kind: 'banner'; label: string }
+  | { kind: 'jerseys'; items: Array<{ label: string; value: string }> };
+
+/** Label mapping for common jersey key names. */
+const JERSEY_LABELS: Record<string, string> = {
+  domicile: 'Domicile',
+  exterieur: 'Extérieur',
+  extérieur: 'Extérieur',
+  third: 'Third',
+};
+
+/**
+ * Groups raw KV rows into typed display rows:
+ * - lines without '=' whose key matches `[section: Label]` → banner with label stripped
+ * - lines without '=' whose key matches `[maillot_xxx: colors]` → jersey group
+ * - other lines without '=' → plain accent banner
+ * - normal KV rows → kv
+ */
+function groupInfoboxRows(rows: { key: string; value: string }[]): GroupedRow[] {
+  const result: GroupedRow[] = [];
+  let i = 0;
+  while (i < rows.length) {
+    const r = rows[i];
+    if (r.value !== '') {
+      result.push({ kind: 'kv', key: r.key, value: r.value });
+      i++;
+      continue;
+    }
+    const key = r.key.trim();
+
+    // [section: Label] → plain banner, brackets stripped
+    const sectionMatch = key.match(/^\[section:\s*(.+?)\]$/i);
+    if (sectionMatch) {
+      result.push({ kind: 'banner', label: sectionMatch[1].trim() });
+      i++;
+      continue;
+    }
+
+    // [maillot_xxx: ...] — collect consecutive jersey rows into one group
+    const jerseyMatch = key.match(/^\[maillot_(\w+):\s*(.+?)\]$/i);
+    if (jerseyMatch) {
+      const jerseys: Array<{ label: string; value: string }> = [];
+      while (i < rows.length) {
+        const jr = rows[i];
+        if (jr.value !== '') break;
+        const jm = jr.key.trim().match(/^\[maillot_(\w+):\s*(.+?)\]$/i);
+        if (!jm) break;
+        const rawLabel = jm[1].toLowerCase();
+        const label = JERSEY_LABELS[rawLabel]
+          ?? (rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1));
+        jerseys.push({ label, value: jm[2].trim() });
+        i++;
+      }
+      result.push({ kind: 'jerseys', items: jerseys });
+      continue;
+    }
+
+    // Plain text → accent-colored banner
+    result.push({ kind: 'banner', label: key });
+    i++;
+  }
+  return result;
+}
+
 /** A titled sub-section of key-value rows within the infobox. */
 function InfoboxSection({ section, pages, accentColor }: { section: WBInfoboxSection; pages: WikiPage[]; accentColor: string }) {
   const textColor = getContrastingColor(accentColor);
@@ -1219,26 +1309,49 @@ function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
         </div>
       )}
 
-      {/* Base infobox key-value fields (rows with value='' are banner headers) */}
+      {/* Base infobox key-value fields */}
       <div className="p-1">
-        {page.infobox.map((r, i) =>
-          r.value === '' ? (
-            /* Banner / section header row */
+        {groupInfoboxRows(page.infobox).map((row, i) => {
+          if (row.kind === 'kv') return (
+            <div key={i} className="grid grid-cols-[44%_56%] border-b border-[var(--wiki-border)] dark:border-border py-1 px-1 text-xs last:border-0">
+              <span className="font-bold">{row.key}</span>
+              <span><InternalText text={row.value} pages={pages} /></span>
+            </div>
+          );
+
+          if (row.kind === 'banner') return (
             <div
-              key={`${r.key}-${i}`}
-              className="col-span-2 text-center font-bold text-xs py-1 px-2"
+              key={i}
+              className="text-center font-bold text-xs py-1 px-2"
               style={{ background: accentColor, color: headerTextColor }}
             >
-              {r.key}
+              {row.label}
             </div>
-          ) : (
-            /* Normal key-value row */
-            <div key={`${r.key}-${i}`} className="grid grid-cols-[44%_56%] border-b border-[var(--wiki-border)] dark:border-border py-1 px-1 text-xs last:border-0">
-              <span className="font-bold">{r.key}</span>
-              <span><InternalText text={r.value} pages={pages} /></span>
+          );
+
+          /* row.kind === 'jerseys' */
+          return (
+            <div key={i} className="py-2 px-2 border-b border-[var(--wiki-border)] dark:border-border last:border-0">
+              <div className="infobox-jerseys-row">
+                {row.items.map((item) => {
+                  const isPath = /\.(png|jpg|jpeg|svg|webp)$/i.test(item.value);
+                  if (isPath) return (
+                    <div key={item.label} className="infobox-jersey-kit">
+                      <img
+                        src={`${import.meta.env.BASE_URL}${item.value.trim()}`}
+                        className="w-9 h-auto"
+                        alt={item.label}
+                      />
+                      <span className="infobox-jersey-label">{item.label}</span>
+                    </div>
+                  );
+                  const colors = item.value.split(',').map((s) => s.trim()).filter(Boolean);
+                  return <JerseyKit key={item.label} jersey={{ name: item.label, colors }} />;
+                })}
+              </div>
             </div>
-          )
-        )}
+          );
+        })}
 
         {/* Optional sub-sections — only rendered when [INFOBOX_SECTION] blocks are in the source */}
         {page.infoboxSections?.map((s) => (

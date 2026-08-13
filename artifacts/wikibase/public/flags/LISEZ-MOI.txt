@@ -1,0 +1,19 @@
+Dossier de drapeaux personnalisés
+===================================
+
+Déposez ici vos images de drapeaux fictifs ou personnalisés au format PNG ou SVG.
+
+SYNTAXE dans vos pages :
+  [flag: cal]   → cherche flags/cal.png dans ce dossier
+  [flag: fr]    → utilise le drapeau bundlé (flag-icons, pas besoin de fichier)
+
+EXEMPLES de fichiers :
+  cal.png       → drapeau de Caledora
+  novaris.png   → drapeau de Novaris
+  eu-custom.svg → drapeau personnalisé
+
+TAILLE RECOMMANDÉE : 20×14 px à 80×56 px, ratio 10:7.
+
+NOTE : Les codes pays réels (fr, gb, de, us…) utilisent automatiquement
+la bibliothèque bundlée flag-icons et n'ont PAS besoin d'un fichier ici.
+Ce dossier est uniquement pour les drapeaux qui n'existent pas dans flag-icons.
