@@ -1551,19 +1551,31 @@ function BlockView({ block, pages }: { block: WBBlock; pages: WikiPage[] }) {
   if (block.type === 'image') {
     const img = block.image;
     const src = resolveImageSrc(img);
-    const alignClass = img.alignment === 'droite' ? 'lg:float-right lg:clear-right lg:ml-4 lg:mb-2' : img.alignment === 'gauche' ? 'lg:float-left lg:clear-left lg:mr-4 lg:mb-2' : 'mx-auto my-3';
+    const pos = (img.alignment || 'droite').toLowerCase();
+    const floatClass = pos === 'gauche'
+      ? 'float-left clear-left mr-4 mb-3 max-w-[280px] sm:max-w-[320px]'
+      : pos === 'centre'
+      ? 'mx-auto my-4 block clear-both max-w-full text-center'
+      : 'float-right clear-right ml-4 mb-3 max-w-[280px] sm:max-w-[320px]';
     return (
-      <figure data-testid={`image-block-${img.filename}`} className={`${alignClass} w-full lg:w-[220px] border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-1 text-center mb-3`}>
+      <figure
+        data-testid={`image-block-${img.filename}`}
+        className={`${floatClass} border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-1`}
+      >
         <div
-          className={`flex h-32 items-center justify-center overflow-hidden bg-[#eaecf0] dark:bg-muted text-xs text-muted-foreground${src ? ' cursor-zoom-in' : ''}`}
+          className={`flex items-center justify-center overflow-hidden bg-[#eaecf0] dark:bg-muted text-xs text-muted-foreground${src ? ' cursor-zoom-in' : ''}`}
           onClick={src ? () => openLightbox({ src, alt: img.alt, caption: img.caption || img.filename }) : undefined}
         >
           {src
-            ? <img src={src} alt={img.alt} className="max-h-full max-w-full object-contain" />
-            : <><ImageIcon size={14} className="mr-1" />Image manquante</>
+            ? <img src={src} alt={img.alt} className="max-w-full object-contain block" />
+            : <div className="flex items-center gap-1 py-8 px-4"><ImageIcon size={14} />Image manquante</div>
           }
         </div>
-        <figcaption className="pt-1 text-[11px] text-center text-muted-foreground">{img.caption || img.filename}</figcaption>
+        {(img.caption || img.filename) && (
+          <figcaption className="pt-1 px-1 text-[11px] text-center text-muted-foreground leading-relaxed">
+            {img.caption || img.filename}
+          </figcaption>
+        )}
       </figure>
     );
   }
@@ -1730,7 +1742,7 @@ function ReaderPage() {
             {section.level === 2 && <h2 className="wiki-h2">{section.title}</h2>}
             {section.level === 3 && <h3 className="wiki-h3">{section.title}</h3>}
             {section.level === 4 && <h4 className="wiki-h4">{section.title}</h4>}
-            <div className="space-y-2">
+            <div className="flow-root space-y-2">
               {section.blocks.map((block, j) => <BlockView key={j} block={block} pages={pages} />)}
             </div>
           </section>

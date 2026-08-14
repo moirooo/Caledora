@@ -39,6 +39,39 @@ const fields = (arr: string[]) => arr.filter((line) => line.includes('=')).map((
   return { key: line.slice(0, ix).trim(), value: line.slice(ix + 1).trim() };
 });
 
+/** Regex for the short inline image syntax inside TEXTE blocks.
+ *  `[image: fichier.png | droite | Légende optionnelle]`
+ *  Groups: 1=filename  2=position (opt)  3=caption (opt)
+ */
+const INLINE_IMG_RE = /^\[image:\s*([^|\]]+?)(?:\|\s*([^|\]]*?))?(?:\|\s*([^|\]]*?))?\]\s*$/i;
+
+/** Split a TEXTE block's lines into a mix of text and image blocks. */
+function processTexteBlock(content: string[]): WBBlock[] {
+  const result: WBBlock[] = [];
+  let textLines: string[] = [];
+
+  const flushText = () => {
+    const t = textLines.join('\n').trim();
+    if (t) result.push({ type: 'text', content: t });
+    textLines = [];
+  };
+
+  for (const line of content) {
+    const m = line.match(INLINE_IMG_RE);
+    if (m) {
+      flushText();
+      const filename = m[1].trim();
+      const alignment = (m[2]?.trim() || 'droite').toLowerCase();
+      const caption = m[3]?.trim() ?? '';
+      result.push({ type: 'image', image: { filename, caption, alt: caption || filename, alignment, size: '300', missing: true } });
+    } else {
+      textLines.push(line);
+    }
+  }
+  flushText();
+  return result;
+}
+
 export function parseWikiText(sourceText: string, category = 'Non classé', type = 'Article'): WikiPage {
   const buckets: { tag: string; content: string[] }[] = [];
   let current: { tag: string; content: string[] } | null = null;
@@ -66,7 +99,7 @@ export function parseWikiText(sourceText: string, category = 'Non classé', type
     const level = bucket.tag === 'SECTION' ? 2 : bucket.tag === 'SOUS-SECTION' ? 3 : bucket.tag === 'SOUS-SOUS-SECTION' ? 4 : 0;
     if (level) { active = { title: clean(bucket.content.join('\n')), level, blocks: [] }; sections.push(active); continue; }
     if (!active) continue;
-    if (bucket.tag === 'TEXTE' && clean(bucket.content.join('\n'))) active.blocks.push({ type: 'text', content: clean(bucket.content.join('\n')) });
+    if (bucket.tag === 'TEXTE') { for (const blk of processTexteBlock(bucket.content)) active.blocks.push(blk); }
     if (bucket.tag === 'LISTE' || bucket.tag === 'LISTE_NUMEROTEE') active.blocks.push({ type: bucket.tag === 'LISTE' ? 'list' : 'numbered', items: bucket.content.map(clean).filter(Boolean) });
     if (bucket.tag === 'IMAGE') active.blocks.push({ type: 'image', image: imageFrom(bucket.content) });
     if (bucket.tag === 'TABLEAU') {
