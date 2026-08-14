@@ -1205,20 +1205,35 @@ function flagEmoji(code: string): string {
   ).join('');
 }
 
+/** Lowercase + strip diacritics for accent-insensitive comparison. */
+function normalizeStr(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+/** Find a page by title (exact, case-insensitive) then by aliases (accent+case insensitive). */
+function resolvePage(name: string, pages: WikiPage[]): WikiPage | undefined {
+  const norm = normalizeStr(name);
+  return (
+    pages.find((p) => normalizeStr(p.title) === norm) ??
+    pages.find((p) => p.aliases.some((a) => normalizeStr(a) === norm))
+  );
+}
+
 function InternalText({ text, pages }: { text: string; pages: WikiPage[] }) {
-  // Matches: [[Wiki links]], {{flag:xx}} (emoji), [flag: gb-eng] (image), {{or/argent/bronze}} (medals)
+  // Matches: [[Wiki links]] (with optional |display text), {{flag:xx}} (emoji), [flag: gb-eng] (image), {{or/argent/bronze}} (medals)
   const parts = text.split(/(\[\[[^\]]+\]\]|\{\{flag:[a-zA-Z]{2,3}\}\}|\[flag:\s*[a-zA-Z0-9-]+\]|\{\{(?:or|argent|bronze)\}\})/gi);
   return (
     <>
       {parts.map((part, i) => {
-        // [[Internal link]]
-        const wikiMatch = part.match(/^\[\[([^\]]+)\]\]$/);
+        // [[Target]] or [[Target|Display text]]
+        const wikiMatch = part.match(/^\[\[([^\]|]+)(?:\|([^\]]*))?\]\]$/);
         if (wikiMatch) {
-          const name = wikiMatch[1];
-          const target = pages.find((p) => p.title.toLowerCase() === name.toLowerCase());
+          const targetName = wikiMatch[1].trim();
+          const displayText = wikiMatch[2]?.trim() || targetName;
+          const target = resolvePage(targetName, pages);
           return target
-            ? <Link data-testid={`link-internal-${name}`} key={i} href={`/page/${target.id}`} className="wiki-link">{name}</Link>
-            : <span data-testid={`link-missing-${name}`} key={i} className="wiki-link-red">{name}</span>;
+            ? <Link data-testid={`link-internal-${targetName}`} key={i} href={`/page/${target.id}`} className="wiki-link">{displayText}</Link>
+            : <span data-testid={`link-missing-${targetName}`} key={i} className="wiki-link-red">{displayText}</span>;
         }
         // {{flag:xx}} → emoji
         const flagEmojiMatch = part.match(/^\{\{flag:([a-zA-Z]{2,3})\}\}$/);

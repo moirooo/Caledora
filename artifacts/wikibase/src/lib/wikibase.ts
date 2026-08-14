@@ -27,7 +27,7 @@ export type WikiPage = {
   infoboxSections?: WBInfoboxSection[];
 };
 
-const tags = new Set(['TITRE','SOUS-TITRE','ALIASES','INTRODUCTION','INFOBOX','IMAGE_INFOBOX','SECTION','SOUS-SECTION','SOUS-SOUS-SECTION','TEXTE','LISTE','LISTE_NUMEROTEE','IMAGE','TABLEAU','LIENS','REFERENCES','BIBLIOGRAPHIE','CATEGORIES','COULEUR','MAILLOTS','INFOBOX_SECTION']);
+const tags = new Set(['TITRE','SOUS-TITRE','ALIASES','ALIAS','INTRODUCTION','INFOBOX','IMAGE_INFOBOX','SECTION','SOUS-SECTION','SOUS-SOUS-SECTION','TEXTE','LISTE','LISTE_NUMEROTEE','IMAGE','TABLEAU','LIENS','REFERENCES','BIBLIOGRAPHIE','CATEGORIES','COULEUR','MAILLOTS','INFOBOX_SECTION']);
 const lines = (text: string) => text.replace(/\r/g, '').split('\n');
 const clean = (s: string) => s.trim();
 const field = (arr: string[], key: string) => {
@@ -156,7 +156,8 @@ export function parseWikiText(sourceText: string, category = 'Non classé', type
     .filter((s) => s.fields.length > 0);
 
   return {
-    id: `page-${Date.now()}`, title, subtitle: clean(first('SOUS-TITRE').join('\n')), aliases: first('ALIASES').map(clean).filter(Boolean),
+    id: `page-${Date.now()}`, title, subtitle: clean(first('SOUS-TITRE').join('\n')),
+    aliases: [...first('ALIASES'), ...first('ALIAS')].flatMap((line) => line.split(',')).map(clean).filter(Boolean),
     introduction: clean(first('INTRODUCTION').join('\n')), infobox: infoboxFields,
     infoboxImage: imageLines.length ? imageFrom(imageLines) : undefined, sections, links: first('LIENS').map(clean).filter(Boolean),
     references: fields(first('REFERENCES')), bibliography: first('BIBLIOGRAPHIE').map(clean).filter(Boolean),
