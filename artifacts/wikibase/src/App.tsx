@@ -1,7 +1,7 @@
 import 'flag-icons/css/flag-icons.min.css';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
-import { Archive, ArrowLeft, Check, ChevronRight, Clock3, Download, FileText, GitCompare, Image as ImageIcon, Menu, Pencil, Plus, RotateCcw, Search, Settings2, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { Archive, ArrowLeft, BookOpen, Check, ChevronRight, Clock3, Download, FileText, GitCompare, Image as ImageIcon, Menu, Pencil, Plus, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, X } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -541,98 +541,324 @@ function Dashboard() {
   const { pages, setPages } = usePages();
   const [query, setQuery] = useState(urlQ);
   const [filter, setFilter] = useState('Toutes');
-  const visible = pages.filter(
-    (p) => !p.isTrashed && allText(p).includes(query.toLowerCase()) && (filter === 'Toutes' || p.category === filter)
+  const [showAll, setShowAll] = useState(!!urlQ);
+
+  useEffect(() => { if (urlQ) setShowAll(true); }, [urlQ]);
+
+  const active = pages.filter((p) => !p.isTrashed);
+
+  // Article à la une — changes daily, prefers pages with an infobox image
+  const featured = useMemo(() => {
+    if (!active.length) return null;
+    const withImg = active.filter((p) => p.infoboxImage?.filename);
+    const pool = withImg.length ? withImg : active;
+    const seed = Math.floor(Date.now() / 86_400_000);
+    return pool[seed % pool.length];
+  }, [active.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Last 6 modified pages
+  const recent = [...active].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 6);
+
+  // Le saviez-vous — 4 pages with a usable intro, daily rotation
+  const didYouKnow = useMemo(() => {
+    const pool = active.filter((p) => p.introduction.trim().length > 40);
+    const src = pool.length ? pool : active;
+    if (!src.length) return [];
+    const seed = Math.floor(Date.now() / 86_400_000);
+    const start = seed % src.length;
+    return [...src.slice(start), ...src.slice(0, start)].slice(0, 4);
+  }, [active.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const portals: { label: string; desc: string; emoji: string; cats: string[]; accent: string }[] = [
+    { label: 'Sport & Compétitions',   desc: 'Football, Stades, Athlètes',         emoji: '⚽', cats: ['Sports & Football'],                              accent: '#1a56a0' },
+    { label: 'Économie & Entreprises', desc: 'Compagnies, Banques, Marques',        emoji: '💼', cats: ['Économie'],                                        accent: '#b45309' },
+    { label: 'Territoire & Histoire',  desc: 'Villes, Géographie, Institutions',   emoji: '🗺️', cats: ['Géographie', 'Histoire', 'Monuments & Lieux'],     accent: '#166534' },
+    { label: 'Culture & Société',      desc: 'Mode, Gastronomie, Médias',           emoji: '🎭', cats: ['Culture', 'Personnes & Organisations'],            accent: '#6b21a8' },
+  ];
+
+  const categories = ['Toutes', ...Array.from(new Set(active.map((p) => p.category)))];
+  const visible = active.filter(
+    (p) => allText(p).includes(query.toLowerCase()) && (filter === 'Toutes' || p.category === filter)
   );
-  const categories = ['Toutes', ...Array.from(new Set(pages.filter((p) => !p.isTrashed).map((p) => p.category)))];
+  const featuredSrc = featured?.infoboxImage ? resolveImageSrc(featured.infoboxImage) : undefined;
 
   return (
-    <div className="animate-rise">
-      <h1 className="font-editorial text-[2em] font-normal mb-1">Toutes les pages</h1>
-      <div className="border-b border-[var(--wiki-border)] dark:border-border pb-3 mb-5 text-sm text-muted-foreground flex flex-wrap items-center justify-between gap-3">
-        <span>{visible.length} page{visible.length !== 1 ? 's' : ''} · stockage local</span>
-        <Link href="/create" className="wiki-link flex items-center gap-1 text-sm"><Plus size={13} /> Créer une nouvelle page</Link>
-      </div>
+    <div className="animate-rise space-y-8">
 
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <label className="relative block max-w-md flex-1">
-          <Search className="absolute left-2.5 top-2 text-muted-foreground" size={14} />
-          <input
-            data-testid="input-search-pages"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filtrer les pages..."
-            className="h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary pl-8 pr-3 text-sm outline-none focus:border-primary"
-          />
-        </label>
-        <div className="flex flex-wrap gap-1">
-          {categories.map((cat) => (
-            <button
-              data-testid={`button-filter-${cat}`}
-              key={cat}
-              onClick={() => setFilter(cat)}
-              className={`rounded-sm px-2 py-1 text-xs ${filter === cat ? 'bg-[#eaecf0] dark:bg-muted font-bold' : 'wiki-link hover:underline'}`}
-            >
-              {cat}
-            </button>
-          ))}
+      {/* ── 1. HERO ─────────────────────────────────────────────────────── */}
+      <div className="rounded-lg border border-[var(--wiki-border)] dark:border-border overflow-hidden">
+        <div className="bg-gradient-to-br from-[#f8f9fa] via-[#eaecf0] to-[#dce3ec] dark:from-secondary dark:via-secondary/70 dark:to-background px-6 py-8 sm:px-10">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-6">
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+                Encyclopédie libre locale
+              </p>
+              <h1 className="font-editorial text-[1.8em] sm:text-[2.3em] font-normal leading-tight mb-3">
+                Bienvenue sur l'encyclopédie<br className="hidden sm:block" />{' '}
+                de <span className="font-bold text-primary">Caledora</span>
+              </h1>
+              <p className="text-sm text-muted-foreground mb-5">
+                {active.length > 0
+                  ? <><strong className="text-foreground">{active.length}</strong> article{active.length > 1 ? 's' : ''} disponible{active.length > 1 ? 's' : ''} · stockage 100&nbsp;% local</>
+                  : 'Aucun article — créez votre première page'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Link href="/create" className="inline-flex items-center gap-1.5 rounded bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium hover:opacity-90 transition">
+                  <Plus size={13} /> Nouvel article
+                </Link>
+                <button
+                  onClick={() => setShowAll((v) => !v)}
+                  className="inline-flex items-center gap-1.5 rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-3 py-1.5 text-sm hover:bg-[#eaecf0] dark:hover:bg-muted transition"
+                >
+                  <FileText size={13} />
+                  {showAll ? 'Masquer la liste' : `Toutes les pages (${active.length})`}
+                </button>
+              </div>
+            </div>
+
+            {/* Stat pills — one per portal */}
+            <div className="grid grid-cols-2 sm:grid-cols-1 gap-1.5 shrink-0">
+              {portals.map(({ label, emoji, cats, accent }) => {
+                const n = active.filter((p) => cats.includes(p.category)).length;
+                return (
+                  <button
+                    key={label}
+                    onClick={() => { setFilter(cats[0]); setShowAll(true); }}
+                    className="flex items-center gap-2 rounded-full border border-[var(--wiki-border)] dark:border-border bg-white/80 dark:bg-card/80 px-3 py-1 text-xs hover:border-primary/50 transition text-left"
+                  >
+                    <span>{emoji}</span>
+                    <span className="font-bold" style={{ color: accent }}>{n}</span>
+                    <span className="text-muted-foreground truncate">{label.split('&')[0].trim()}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          { label: 'Pages actives', value: String(visible.length) },
-          { label: 'Catégories', value: String(categories.length - 1) },
-          { label: 'Format source', value: 'TXT' },
-          { label: 'Stockage', value: 'Local' },
-        ].map(({ label, value }) => (
-          <div key={label} className="rounded border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-3">
-            <div className="text-[11px] text-muted-foreground">{label}</div>
-            <div data-testid={`stat-${label.toLowerCase().replaceAll(' ', '-')}`} className="text-xl font-bold mt-0.5">{value}</div>
+      {/* ── 2. ARTICLE À LA UNE + PORTAILS ──────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+
+        {/* Featured article */}
+        {featured ? (
+          <div className="rounded-lg border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card overflow-hidden flex flex-col">
+            <div className="flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary">
+              <Star size={11} /> Article à la une
+            </div>
+            <div className="flex flex-col sm:flex-row flex-1">
+              {featuredSrc && (
+                <div className="sm:w-44 shrink-0 bg-[#f8f9fa] dark:bg-secondary border-b sm:border-b-0 sm:border-r border-[var(--wiki-border)] dark:border-border flex items-center justify-center p-4">
+                  <img
+                    src={featuredSrc}
+                    alt={featured.infoboxImage?.alt || featured.title}
+                    className="max-h-40 max-w-full object-contain"
+                  />
+                </div>
+              )}
+              <div className="p-5 flex flex-col flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Badge>{featured.category}</Badge>
+                </div>
+                <h2 className="font-editorial text-[1.5em] font-normal leading-snug mb-1.5">{featured.title}</h2>
+                {featured.subtitle && (
+                  <p className="text-sm text-muted-foreground italic mb-2">{featured.subtitle}</p>
+                )}
+                <p className="text-sm text-muted-foreground leading-6 line-clamp-4 flex-1">{featured.introduction}</p>
+                <div className="mt-4 pt-3 border-t border-[var(--wiki-border)] dark:border-border">
+                  <Link
+                    href={`/page/${featured.id}`}
+                    className="inline-flex items-center gap-1.5 rounded border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary px-3 py-1.5 text-sm hover:bg-[#eaecf0] dark:hover:bg-muted transition"
+                  >
+                    <BookOpen size={13} /> Lire l'article
+                  </Link>
+                </div>
+              </div>
+            </div>
           </div>
-        ))}
+        ) : (
+          <div className="rounded-lg border border-dashed border-[var(--wiki-border)] dark:border-border flex items-center justify-center p-10 text-center text-muted-foreground text-sm">
+            <div>
+              <FileText size={28} className="mx-auto mb-2 opacity-25" />
+              Aucun article à mettre en avant.
+              <br />
+              <Link href="/create" className="wiki-link mt-1 inline-block">Créer le premier article →</Link>
+            </div>
+          </div>
+        )}
+
+        {/* Portails thématiques */}
+        <div className="flex flex-col gap-3">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+            Portails thématiques
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {portals.map(({ label, desc, emoji, cats, accent }) => {
+              const n = active.filter((p) => cats.includes(p.category)).length;
+              return (
+                <button
+                  key={label}
+                  onClick={() => { setFilter(cats[0]); setShowAll(true); }}
+                  className="text-left rounded-lg border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-3.5 hover:border-primary/50 hover:shadow-sm transition group"
+                  style={{ borderTopWidth: 3, borderTopColor: accent }}
+                >
+                  <div className="text-2xl mb-2 leading-none">{emoji}</div>
+                  <div className="text-sm font-bold leading-tight group-hover:text-primary transition mb-0.5">{label}</div>
+                  <div className="text-[11px] text-muted-foreground mb-2 leading-tight">{desc}</div>
+                  <div className="text-[11px] text-muted-foreground border-t border-[var(--wiki-border)] dark:border-border pt-1.5 mt-1.5">
+                    {n > 0 ? <><strong className="text-foreground">{n}</strong> article{n > 1 ? 's' : ''}</> : 'Aucun article'}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
+      {/* ── 3. LE SAVIEZ-VOUS + DERNIERS ARTICLES ───────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        {/* Le saviez-vous */}
+        <div className="rounded-lg border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card overflow-hidden">
+          <div className="flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary">
+            <Sparkles size={11} /> Le saviez-vous ?
+          </div>
+          {didYouKnow.length ? (
+            <ul className="divide-y divide-[var(--wiki-border)] dark:divide-border">
+              {didYouKnow.map((p) => {
+                const sentence = (p.introduction.split(/[.!?]/)[0] ?? '').trim();
+                return (
+                  <li key={p.id} className="px-4 py-3 text-sm leading-6 flex gap-2.5">
+                    <span className="text-primary shrink-0 mt-0.5">•</span>
+                    <span className="text-muted-foreground">
+                      {sentence ? `${sentence}. ` : ''}
+                      <Link href={`/page/${p.id}`} className="wiki-link">→&nbsp;{p.title}</Link>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="px-4 py-8 text-sm text-muted-foreground text-center">
+              Ajoutez des articles pour voir des anecdotes ici.
+            </p>
+          )}
+        </div>
+
+        {/* Derniers articles modifiés */}
+        <div className="rounded-lg border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card overflow-hidden">
+          <div className="flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary">
+            <Clock3 size={11} /> Derniers articles modifiés
+          </div>
+          {recent.length ? (
+            <ul className="divide-y divide-[var(--wiki-border)] dark:divide-border">
+              {recent.map((p) => {
+                const color = p.accentColor ?? categoryColor(p.category);
+                return (
+                  <li key={p.id}>
+                    <Link href={`/page/${p.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#f8f9fa] dark:hover:bg-secondary/60 transition group">
+                      <div className="w-[3px] h-8 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium truncate group-hover:text-primary transition">{p.title}</div>
+                        <div className="text-[11px] text-muted-foreground">{p.category} · {formatDate(p.updatedAt)}</div>
+                      </div>
+                      <ChevronRight size={13} className="text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition" />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="px-4 py-8 text-sm text-muted-foreground text-center">Aucun article pour l'instant.</p>
+          )}
+        </div>
+      </div>
+
+      {/* ── 4. IMPORT / EXPORT ──────────────────────────────────────────── */}
       <BackupBar onImported={setPages} />
 
-      {visible.length ? (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {visible.map((page, i) => {
-            const color = page.accentColor ?? categoryColor(page.category);
-            return (
-              <Link
-                href={`/page/${page.id}`}
-                data-testid={`card-page-${page.id}`}
-                key={page.id}
-                className={`group block rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4 hover:border-primary/50 transition ${i === 0 ? 'lg:col-span-2' : ''}`}
-                style={{ borderTopWidth: 3, borderTopColor: color }}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                      <Badge tone="green">Publié</Badge>
-                      <span>{page.category}</span>
-                      <span>·</span>
-                      <span>{page.type}</span>
-                      <span>·</span>
-                      <span>{formatDate(page.updatedAt)}</span>
-                    </div>
-                    <h2 data-testid={`text-page-title-${page.id}`} className={`wiki-link font-editorial ${i === 0 ? 'text-[1.6em]' : 'text-[1.3em]'} group-hover:underline`}>{page.title}</h2>
-                    {page.subtitle && <p className="text-sm text-muted-foreground mt-0.5 italic">{page.subtitle}</p>}
-                    <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{page.introduction}</p>
-                  </div>
-                  <ChevronRight size={15} className="shrink-0 text-muted-foreground mt-1" />
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[var(--wiki-border)] dark:border-border pt-2">
-                  {page.categories.slice(0, 4).map((c) => <span key={c} className="text-[11px] wiki-link">{c}</span>)}
-                  <span className="ml-auto text-[11px] text-muted-foreground">{page.sections.length} sections</span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+      {/* ── 5. TOUTES LES PAGES ─────────────────────────────────────────── */}
+      {!showAll ? (
+        <button
+          onClick={() => setShowAll(true)}
+          className="w-full rounded-lg border border-dashed border-[var(--wiki-border)] dark:border-border py-3 text-sm text-muted-foreground hover:border-primary/50 hover:text-foreground transition flex items-center justify-center gap-2"
+        >
+          <FileText size={14} /> Voir toutes les pages ({active.length})
+        </button>
       ) : (
-        <Empty title="Aucune page trouvée" text="Modifiez votre recherche ou importez un nouveau fichier TXT." action={<Link href="/create" className="wiki-link text-sm">Créer une page</Link>} />
+        <div>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--wiki-border)] dark:border-border pb-3">
+            <h2 className="font-editorial text-[1.4em] font-normal">Toutes les pages</h2>
+            <button onClick={() => setShowAll(false)} className="text-xs wiki-link flex items-center gap-1">
+              <X size={11} /> Masquer
+            </button>
+          </div>
+
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <label className="relative block max-w-md flex-1">
+              <Search className="absolute left-2.5 top-2 text-muted-foreground" size={14} />
+              <input
+                data-testid="input-search-pages"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Filtrer les pages..."
+                className="h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary pl-8 pr-3 text-sm outline-none focus:border-primary"
+              />
+            </label>
+            <div className="flex flex-wrap gap-1">
+              {categories.map((cat) => (
+                <button
+                  data-testid={`button-filter-${cat}`}
+                  key={cat}
+                  onClick={() => setFilter(cat)}
+                  className={`rounded-sm px-2 py-1 text-xs ${filter === cat ? 'bg-[#eaecf0] dark:bg-muted font-bold' : 'wiki-link hover:underline'}`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {visible.length ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {visible.map((page, i) => {
+                const color = page.accentColor ?? categoryColor(page.category);
+                return (
+                  <Link
+                    href={`/page/${page.id}`}
+                    data-testid={`card-page-${page.id}`}
+                    key={page.id}
+                    className={`group block rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4 hover:border-primary/50 transition ${i === 0 ? 'lg:col-span-2' : ''}`}
+                    style={{ borderTopWidth: 3, borderTopColor: color }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <Badge tone="green">Publié</Badge>
+                          <span>{page.category}</span>
+                          <span>·</span>
+                          <span>{page.type}</span>
+                          <span>·</span>
+                          <span>{formatDate(page.updatedAt)}</span>
+                        </div>
+                        <h2 data-testid={`text-page-title-${page.id}`} className={`wiki-link font-editorial ${i === 0 ? 'text-[1.6em]' : 'text-[1.3em]'} group-hover:underline`}>{page.title}</h2>
+                        {page.subtitle && <p className="text-sm text-muted-foreground mt-0.5 italic">{page.subtitle}</p>}
+                        <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{page.introduction}</p>
+                      </div>
+                      <ChevronRight size={15} className="shrink-0 text-muted-foreground mt-1" />
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[var(--wiki-border)] dark:border-border pt-2">
+                      {page.categories.slice(0, 4).map((c) => <span key={c} className="text-[11px] wiki-link">{c}</span>)}
+                      <span className="ml-auto text-[11px] text-muted-foreground">{page.sections.length} sections</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <Empty title="Aucune page trouvée" text="Modifiez votre recherche ou importez un nouveau fichier TXT." action={<Link href="/create" className="wiki-link text-sm">Créer une page</Link>} />
+          )}
+        </div>
       )}
     </div>
   );
