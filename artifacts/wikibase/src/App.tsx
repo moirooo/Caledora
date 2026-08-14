@@ -20,6 +20,57 @@ const AppearanceContext = createContext<AppearanceCtx>({
 });
 const useAppearance = () => useContext(AppearanceContext);
 
+/* ─── Lightbox context ───────────────────────────────────────────────────── */
+
+type LightboxEntry = { src: string; alt: string; caption?: string };
+const LightboxContext = createContext<{ open: (e: LightboxEntry) => void }>({ open: () => {} });
+
+function LightboxProvider({ children }: { children: ReactNode }) {
+  const [entry, setEntry] = useState<LightboxEntry | null>(null);
+  const close = () => setEntry(null);
+
+  useEffect(() => {
+    if (!entry) return;
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [entry]);
+
+  return (
+    <LightboxContext.Provider value={{ open: setEntry }}>
+      {children}
+      {entry && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={close}
+        >
+          {/* Close button */}
+          <button
+            onClick={close}
+            className="absolute top-4 right-5 text-white/70 hover:text-white transition"
+            aria-label="Fermer"
+          >
+            <X size={30} />
+          </button>
+          {/* Image + caption — click on image doesn't close */}
+          <div className="flex flex-col items-center max-w-[92vw]" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={entry.src}
+              alt={entry.alt}
+              className="max-w-[92vw] max-h-[82vh] object-contain rounded shadow-2xl"
+            />
+            {entry.caption && (
+              <p className="mt-3 text-sm text-white/80 text-center max-w-2xl px-4 leading-relaxed">
+                {entry.caption}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </LightboxContext.Provider>
+  );
+}
+
 function AppearanceProvider({ children }: { children: ReactNode }) {
   const [appearance, setAppearanceState] = useState<Appearance>(() => {
     try {
@@ -809,7 +860,7 @@ function SourcePreview({ page }: { page: WikiPage }) {
           </div>
         </div>
         <div className="wiki-infobox h-fit">
-          <div className="wiki-infobox-header" style={{ background: color }}>{page.title}</div>
+          <div className="wiki-infobox-header" style={{ background: color, color: getContrastingColor(color) }}>{page.title}</div>
           <div className="p-2">
             {page.infobox.slice(0, 6).map((r) => (
               <div key={r.key} className="grid grid-cols-[45%_55%] border-b border-[var(--wiki-border)] dark:border-border py-1 text-xs last:border-0">
@@ -1364,6 +1415,7 @@ function InfoboxSection({ section, pages, accentColor }: { section: WBInfoboxSec
 }
 
 function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
+  const { open: openLightbox } = useContext(LightboxContext);
   const accentColor = page.accentColor ?? categoryColor(page.category);
   const headerTextColor = getContrastingColor(accentColor);
   return (
@@ -1377,7 +1429,11 @@ function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
             ? <img
                 src={resolveImageSrc(page.infoboxImage)}
                 alt={page.infoboxImage.alt}
-                className="max-h-40 max-w-full object-contain"
+                className="max-h-40 max-w-full object-contain cursor-zoom-in"
+                onClick={() => {
+                  const src = resolveImageSrc(page.infoboxImage!);
+                  if (src) openLightbox({ src, alt: page.infoboxImage!.alt, caption: page.infoboxImage!.caption });
+                }}
                 onError={(e) => {
                   console.error('[WikiBase] Image introuvable :', e.currentTarget.src);
                   e.currentTarget.style.display = 'none';
@@ -1482,6 +1538,7 @@ function resolveImageSrc(img: WBImage): string | undefined {
 }
 
 function BlockView({ block, pages }: { block: WBBlock; pages: WikiPage[] }) {
+  const { open: openLightbox } = useContext(LightboxContext);
   if (block.type === 'text') return <p className="text-sm leading-7"><InternalText text={block.content} pages={pages} /></p>;
   if (block.type === 'list' || block.type === 'numbered') {
     const List = block.type === 'list' ? 'ul' : 'ol';
@@ -1493,12 +1550,16 @@ function BlockView({ block, pages }: { block: WBBlock; pages: WikiPage[] }) {
   }
   if (block.type === 'image') {
     const img = block.image;
+    const src = resolveImageSrc(img);
     const alignClass = img.alignment === 'droite' ? 'lg:float-right lg:clear-right lg:ml-4 lg:mb-2' : img.alignment === 'gauche' ? 'lg:float-left lg:clear-left lg:mr-4 lg:mb-2' : 'mx-auto my-3';
     return (
       <figure data-testid={`image-block-${img.filename}`} className={`${alignClass} w-full lg:w-[220px] border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-1 text-center mb-3`}>
-        <div className="flex h-32 items-center justify-center overflow-hidden bg-[#eaecf0] dark:bg-muted text-xs text-muted-foreground">
-          {resolveImageSrc(img)
-            ? <img src={resolveImageSrc(img)} alt={img.alt} className="max-h-full max-w-full object-contain" />
+        <div
+          className={`flex h-32 items-center justify-center overflow-hidden bg-[#eaecf0] dark:bg-muted text-xs text-muted-foreground${src ? ' cursor-zoom-in' : ''}`}
+          onClick={src ? () => openLightbox({ src, alt: img.alt, caption: img.caption || img.filename }) : undefined}
+        >
+          {src
+            ? <img src={src} alt={img.alt} className="max-h-full max-w-full object-contain" />
             : <><ImageIcon size={14} className="mr-1" />Image manquante</>
           }
         </div>
@@ -2044,8 +2105,9 @@ function NotFound() {
 
 function Router() {
   return (
-    <Shell>
-      <Switch>
+    <LightboxProvider>
+      <Shell>
+        <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/create" component={CreatePage} />
         <Route path="/page/:id/edit" component={EditPage} />
@@ -2054,8 +2116,9 @@ function Router() {
         <Route path="/page/:id" component={ReaderPage} />
         <Route path="/trash" component={TrashPage} />
         <Route component={NotFound} />
-      </Switch>
-    </Shell>
+        </Switch>
+      </Shell>
+    </LightboxProvider>
   );
 }
 
