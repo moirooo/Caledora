@@ -590,7 +590,7 @@ function AppTile({ app, onClick }: { app: DashApp; onClick: () => void }) {
       className="group flex flex-col items-center gap-2 active:scale-95 transition-transform duration-100 select-none"
     >
       <div
-        className="relative w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-[18px] overflow-hidden shadow-xl border border-white/10 group-hover:border-white/40 group-hover:-translate-y-1 transition-all duration-200"
+        className="relative w-14 h-14 sm:w-[60px] sm:h-[60px] rounded-[16px] overflow-hidden shadow-xl border border-white/10 group-hover:border-white/40 group-hover:-translate-y-1 transition-all duration-200"
         style={{ background: app.imgBg ?? app.bg }}
       >
         {app.imageNode ? (
@@ -674,7 +674,7 @@ function Dashboard() {
     // CFC Official
     { id: 'cfc',       label: 'CFC Official',     image: img('logo1.png'),      bg: 'linear-gradient(145deg,#1e3a8a,#2563eb)', imgFit: 'contain', imgPad: true,  active: false },
     // Caledora Airways
-    { id: 'airways',   label: 'Caledora Airways', emoji: '✈️',                  bg: 'linear-gradient(145deg,#0c4a6e,#0369a1)', active: false },
+    { id: 'airways',   label: 'Caledora Airways', image: img('airways2.jpg'),   bg: 'linear-gradient(145deg,#0c4a6e,#0369a1)', imgFit: 'cover', active: false },
     // Oria Bank — white bg + padding so logo doesn't get cropped
     { id: 'bank',      label: 'Oria Bank',        image: img('oriabank.png'),   imgBg: '#ffffff', imgFit: 'contain', imgPad: true,  bg: '#ffffff', active: false },
     // Maps — custom Google Maps pin SVG
@@ -698,7 +698,7 @@ function Dashboard() {
 
   return (
     <div
-      className="relative w-full min-h-screen flex flex-col overflow-hidden"
+      className="relative w-full h-screen max-h-screen flex flex-col overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #060c1a 0%, #0c1c38 45%, #060e1f 100%)' }}
     >
       {/* Background star field */}
