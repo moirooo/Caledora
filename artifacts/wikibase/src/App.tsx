@@ -559,36 +559,64 @@ function usePages() {
 type DashApp = {
   id: string;
   label: string;
-  image?: string;          // URL to public image
-  emoji?: string;          // shown when no image
-  bg: string;              // gradient CSS (fallback background)
+  image?: string;           // URL to public image
+  imageNode?: React.ReactNode; // raw SVG / custom element instead of <img>
+  emoji?: string;           // shown when no image
+  bg: string;               // gradient CSS (tile background)
+  imgBg?: string;           // override background behind the image (e.g. '#fff')
+  imgFit?: 'cover' | 'contain'; // default 'cover'
+  imgPad?: boolean;         // add p-2.5 inside the image box
+  imgFilter?: string;       // CSS filter applied to <img>
   active: boolean;
-  activeBadge?: string;    // e.g. "Actif" or article count
+  activeBadge?: string;
 };
 
+/* Google Maps pin SVG (official multicolour style) */
+const MapsPinSvg = (
+  <svg viewBox="0 0 24 34" xmlns="http://www.w3.org/2000/svg" className="w-8 h-auto">
+    <path d="M12 0C5.373 0 0 5.373 0 12c0 8.25 12 22 12 22S24 20.25 24 12C24 5.373 18.627 0 12 0z" fill="#EA4335"/>
+    <path d="M12 0C5.373 0 0 5.373 0 12c0 1.98.48 3.845 1.33 5.49L12 0z" fill="#FBBC04"/>
+    <path d="M12 0l10.67 17.49A11.96 11.96 0 0024 12C24 5.373 18.627 0 12 0z" fill="#34A853"/>
+    <circle cx="12" cy="12" r="5" fill="white"/>
+    <circle cx="12" cy="12" r="3.5" fill="#EA4335"/>
+  </svg>
+);
+
 function AppTile({ app, onClick }: { app: DashApp; onClick: () => void }) {
+  const fit = app.imgFit ?? 'cover';
   return (
     <button
       onClick={onClick}
-      className="group flex flex-col items-center gap-2.5 active:scale-95 transition-transform duration-100 select-none"
+      className="group flex flex-col items-center gap-2 active:scale-95 transition-transform duration-100 select-none"
     >
-      <div className="relative w-[88px] h-[88px] sm:w-24 sm:h-24 rounded-[22px] overflow-hidden shadow-2xl border border-white/10 group-hover:border-white/35 group-hover:-translate-y-1 transition-all duration-200">
-        {app.image
-          ? <img src={app.image} alt={app.label} className="w-full h-full object-cover" loading="lazy" />
-          : (
-            <div className="w-full h-full flex items-center justify-center text-[42px]" style={{ background: app.bg }}>
-              {app.emoji}
-            </div>
-          )
-        }
-        {/* Active badge */}
+      <div
+        className="relative w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-[18px] overflow-hidden shadow-xl border border-white/10 group-hover:border-white/40 group-hover:-translate-y-1 transition-all duration-200"
+        style={{ background: app.imgBg ?? app.bg }}
+      >
+        {app.imageNode ? (
+          <div className="w-full h-full flex items-center justify-center p-2">
+            {app.imageNode}
+          </div>
+        ) : app.image ? (
+          <img
+            src={app.image}
+            alt={app.label}
+            loading="lazy"
+            className={`w-full h-full ${fit === 'contain' ? 'object-contain' : 'object-cover'} ${app.imgPad ? 'p-2.5' : ''}`}
+            style={app.imgFilter ? { filter: app.imgFilter } : undefined}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-[34px]" style={{ background: app.bg }}>
+            {app.emoji}
+          </div>
+        )}
         {app.activeBadge && (
-          <div className="absolute top-1.5 right-1.5 bg-[#4ade80] text-[#0a1628] text-[9px] font-extrabold px-1.5 py-0.5 rounded-full leading-none shadow">
+          <div className="absolute top-1 right-1 bg-[#4ade80] text-[#0a1628] text-[8px] font-extrabold px-1.5 py-0.5 rounded-full leading-none shadow">
             {app.activeBadge}
           </div>
         )}
       </div>
-      <span className="text-white/75 text-[11.5px] sm:text-[12px] text-center font-medium group-hover:text-white transition-colors leading-tight">{app.label}</span>
+      <span className="text-white/70 text-[11px] sm:text-[11.5px] text-center font-medium group-hover:text-white transition-colors leading-tight">{app.label}</span>
     </button>
   );
 }
@@ -637,14 +665,22 @@ function Dashboard() {
   const img = (f: string) => `${BASE}/images/${f}`;
 
   const apps: DashApp[] = [
-    { id: 'wikibase',  label: 'WikiBase',        image: img('site_logo.png'),   bg: 'linear-gradient(145deg,#1e40af,#3b82f6)', active: true,  activeBadge: active.length > 0 ? 'Actif' : undefined },
-    { id: 'instagram', label: 'Instagram',        image: img('Instagram.png'),   bg: 'linear-gradient(145deg,#833ab4,#fd1d1d)', active: false },
-    { id: 'twitter',   label: 'Twitter / X',      image: img('XLogo.png'),       bg: 'linear-gradient(145deg,#111827,#374151)', active: false },
-    { id: 'cfc',       label: 'CFC Official',     image: img('logo1.png'),       bg: 'linear-gradient(145deg,#1e3a8a,#2563eb)', active: false },
-    { id: 'airways',   label: 'Caledora Airways', emoji: '✈️',                   bg: 'linear-gradient(145deg,#0c4a6e,#0369a1)', active: false },
-    { id: 'bank',      label: 'Oria Bank',        image: img('oriabank.png'),    bg: 'linear-gradient(145deg,#78350f,#d97706)', active: false },
-    { id: 'maps',      label: 'Maps',             emoji: '🗺️',                   bg: 'linear-gradient(145deg,#14532d,#16a34a)', active: false },
-    { id: 'settings',  label: 'Paramètres',       emoji: '⚙️',                   bg: 'linear-gradient(145deg,#374151,#6b7280)', active: true  },
+    // WikiBase — white bg so the dark W logo is visible
+    { id: 'wikibase',  label: 'WikiBase',        image: img('site_logo.png'),  imgBg: '#ffffff', imgFit: 'contain', imgPad: true,  bg: '#ffffff', active: true,  activeBadge: active.length > 0 ? 'Actif' : undefined },
+    // Instagram — image covers tile naturally (gradient logo)
+    { id: 'instagram', label: 'Instagram',        image: img('Instagram.png'),  bg: 'linear-gradient(145deg,#833ab4,#fd1d1d)', active: false },
+    // Twitter/X — black logo → invert to white, keep dark tile
+    { id: 'twitter',   label: 'Twitter / X',      image: img('XLogo.png'),      bg: 'linear-gradient(145deg,#111827,#1f2937)', imgFit: 'contain', imgPad: true, imgFilter: 'brightness(0) invert(1)', active: false },
+    // CFC Official
+    { id: 'cfc',       label: 'CFC Official',     image: img('logo1.png'),      bg: 'linear-gradient(145deg,#1e3a8a,#2563eb)', imgFit: 'contain', imgPad: true,  active: false },
+    // Caledora Airways
+    { id: 'airways',   label: 'Caledora Airways', emoji: '✈️',                  bg: 'linear-gradient(145deg,#0c4a6e,#0369a1)', active: false },
+    // Oria Bank — white bg + padding so logo doesn't get cropped
+    { id: 'bank',      label: 'Oria Bank',        image: img('oriabank.png'),   imgBg: '#ffffff', imgFit: 'contain', imgPad: true,  bg: '#ffffff', active: false },
+    // Maps — custom Google Maps pin SVG
+    { id: 'maps',      label: 'Maps',             imageNode: MapsPinSvg,        bg: '#ffffff',    imgBg: '#ffffff',  active: false },
+    // Paramètres
+    { id: 'settings',  label: 'Paramètres',       emoji: '⚙️',                  bg: 'linear-gradient(145deg,#374151,#6b7280)', active: true  },
   ];
 
   const handleApp = (app: DashApp) => {
@@ -705,9 +741,13 @@ function Dashboard() {
                 <span className="text-[9px] text-white/50">CFC</span>
               </div>
               <div className="text-white/30 font-bold text-base px-1">vs</div>
-              {/* Arsenal */}
+              {/* Arsenal — official badge via Wikimedia */}
               <div className="flex flex-col items-center gap-1">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-extrabold border border-white/20 shadow" style={{ background: '#EF0107', color: '#fff' }}>AFC</div>
+                <img
+                  src="https://upload.wikimedia.org/wikipedia/en/5/53/Arsenal_FC.svg"
+                  alt="Arsenal FC"
+                  className="w-9 h-9 object-contain"
+                />
                 <span className="text-[9px] text-white/50">Arsenal</span>
               </div>
             </div>
