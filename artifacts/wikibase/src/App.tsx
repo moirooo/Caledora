@@ -2462,6 +2462,40 @@ const xReplyTpl = (name: string) => [
   `⚡ Le dynamisme de Caledora ne s'arrête jamais ! #CaledoraSport`,
 ];
 
+/** Extract all @handles from tweet text (unique, case-preserved) */
+const extractMentions = (text: string): string[] => [...new Set((text.match(/@[a-zA-Z0-9_]+/g) || []))];
+
+/** Generate a contextualised reply from a mentioned account */
+function genMentionReply(mentionedAcct: XAccount, tweetText: string, author: XAccount): string {
+  const t = tweetText.toLowerCase();
+  const n = author.name;
+  if (t.includes('?'))                                         return `Bonjour ${n} ! Merci pour votre question 🙏 Notre équipe reviendra vers vous très rapidement avec une réponse complète.`;
+  if (/félicit|bravo|congrat|bien jou|magnif/.test(t))        return `Merci beaucoup ${n} ! 🙌 Votre soutien compte énormément pour nous. On continue ensemble 💙`;
+  if (/match|⚽|victoire|stade|tribune|foot/.test(t))         return `On vous attend dans les tribunes ${n} ! 💙🏟️ Ce sera un grand match ! #CFCvARS`;
+  if (/bienvenu|annonce|ouverture|lancement|nouveau/.test(t)) return `Merci pour le partage ${n} ! 🚀 Restez connectés pour toutes nos actualités #Caledora`;
+  if (/merci|remerci/.test(t))                                return `Avec plaisir ${n} ! 😊 C'est toujours un bonheur d'échanger avec notre communauté.`;
+  const fb = [
+    `Merci pour la mention ${n} ! Nous sommes ravis de votre intérêt 🙏`,
+    `Bonjour ${n} ! Un grand merci pour votre message 📩 Notre équipe est à votre disposition.`,
+    `Merci ${n} ! Ensemble nous faisons avancer Caledora 💪 #Caledora`,
+  ];
+  return fb[Math.floor(Math.random() * fb.length)];
+}
+
+/** Render tweet text with @mentions highlighted in blue */
+function XTweetText({ text }: { text: string }) {
+  const parts = text.split(/(@[a-zA-Z0-9_]+)/g);
+  return (
+    <span>
+      {parts.map((part, i) =>
+        /^@[a-zA-Z0-9_]+$/.test(part)
+          ? <span key={i} style={{ color: '#1d9bf0' }} className="hover:underline cursor-pointer">{part}</span>
+          : <span key={i}>{part}</span>
+      )}
+    </span>
+  );
+}
+
 const XSTORAGE = 'caledora-x-tweets';
 const XINIT: XTweet[] = [
   { id:'xi1', ts:Date.now()-1000*60*35,  likes:847, retweets:234, views:12400, liked:false, retweeted:false, replies:[], acct:{ handle:'@CaledoraFC',      name:'Caledora FC',       initials:'CF', avatarColor:xColor('Caledora FC'),       avatarUrl:`${import.meta.env.BASE_URL}images/logo1.png`,    badge:'gold' }, text:'⚽ Matchday ! Caledora FC reçoit Arsenal ce samedi à 20h45 au Caledora Mare Stadium. Soyez nombreux dans les tribunes ! 💙🏟️ #CFCvARS #Caledora' },
@@ -2481,60 +2515,81 @@ function XBadgeIcon({ type }: { type: 'gold' | 'blue' | null }) {
 }
 
 function XCard({ tweet, expanded, onToggleExpand, onLike, onRT, onSimulate }: { tweet: XTweet; expanded: boolean; onToggleExpand: () => void; onLike: () => void; onRT: () => void; onSimulate: () => void }) {
+  const showThread = expanded && tweet.replies.length > 0;
   return (
     <div style={{ borderBottom: '1px solid #2f3336' }}>
-      <div className="flex gap-3 px-4 py-3 hover:bg-white/[0.025] transition-colors">
-        <XAvtr acct={tweet.acct} size={44} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap leading-none">
+      {/* ── Main tweet ── */}
+      <div className="flex gap-3 px-4 pt-3 pb-2 hover:bg-white/[0.025] transition-colors">
+        {/* Avatar + vertical thread line below */}
+        <div className="flex flex-col items-center shrink-0" style={{ width: 44 }}>
+          <XAvtr acct={tweet.acct} size={44} />
+          {showThread && <div className="w-0.5 flex-1 bg-[#2f3336] mt-1.5 min-h-[14px]" />}
+        </div>
+        <div className="flex-1 min-w-0 pb-1">
+          <div className="flex items-center gap-1.5 flex-wrap leading-none mb-1.5">
             <span className="font-bold text-[15px] text-white">{tweet.acct.name}</span>
             <XBadgeIcon type={tweet.acct.badge} />
             <span className="text-[#71767b] text-[13px]">{tweet.acct.handle} · {xAgo(tweet.ts)}</span>
           </div>
-          <p className="text-[15px] text-white mt-1.5 leading-relaxed whitespace-pre-wrap break-words">{tweet.text}</p>
+          <p className="text-[15px] text-white leading-relaxed whitespace-pre-wrap break-words">
+            <XTweetText text={tweet.text} />
+          </p>
           {tweet.imageUrl && (
             <div className="mt-3 rounded-2xl overflow-hidden border border-[#2f3336]" style={{ maxHeight: 280 }}>
               <img src={tweet.imageUrl} alt="" className="w-full object-cover" style={{ maxHeight: 280 }} />
             </div>
           )}
+          {/* Action bar — all counters always visible */}
           <div className="flex items-center gap-5 mt-3 text-[#71767b] text-[13px]">
-            <button onClick={onToggleExpand} className="flex items-center gap-1.5 hover:text-[#1d9bf0] transition-colors">
-              <MessageCircle size={16} />{tweet.replies.length > 0 && <span>{tweet.replies.length}</span>}
+            <button onClick={onToggleExpand} className="flex items-center gap-1.5 hover:text-[#1d9bf0] transition-colors min-w-[36px]">
+              <MessageCircle size={16} /><span>{tweet.replies.length || ''}</span>
             </button>
-            <button onClick={onRT} className="flex items-center gap-1.5 hover:text-[#00ba7c] transition-colors" style={{ color: tweet.retweeted ? '#00ba7c' : '#71767b' }}>
-              <Repeat2 size={16} />{tweet.retweets > 0 && <span>{fmtN(tweet.retweets)}</span>}
+            <button onClick={onRT} className="flex items-center gap-1.5 hover:text-[#00ba7c] transition-colors min-w-[36px]" style={{ color: tweet.retweeted ? '#00ba7c' : '#71767b' }}>
+              <Repeat2 size={16} /><span>{fmtN(tweet.retweets)}</span>
             </button>
-            <button onClick={onLike} className="flex items-center gap-1.5 transition-colors" style={{ color: tweet.liked ? '#f91880' : '#71767b' }}>
-              <Heart size={16} fill={tweet.liked ? '#f91880' : 'none'} />{tweet.likes > 0 && <span>{fmtN(tweet.likes)}</span>}
+            <button onClick={onLike} className="flex items-center gap-1.5 transition-colors min-w-[36px]" style={{ color: tweet.liked ? '#f91880' : '#71767b' }}>
+              <Heart size={16} fill={tweet.liked ? '#f91880' : 'none'} /><span>{fmtN(tweet.likes)}</span>
             </button>
-            <span className="flex items-center gap-1.5"><BarChart2 size={15} /><span>{fmtN(tweet.views)}</span></span>
+            <span className="flex items-center gap-1.5 min-w-[44px]"><BarChart2 size={15} /><span>{fmtN(tweet.views)}</span></span>
             <button onClick={onSimulate} className="flex items-center gap-1 ml-auto hover:text-[#7856ff] transition-colors text-[12px]">
               <Sparkles size={13} /><span className="hidden sm:inline ml-0.5">Simuler</span>
             </button>
           </div>
         </div>
       </div>
-      {expanded && tweet.replies.length > 0 && (
-        <div style={{ background: 'rgba(255,255,255,0.015)', borderTop: '1px solid #1e2732' }}>
-          {tweet.replies.map(r => (
-            <div key={r.id} className="flex gap-2 px-4 py-2.5 border-b border-[#1e2732] last:border-b-0 hover:bg-white/[0.02]">
-              <div className="flex flex-col items-center gap-1 shrink-0 w-10">
-                <div className="w-0.5 h-2 bg-[#2f3336]" /><XAvtr acct={r.acct} size={32} />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-1.5 text-[13px] flex-wrap">
-                  <span className="font-bold text-white">{r.acct.name}</span>
-                  <XBadgeIcon type={r.acct.badge} />
-                  <span className="text-[#71767b]">{r.acct.handle} · {xAgo(r.ts)}</span>
+
+      {/* ── Replies thread ── */}
+      {showThread && (
+        <div>
+          {tweet.replies.map((r, i) => {
+            const isLast = i === tweet.replies.length - 1;
+            return (
+              <div key={r.id} className="flex gap-2 px-4 pt-2 pb-1.5 hover:bg-white/[0.02] transition-colors">
+                {/* Avatar column with thread lines */}
+                <div className="flex flex-col items-center shrink-0" style={{ width: 44 }}>
+                  <div className="w-0.5 h-2 bg-[#2f3336]" />
+                  <XAvtr acct={r.acct} size={32} />
+                  {!isLast && <div className="w-0.5 flex-1 bg-[#2f3336] mt-1.5 min-h-[8px]" />}
                 </div>
-                <p className="text-[14px] text-white mt-0.5 leading-relaxed">{r.text}</p>
-                <div className="flex gap-4 mt-1.5 text-[#71767b] text-[12px] items-center">
-                  <span className="flex items-center gap-1"><MessageCircle size={12} /></span>
-                  <span className="flex items-center gap-1"><Heart size={12} />{r.likes}</span>
+                <div className="flex-1 min-w-0 pb-1">
+                  <div className="flex items-center gap-1.5 text-[13px] flex-wrap leading-none mb-1">
+                    <span className="font-bold text-white">{r.acct.name}</span>
+                    <XBadgeIcon type={r.acct.badge} />
+                    <span className="text-[#71767b]">{r.acct.handle} · {xAgo(r.ts)}</span>
+                  </div>
+                  <p className="text-[14px] text-white leading-relaxed">
+                    <XTweetText text={r.text} />
+                  </p>
+                  <div className="flex gap-5 mt-2 text-[#71767b] text-[12px] items-center">
+                    <span className="flex items-center gap-1"><MessageCircle size={12} /></span>
+                    <span className="flex items-center gap-1"><Heart size={12} /><span>{r.likes}</span></span>
+                    <span className="flex items-center gap-1"><Repeat2 size={12} /></span>
+                    <span className="flex items-center gap-1 ml-auto"><BarChart2 size={11} /><span>{fmtN(Math.floor(r.likes * 8 + Math.random() * 200))}</span></span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -2566,8 +2621,20 @@ function TwitterPage() {
 
   const postTweet = () => {
     if (!draft.trim()) return;
-    const t: XTweet = { id: `xt_${Date.now()}`, acct: author, text: draft.trim(), imageUrl: imgUrl.trim() || undefined, ts: Date.now(), likes: 0, retweets: 0, views: Math.floor(Math.random() * 50) + 1, liked: false, retweeted: false, replies: [] };
+    const mentions = extractMentions(draft);
+    const mentionReplies: XReply[] = mentions
+      .map(h => allAccts.find(a => a.handle.toLowerCase() === h.toLowerCase()))
+      .filter(Boolean)
+      .map((acct, i) => ({
+        id: `xr_m_${Date.now()}_${i}`,
+        acct: acct!,
+        text: genMentionReply(acct!, draft, author),
+        likes: Math.floor(Math.random() * 60) + 2,
+        ts: Date.now() + 1000 * (i + 1),
+      }));
+    const t: XTweet = { id: `xt_${Date.now()}`, acct: author, text: draft.trim(), imageUrl: imgUrl.trim() || undefined, ts: Date.now(), likes: 0, retweets: 0, views: Math.floor(Math.random() * 50) + 1, liked: false, retweeted: false, replies: mentionReplies };
     setTweets([t, ...tweets]);
+    if (mentionReplies.length > 0) setExpanded(prev => new Set([...prev, t.id]));
     setDraft(''); setImgUrl('');
   };
 
@@ -2576,10 +2643,32 @@ function TwitterPage() {
 
   const simulate = (id: string) => {
     const tw = tweets.find(t => t.id === id); if (!tw) return;
-    const pool = allAccts.filter(a => a.handle !== tw.acct.handle).sort(() => Math.random() - 0.5);
+    const mentions = extractMentions(tw.text);
+    // Mentioned accounts reply first with contextualised text (skip if already replied)
+    const alreadyReplied = new Set(tw.replies.map(r => r.acct.handle.toLowerCase()));
+    const mentionReplies: XReply[] = mentions
+      .map(h => allAccts.find(a => a.handle.toLowerCase() === h.toLowerCase()))
+      .filter(Boolean)
+      .filter(a => !alreadyReplied.has(a!.handle.toLowerCase()))
+      .map((acct, i) => ({
+        id: `xr_m_${Date.now()}_${i}`,
+        acct: acct!,
+        text: genMentionReply(acct!, tw.text, tw.acct),
+        likes: Math.floor(Math.random() * 80) + 5,
+        ts: Date.now() - Math.floor(Math.random() * 120000),
+      }));
+    // Fill remaining slots with random accounts
+    const usedHandles = new Set([tw.acct.handle.toLowerCase(), ...mentions.map(h => h.toLowerCase()), ...alreadyReplied]);
+    const pool = allAccts.filter(a => !usedHandles.has(a.handle.toLowerCase())).sort(() => Math.random() - 0.5);
     const tpl  = xReplyTpl(tw.acct.name);
-    const newReplies: XReply[] = pool.slice(0, 2 + Math.floor(Math.random() * 2)).map((acct, i) => ({ id: `xr_${Date.now()}_${i}`, acct, text: tpl[Math.floor(Math.random() * tpl.length)], likes: Math.floor(Math.random() * 120) + 1, ts: Date.now() - Math.floor(Math.random() * 600000) }));
-    setTweets(tweets.map(t => t.id === id ? { ...t, replies: [...t.replies, ...newReplies] } : t));
+    const want = Math.max(0, 3 - mentionReplies.length);
+    const regularReplies: XReply[] = pool.slice(0, want).map((acct, i) => ({
+      id: `xr_r_${Date.now()}_${i}`, acct,
+      text: tpl[Math.floor(Math.random() * tpl.length)],
+      likes: Math.floor(Math.random() * 120) + 1,
+      ts: Date.now() - Math.floor(Math.random() * 600000),
+    }));
+    setTweets(tweets.map(t => t.id === id ? { ...t, replies: [...t.replies, ...mentionReplies, ...regularReplies] } : t));
     setExpanded(prev => new Set([...prev, id]));
   };
 
@@ -2612,7 +2701,7 @@ function TwitterPage() {
       {/* ── CENTER ───────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 border-r border-[#2f3336]" style={{ maxWidth: 598 }}>
         {/* Sticky header */}
-        <div className="sticky top-0 z-20 bg-black/90 backdrop-blur-sm border-b border-[#2f3336]">
+        <div className="sticky top-0 z-20 backdrop-blur-md bg-black/75 border-b border-[#2f3336]">
           <div className="flex items-center justify-between px-4 py-3">
             <h1 className="font-bold text-[19px]">Accueil</h1>
             <button onClick={() => navigate('/')} className="md:hidden text-[#1d9bf0] text-sm font-semibold flex items-center gap-1"><ArrowLeft size={14}/>Hub</button>
