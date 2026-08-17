@@ -534,332 +534,393 @@ function usePages() {
 
 /* ─── Dashboard ─────────────────────────────────────────────────────────── */
 
+/* ─── CaledoraOS helpers ─────────────────────────────────────────────────── */
+
+type AppIcon = {
+  id: string; label: string; emoji: string;
+  g: [string, string]; active: boolean; badge?: string;
+};
+
+function OsIcon({ app, size = 56, onClick }: { app: AppIcon; size?: number; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-1 active:scale-90 transition-transform duration-100 select-none"
+    >
+      <div className="relative">
+        <div
+          className="flex items-center justify-center shadow-lg"
+          style={{
+            width: size, height: size, fontSize: size * 0.42,
+            background: `linear-gradient(145deg, ${app.g[0]}, ${app.g[1]})`,
+            borderRadius: '22%',
+          }}
+        >
+          {app.emoji}
+        </div>
+        {app.badge && (
+          <div className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-500 rounded-full flex items-center justify-center text-[10px] text-white font-bold px-1 leading-none">
+            {app.badge}
+          </div>
+        )}
+      </div>
+      <span className="text-white/90 text-[10px] text-center leading-tight line-clamp-1 w-full px-0.5">{app.label}</span>
+    </button>
+  );
+}
+
+function StarField() {
+  const pts: [number, number, number, number][] = [
+    [32,78,1,0.4],[88,118,1.5,0.6],[52,198,1,0.3],[195,62,1,0.5],[308,148,1.5,0.4],
+    [352,92,1,0.6],[148,298,1,0.3],[272,282,1.5,0.5],[82,352,1,0.4],[322,398,1,0.6],
+    [182,448,1,0.3],[62,498,1.5,0.5],[338,552,1,0.4],[118,618,1,0.6],[282,682,1.5,0.3],
+    [198,748,1,0.5],[28,702,1,0.4],[372,698,1.5,0.6],[102,152,1,0.3],[248,178,1,0.5],
+    [378,352,1,0.4],[165,532,1.5,0.6],[42,420,1,0.3],[295,498,1,0.5],
+  ];
+  return (
+    <svg className="absolute inset-0 pointer-events-none" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+      {pts.map(([x, y, r, o], i) => <circle key={i} cx={x} cy={y} r={r} fill="white" opacity={o} />)}
+    </svg>
+  );
+}
+
 function Dashboard() {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const qs = new URLSearchParams(location.includes('?') ? location.split('?')[1] : '');
   const urlQ = qs.get('q') ?? '';
+  const urlView = qs.get('view') ?? '';
   const { pages, setPages } = usePages();
+  const { appearance, setAppearance } = useAppearance();
+
+  /* ── phone OS state ── */
+  const [osTime, setOsTime] = useState(new Date());
+  const [comingSoon, setComingSoon] = useState<string | null>(null);
+  const [showOsSettings, setShowOsSettings] = useState(false);
+
+  /* ── article list state ── */
   const [query, setQuery] = useState(urlQ);
   const [filter, setFilter] = useState('Toutes');
-  const [showAll, setShowAll] = useState(!!urlQ);
+  const showList = !!(urlQ || urlView === 'list');
+  const [showAll, setShowAll] = useState(showList);
 
-  useEffect(() => { if (urlQ) setShowAll(true); }, [urlQ]);
-
+  /* ── shared data ── */
   const active = pages.filter((p) => !p.isTrashed);
-
-  // Article à la une — changes daily, prefers pages with an infobox image
-  const featured = useMemo(() => {
-    if (!active.length) return null;
-    const withImg = active.filter((p) => p.infoboxImage?.filename);
-    const pool = withImg.length ? withImg : active;
-    const seed = Math.floor(Date.now() / 86_400_000);
-    return pool[seed % pool.length];
-  }, [active.length]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Last 6 modified pages
-  const recent = [...active].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 6);
-
-  // Le saviez-vous — 4 pages with a usable intro, daily rotation
-  const didYouKnow = useMemo(() => {
-    const pool = active.filter((p) => p.introduction.trim().length > 40);
-    const src = pool.length ? pool : active;
-    if (!src.length) return [];
-    const seed = Math.floor(Date.now() / 86_400_000);
-    const start = seed % src.length;
-    return [...src.slice(start), ...src.slice(0, start)].slice(0, 4);
-  }, [active.length]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const portals: { label: string; desc: string; emoji: string; cats: string[]; accent: string }[] = [
-    { label: 'Sport & Compétitions',   desc: 'Football, Stades, Athlètes',         emoji: '⚽', cats: ['Sports & Football'],                              accent: '#1a56a0' },
-    { label: 'Économie & Entreprises', desc: 'Compagnies, Banques, Marques',        emoji: '💼', cats: ['Économie'],                                        accent: '#b45309' },
-    { label: 'Territoire & Histoire',  desc: 'Villes, Géographie, Institutions',   emoji: '🗺️', cats: ['Géographie', 'Histoire', 'Monuments & Lieux'],     accent: '#166534' },
-    { label: 'Culture & Société',      desc: 'Mode, Gastronomie, Médias',           emoji: '🎭', cats: ['Culture', 'Personnes & Organisations'],            accent: '#6b21a8' },
-  ];
-
   const categories = ['Toutes', ...Array.from(new Set(active.map((p) => p.category)))];
   const visible = active.filter(
     (p) => allText(p).includes(query.toLowerCase()) && (filter === 'Toutes' || p.category === filter)
   );
-  const featuredSrc = featured?.infoboxImage ? resolveImageSrc(featured.infoboxImage) : undefined;
+
+  /* ── live clock ── */
+  useEffect(() => {
+    const id = setInterval(() => setOsTime(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const timeStr = `${pad(osTime.getHours())}:${pad(osTime.getMinutes())}`;
+  const dateStr = (() => {
+    const s = osTime.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  })();
+
+  /* ── app definitions ── */
+  const apps: AppIcon[] = [
+    { id: 'wikibase',     label: 'WikiBase',     emoji: '📖', g: ['#1e40af','#3b82f6'], active: true,  badge: active.length > 0 ? String(active.length) : undefined },
+    { id: 'footballgram', label: 'Footballgram', emoji: '📸', g: ['#9333ea','#ec4899'], active: false },
+    { id: 'chirp',        label: 'Chirp',        emoji: '𝕏',  g: ['#111827','#374151'], active: false },
+    { id: 'cfc',          label: 'CFC Official', emoji: '⚽', g: ['#1e3a8a','#2563eb'], active: false },
+    { id: 'airways',      label: 'Caledora Air', emoji: '✈️', g: ['#0c4a6e','#0284c7'], active: false },
+    { id: 'bank',         label: 'Oria Bank',    emoji: '🏦', g: ['#78350f','#d97706'], active: false },
+    { id: 'maps',         label: 'Maps',         emoji: '🗺️', g: ['#14532d','#16a34a'], active: false },
+    { id: 'settings',     label: 'Paramètres',   emoji: '⚙️', g: ['#374151','#6b7280'], active: true  },
+  ];
+  const dockApps: AppIcon[] = [
+    { id: 'phone',        label: 'Téléphone',    emoji: '📞', g: ['#166534','#22c55e'], active: false },
+    { id: 'messages',     label: 'Messages',     emoji: '💬', g: ['#0369a1','#38bdf8'], active: false },
+    { id: 'wikibase',     label: 'WikiBase',     emoji: '📖', g: ['#1e40af','#3b82f6'], active: true  },
+    { id: 'footballgram', label: 'Footballgram', emoji: '📸', g: ['#9333ea','#ec4899'], active: false },
+  ];
+
+  const handleApp = (id: string, appActive: boolean, label: string) => {
+    if (!appActive) { setComingSoon(label); return; }
+    if (id === 'wikibase')  navigate('/?view=list');
+    if (id === 'settings')  setShowOsSettings(true);
+  };
+
+  /* ════════════════════════════════════════════════════════════════════
+     VIEW: ARTICLE LIST (WikiBase app or header search)
+  ════════════════════════════════════════════════════════════════════ */
+  if (showList) {
+    return (
+      <div className="animate-rise">
+        {/* Back bar */}
+        <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-[var(--wiki-border)] dark:border-border pb-4">
+          <button
+            onClick={() => navigate('/')}
+            className="inline-flex items-center gap-1.5 text-sm wiki-link"
+          >
+            <ArrowLeft size={14} /> CaledoraOS
+          </button>
+          <span className="text-muted-foreground">·</span>
+          <span className="font-editorial text-lg font-normal">WikiBase</span>
+          <Link href="/create" className="ml-auto inline-flex items-center gap-1 wiki-link text-sm">
+            <Plus size={13} /> Nouvel article
+          </Link>
+        </div>
+
+        {/* Filters */}
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <label className="relative block max-w-md flex-1">
+            <Search className="absolute left-2.5 top-2 text-muted-foreground" size={14} />
+            <input
+              data-testid="input-search-pages"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filtrer les pages…"
+              className="h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary pl-8 pr-3 text-sm outline-none focus:border-primary"
+            />
+          </label>
+          <div className="flex flex-wrap gap-1">
+            {categories.map((cat) => (
+              <button
+                data-testid={`button-filter-${cat}`}
+                key={cat}
+                onClick={() => setFilter(cat)}
+                className={`rounded-sm px-2 py-1 text-xs ${filter === cat ? 'bg-[#eaecf0] dark:bg-muted font-bold' : 'wiki-link hover:underline'}`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <BackupBar onImported={setPages} />
+
+        {visible.length ? (
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {visible.map((page, i) => {
+              const color = page.accentColor ?? categoryColor(page.category);
+              return (
+                <Link
+                  href={`/page/${page.id}`}
+                  data-testid={`card-page-${page.id}`}
+                  key={page.id}
+                  className={`group block rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4 hover:border-primary/50 transition ${i === 0 ? 'lg:col-span-2' : ''}`}
+                  style={{ borderTopWidth: 3, borderTopColor: color }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <Badge tone="green">Publié</Badge>
+                        <span>{page.category}</span><span>·</span>
+                        <span>{page.type}</span><span>·</span>
+                        <span>{formatDate(page.updatedAt)}</span>
+                      </div>
+                      <h2 data-testid={`text-page-title-${page.id}`} className={`wiki-link font-editorial ${i === 0 ? 'text-[1.6em]' : 'text-[1.3em]'} group-hover:underline`}>{page.title}</h2>
+                      {page.subtitle && <p className="text-sm text-muted-foreground mt-0.5 italic">{page.subtitle}</p>}
+                      <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{page.introduction}</p>
+                    </div>
+                    <ChevronRight size={15} className="shrink-0 text-muted-foreground mt-1" />
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[var(--wiki-border)] dark:border-border pt-2">
+                    {page.categories.slice(0, 4).map((c) => <span key={c} className="text-[11px] wiki-link">{c}</span>)}
+                    <span className="ml-auto text-[11px] text-muted-foreground">{page.sections.length} sections</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <Empty title="Aucune page trouvée" text="Modifiez votre recherche ou importez un nouveau fichier TXT." action={<Link href="/create" className="wiki-link text-sm">Créer une page</Link>} />
+        )}
+      </div>
+    );
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     VIEW: CaledoraOS — smartphone interface
+  ════════════════════════════════════════════════════════════════════ */
+  const glass = { background: 'rgba(255,255,255,0.13)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' } as React.CSSProperties;
 
   return (
-    <div className="animate-rise space-y-8">
+    /* Outer stage — centers the phone on desktop, fills screen on mobile */
+    <div className="-mx-4 flex items-start justify-center py-0 sm:py-6 sm:px-4 min-h-[calc(100dvh-58px)]">
+      {/* ── Phone frame ── */}
+      <div
+        className="relative flex flex-col overflow-hidden w-full"
+        style={{
+          maxWidth: 390,
+          height: 'clamp(600px, calc(100dvh - 70px), 820px)',
+          borderRadius: 'clamp(0px, 4vw, 44px)',
+          border: '2px solid #3d3d3f',
+          boxShadow: '0 0 0 1px #1c1c1e, 0 30px 90px rgba(0,0,0,0.55)',
+          background: 'linear-gradient(165deg, #0d1b2a 0%, #1b3050 38%, #0f2540 65%, #0a1628 100%)',
+        }}
+      >
+        {/* Wallpaper stars */}
+        <StarField />
 
-      {/* ── 1. HERO ─────────────────────────────────────────────────────── */}
-      <div className="rounded-lg border border-[var(--wiki-border)] dark:border-border overflow-hidden">
-        <div className="bg-gradient-to-br from-[#f8f9fa] via-[#eaecf0] to-[#dce3ec] dark:from-secondary dark:via-secondary/70 dark:to-background px-6 py-8 sm:px-10">
-          <div className="flex flex-col sm:flex-row sm:items-start gap-6">
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
-                Encyclopédie libre locale
-              </p>
-              <h1 className="font-editorial text-[1.8em] sm:text-[2.3em] font-normal leading-tight mb-3">
-                Bienvenue sur l'encyclopédie<br className="hidden sm:block" />{' '}
-                de <span className="font-bold text-primary">Caledora</span>
-              </h1>
-              <p className="text-sm text-muted-foreground mb-5">
-                {active.length > 0
-                  ? <><strong className="text-foreground">{active.length}</strong> article{active.length > 1 ? 's' : ''} disponible{active.length > 1 ? 's' : ''} · stockage 100&nbsp;% local</>
-                  : 'Aucun article — créez votre première page'}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Link href="/create" className="inline-flex items-center gap-1.5 rounded bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium hover:opacity-90 transition">
-                  <Plus size={13} /> Nouvel article
-                </Link>
-                <button
-                  onClick={() => setShowAll((v) => !v)}
-                  className="inline-flex items-center gap-1.5 rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-3 py-1.5 text-sm hover:bg-[#eaecf0] dark:hover:bg-muted transition"
-                >
-                  <FileText size={13} />
-                  {showAll ? 'Masquer la liste' : `Toutes les pages (${active.length})`}
-                </button>
-              </div>
+        {/* ── Status bar ── */}
+        <div className="relative z-10 flex items-center justify-between px-6 pt-4 pb-1 text-white">
+          <span className="text-[13px] font-semibold tracking-tight">{timeStr}</span>
+          <span className="text-[9px] text-white/50 hidden xs:block">5G Caledora Telecom</span>
+          <div className="flex items-center gap-1.5">
+            {/* Signal */}
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="white">
+              <rect x="0"   y="9"  width="3" height="3" rx="0.5"/>
+              <rect x="4.5" y="6"  width="3" height="6" rx="0.5"/>
+              <rect x="9"   y="3"  width="3" height="9" rx="0.5"/>
+              <rect x="13.5" y="0" width="3" height="12" rx="0.5"/>
+            </svg>
+            {/* Battery */}
+            <svg width="23" height="12" viewBox="0 0 23 12" fill="none">
+              <rect x="0.75" y="0.75" width="18.5" height="10.5" rx="2.25" stroke="white" strokeWidth="1.5"/>
+              <rect x="19.5" y="3.5" width="2.5" height="5" rx="1" fill="white"/>
+              <rect x="2"   y="2"   width="14" height="8" rx="1.5" fill="white"/>
+            </svg>
+          </div>
+        </div>
+
+        {/* ── Big clock ── */}
+        <div className="relative z-10 text-center pt-1 pb-3">
+          <div className="text-white font-extralight select-none" style={{ fontSize: 'clamp(52px,13vw,72px)', lineHeight: 1, letterSpacing: -3 }}>
+            {timeStr}
+          </div>
+          <div className="text-white/60 text-[13px] mt-1">{dateStr}</div>
+        </div>
+
+        {/* ── Scrollable content ── */}
+        <div className="relative z-10 flex-1 overflow-y-auto px-4 pb-28 space-y-4" style={{ scrollbarWidth: 'none' }}>
+
+          {/* Widgets row */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* Weather */}
+            <div className="rounded-2xl p-3.5 text-white" style={glass}>
+              <div className="text-[9px] text-white/50 uppercase tracking-widest mb-1.5">Météo</div>
+              <div className="text-[28px] leading-none mb-1">☀️</div>
+              <div className="text-[22px] font-bold leading-none">24°C</div>
+              <div className="text-[11px] text-white/60 mt-1.5 leading-tight">Caledora City<br/>Ensoleillé</div>
             </div>
+            {/* Match Day */}
+            <div className="rounded-2xl p-3.5 text-white" style={glass}>
+              <div className="text-[9px] text-white/50 uppercase tracking-widest mb-1.5">Prochain Match</div>
+              <div className="text-[11px] font-bold">⚽ Caledora FC</div>
+              <div className="text-[10px] text-white/50 mt-0.5">vs Nova United</div>
+              <div className="text-[13px] font-semibold mt-2">Sam · 20:45</div>
+              <div className="text-[9px] text-white/40 mt-0.5">The Nova Arena</div>
+            </div>
+          </div>
 
-            {/* Stat pills — one per portal */}
-            <div className="grid grid-cols-2 sm:grid-cols-1 gap-1.5 shrink-0">
-              {portals.map(({ label, emoji, cats, accent }) => {
-                const n = active.filter((p) => cats.includes(p.category)).length;
-                return (
-                  <button
-                    key={label}
-                    onClick={() => { setFilter(cats[0]); setShowAll(true); }}
-                    className="flex items-center gap-2 rounded-full border border-[var(--wiki-border)] dark:border-border bg-white/80 dark:bg-card/80 px-3 py-1 text-xs hover:border-primary/50 transition text-left"
-                  >
-                    <span>{emoji}</span>
-                    <span className="font-bold" style={{ color: accent }}>{n}</span>
-                    <span className="text-muted-foreground truncate">{label.split('&')[0].trim()}</span>
-                  </button>
-                );
-              })}
+          {/* App grid — 4 columns */}
+          <div className="grid grid-cols-4 gap-x-3 gap-y-5 pt-1">
+            {apps.map((app) => (
+              <OsIcon key={app.id} app={app} size={58} onClick={() => handleApp(app.id, app.active, app.label)} />
+            ))}
+          </div>
+
+          {/* WikiBase quick-stats banner */}
+          <div className="rounded-2xl p-4 text-white" style={glass}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[9px] text-white/50 uppercase tracking-widest mb-1">WikiBase</div>
+                <div className="text-sm font-semibold">
+                  {active.length > 0
+                    ? <>{active.length} article{active.length > 1 ? 's' : ''} disponible{active.length > 1 ? 's' : ''}</>
+                    : 'Aucun article'}
+                </div>
+                <div className="text-[10px] text-white/40 mt-0.5">Encyclopédie de Caledora</div>
+              </div>
+              <button
+                onClick={() => navigate('/?view=list')}
+                className="shrink-0 rounded-xl px-3 py-1.5 text-[11px] font-semibold transition hover:brightness-110"
+                style={{ background: 'rgba(255,255,255,0.2)' }}
+              >
+                Ouvrir →
+              </button>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* ── 2. ARTICLE À LA UNE + PORTAILS ──────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-
-        {/* Featured article */}
-        {featured ? (
-          <div className="rounded-lg border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card overflow-hidden flex flex-col">
-            <div className="flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary">
-              <Star size={11} /> Article à la une
-            </div>
-            <div className="flex flex-col sm:flex-row flex-1">
-              {featuredSrc && (
-                <div className="sm:w-44 shrink-0 bg-[#f8f9fa] dark:bg-secondary border-b sm:border-b-0 sm:border-r border-[var(--wiki-border)] dark:border-border flex items-center justify-center p-4">
-                  <img
-                    src={featuredSrc}
-                    alt={featured.infoboxImage?.alt || featured.title}
-                    className="max-h-40 max-w-full object-contain"
-                  />
-                </div>
-              )}
-              <div className="p-5 flex flex-col flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Badge>{featured.category}</Badge>
-                </div>
-                <h2 className="font-editorial text-[1.5em] font-normal leading-snug mb-1.5">{featured.title}</h2>
-                {featured.subtitle && (
-                  <p className="text-sm text-muted-foreground italic mb-2">{featured.subtitle}</p>
-                )}
-                <p className="text-sm text-muted-foreground leading-6 line-clamp-4 flex-1">{featured.introduction}</p>
-                <div className="mt-4 pt-3 border-t border-[var(--wiki-border)] dark:border-border">
-                  <Link
-                    href={`/page/${featured.id}`}
-                    className="inline-flex items-center gap-1.5 rounded border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary px-3 py-1.5 text-sm hover:bg-[#eaecf0] dark:hover:bg-muted transition"
-                  >
-                    <BookOpen size={13} /> Lire l'article
-                  </Link>
-                </div>
-              </div>
-            </div>
+        {/* ── Dock ── */}
+        <div
+          className="absolute bottom-0 left-0 right-0 z-20 px-5 pb-4 pt-2"
+          style={{ background: 'rgba(10,20,35,0.45)', backdropFilter: 'blur(30px)', WebkitBackdropFilter: 'blur(30px)' }}
+        >
+          <div
+            className="rounded-[26px] px-3 py-3 flex items-center justify-around"
+            style={glass}
+          >
+            {dockApps.map((app) => (
+              <OsIcon key={app.id} app={app} size={48} onClick={() => handleApp(app.id, app.active, app.label)} />
+            ))}
           </div>
-        ) : (
-          <div className="rounded-lg border border-dashed border-[var(--wiki-border)] dark:border-border flex items-center justify-center p-10 text-center text-muted-foreground text-sm">
-            <div>
-              <FileText size={28} className="mx-auto mb-2 opacity-25" />
-              Aucun article à mettre en avant.
-              <br />
-              <Link href="/create" className="wiki-link mt-1 inline-block">Créer le premier article →</Link>
+        </div>
+
+        {/* ── Coming soon modal ── */}
+        {comingSoon && (
+          <div
+            className="absolute inset-0 z-30 flex items-end justify-center pb-10"
+            style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
+            onClick={() => setComingSoon(null)}
+          >
+            <div
+              className="w-[85%] rounded-3xl p-6 text-center text-white"
+              style={{ background: 'rgba(18,28,45,0.97)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-5xl mb-3">🚀</div>
+              <div className="font-bold text-[17px] mb-1">{comingSoon}</div>
+              <div className="text-[13px] text-white/60 leading-relaxed mb-5">
+                Application en cours de déploiement par<br/>
+                <span className="text-white/80 font-medium">Caledora Digital Services</span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[11px] text-white/50 mb-4" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                ⏳ Bientôt disponible
+              </div>
+              <br/>
+              <button onClick={() => setComingSoon(null)} className="text-[11px] text-white/30 underline">Fermer</button>
             </div>
           </div>
         )}
 
-        {/* Portails thématiques */}
-        <div className="flex flex-col gap-3">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-            Portails thématiques
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {portals.map(({ label, desc, emoji, cats, accent }) => {
-              const n = active.filter((p) => cats.includes(p.category)).length;
-              return (
-                <button
-                  key={label}
-                  onClick={() => { setFilter(cats[0]); setShowAll(true); }}
-                  className="text-left rounded-lg border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-3.5 hover:border-primary/50 hover:shadow-sm transition group"
-                  style={{ borderTopWidth: 3, borderTopColor: accent }}
-                >
-                  <div className="text-2xl mb-2 leading-none">{emoji}</div>
-                  <div className="text-sm font-bold leading-tight group-hover:text-primary transition mb-0.5">{label}</div>
-                  <div className="text-[11px] text-muted-foreground mb-2 leading-tight">{desc}</div>
-                  <div className="text-[11px] text-muted-foreground border-t border-[var(--wiki-border)] dark:border-border pt-1.5 mt-1.5">
-                    {n > 0 ? <><strong className="text-foreground">{n}</strong> article{n > 1 ? 's' : ''}</> : 'Aucun article'}
+        {/* ── Settings panel ── */}
+        {showOsSettings && (
+          <div
+            className="absolute inset-0 z-30"
+            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
+            onClick={() => setShowOsSettings(false)}
+          >
+            <div
+              className="absolute bottom-0 left-0 right-0 rounded-t-3xl p-6 text-white"
+              style={{ background: 'rgba(14,24,40,0.98)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-5">
+                <span className="font-bold text-[16px]">Paramètres</span>
+                <button onClick={() => setShowOsSettings(false)} className="text-white/40 hover:text-white transition"><X size={18} /></button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <div className="text-[11px] text-white/40 uppercase tracking-widest mb-2">Apparence</div>
+                  <div className="flex gap-2">
+                    {(['auto', 'light', 'dark'] as const).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setAppearance({ ...appearance, theme: t })}
+                        className={`flex-1 py-2 rounded-xl text-[12px] font-medium transition ${appearance.theme === t ? 'bg-primary text-white' : 'bg-white/10 text-white/60 hover:bg-white/18'}`}
+                      >
+                        {t === 'auto' ? '🔄 Auto' : t === 'light' ? '☀️ Clair' : '🌙 Sombre'}
+                      </button>
+                    ))}
                   </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* ── 3. LE SAVIEZ-VOUS + DERNIERS ARTICLES ───────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        {/* Le saviez-vous */}
-        <div className="rounded-lg border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card overflow-hidden">
-          <div className="flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary">
-            <Sparkles size={11} /> Le saviez-vous ?
-          </div>
-          {didYouKnow.length ? (
-            <ul className="divide-y divide-[var(--wiki-border)] dark:divide-border">
-              {didYouKnow.map((p) => {
-                const sentence = (p.introduction.split(/[.!?]/)[0] ?? '').trim();
-                return (
-                  <li key={p.id} className="px-4 py-3 text-sm leading-6 flex gap-2.5">
-                    <span className="text-primary shrink-0 mt-0.5">•</span>
-                    <span className="text-muted-foreground">
-                      {sentence ? `${sentence}. ` : ''}
-                      <Link href={`/page/${p.id}`} className="wiki-link">→&nbsp;{p.title}</Link>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="px-4 py-8 text-sm text-muted-foreground text-center">
-              Ajoutez des articles pour voir des anecdotes ici.
-            </p>
-          )}
-        </div>
-
-        {/* Derniers articles modifiés */}
-        <div className="rounded-lg border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card overflow-hidden">
-          <div className="flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary">
-            <Clock3 size={11} /> Derniers articles modifiés
-          </div>
-          {recent.length ? (
-            <ul className="divide-y divide-[var(--wiki-border)] dark:divide-border">
-              {recent.map((p) => {
-                const color = p.accentColor ?? categoryColor(p.category);
-                return (
-                  <li key={p.id}>
-                    <Link href={`/page/${p.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#f8f9fa] dark:hover:bg-secondary/60 transition group">
-                      <div className="w-[3px] h-8 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium truncate group-hover:text-primary transition">{p.title}</div>
-                        <div className="text-[11px] text-muted-foreground">{p.category} · {formatDate(p.updatedAt)}</div>
-                      </div>
-                      <ChevronRight size={13} className="text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition" />
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="px-4 py-8 text-sm text-muted-foreground text-center">Aucun article pour l'instant.</p>
-          )}
-        </div>
-      </div>
-
-      {/* ── 4. IMPORT / EXPORT ──────────────────────────────────────────── */}
-      <BackupBar onImported={setPages} />
-
-      {/* ── 5. TOUTES LES PAGES ─────────────────────────────────────────── */}
-      {!showAll ? (
-        <button
-          onClick={() => setShowAll(true)}
-          className="w-full rounded-lg border border-dashed border-[var(--wiki-border)] dark:border-border py-3 text-sm text-muted-foreground hover:border-primary/50 hover:text-foreground transition flex items-center justify-center gap-2"
-        >
-          <FileText size={14} /> Voir toutes les pages ({active.length})
-        </button>
-      ) : (
-        <div>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--wiki-border)] dark:border-border pb-3">
-            <h2 className="font-editorial text-[1.4em] font-normal">Toutes les pages</h2>
-            <button onClick={() => setShowAll(false)} className="text-xs wiki-link flex items-center gap-1">
-              <X size={11} /> Masquer
-            </button>
-          </div>
-
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <label className="relative block max-w-md flex-1">
-              <Search className="absolute left-2.5 top-2 text-muted-foreground" size={14} />
-              <input
-                data-testid="input-search-pages"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Filtrer les pages..."
-                className="h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary pl-8 pr-3 text-sm outline-none focus:border-primary"
-              />
-            </label>
-            <div className="flex flex-wrap gap-1">
-              {categories.map((cat) => (
-                <button
-                  data-testid={`button-filter-${cat}`}
-                  key={cat}
-                  onClick={() => setFilter(cat)}
-                  className={`rounded-sm px-2 py-1 text-xs ${filter === cat ? 'bg-[#eaecf0] dark:bg-muted font-bold' : 'wiki-link hover:underline'}`}
-                >
-                  {cat}
-                </button>
-              ))}
+                </div>
+                <div className="border-t border-white/10 pt-4 text-[12px] text-white/30">
+                  CaledoraOS 1.0 · WikiBase · {active.length} article{active.length !== 1 ? 's' : ''}
+                </div>
+              </div>
             </div>
           </div>
-
-          {visible.length ? (
-            <div className="grid gap-3 lg:grid-cols-2">
-              {visible.map((page, i) => {
-                const color = page.accentColor ?? categoryColor(page.category);
-                return (
-                  <Link
-                    href={`/page/${page.id}`}
-                    data-testid={`card-page-${page.id}`}
-                    key={page.id}
-                    className={`group block rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4 hover:border-primary/50 transition ${i === 0 ? 'lg:col-span-2' : ''}`}
-                    style={{ borderTopWidth: 3, borderTopColor: color }}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                          <Badge tone="green">Publié</Badge>
-                          <span>{page.category}</span>
-                          <span>·</span>
-                          <span>{page.type}</span>
-                          <span>·</span>
-                          <span>{formatDate(page.updatedAt)}</span>
-                        </div>
-                        <h2 data-testid={`text-page-title-${page.id}`} className={`wiki-link font-editorial ${i === 0 ? 'text-[1.6em]' : 'text-[1.3em]'} group-hover:underline`}>{page.title}</h2>
-                        {page.subtitle && <p className="text-sm text-muted-foreground mt-0.5 italic">{page.subtitle}</p>}
-                        <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{page.introduction}</p>
-                      </div>
-                      <ChevronRight size={15} className="shrink-0 text-muted-foreground mt-1" />
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[var(--wiki-border)] dark:border-border pt-2">
-                      {page.categories.slice(0, 4).map((c) => <span key={c} className="text-[11px] wiki-link">{c}</span>)}
-                      <span className="ml-auto text-[11px] text-muted-foreground">{page.sections.length} sections</span>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          ) : (
-            <Empty title="Aucune page trouvée" text="Modifiez votre recherche ou importez un nouveau fichier TXT." action={<Link href="/create" className="wiki-link text-sm">Créer une page</Link>} />
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

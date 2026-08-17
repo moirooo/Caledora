@@ -1,0 +1,30 @@
+Transforme la page d'accueil ('/') en une interface immersive de smartphone ("CaledoraOS / Phone Screen") :
+
+1. STRUCTURE VISUELLE (Smartphone Frame) :
+   - Centre à l'écran un cadre de smartphone moderne (border-radius prononcé, bordure fine sombre/aluminium, ombre portée élégante) ou affiche l'interface en plein écran mobile avec fond d'écran soigné (wallpaper moderne et sobre).
+   - Barre de statut en haut : heure en direct (HH:mm), date du jour, icônes discrètes de réseau/batterie et indicateur "5G Caledora Telecom".
+
+2. WIDGETS SUPÉRIEURS :
+   - Un widget Météo interactif (ex: "Caledora City • 24°C • Ensoleillé").
+   - Un widget "Match Day / Caledora FC" affichant le prochain match à The Nova Arena ou le dernier score.
+
+3. GRILLE D'APPLICATIONS (App Grid façon iOS/Android) :
+   - Affiche une grille d'icônes carrées aux coins arrondis (squircle) avec leurs libellés en dessous :
+     * 📖 WikiBase (Icône W / Livre) -> Badge "Actif" -> Redirige vers /wiki (ou la liste des articles).
+     * 📸 Footballgram (Icône Caméra dégradé rose/violet) -> Ouvre la route /instagram.
+     * 🐦 Caledora Chirp / X (Icône oiseau/X sur fond noir) -> Fake Twitter.
+     * ⚽ CFC Official (Logo Caledora FC) -> Site du club.
+     * ✈️ Caledora Airways (Logo avion / bleu marine) -> Portail de voyage.
+     * 🏦 Oria Bank (Icône banque / doré) -> E-Banking fictif.
+     * 🗺️ Maps (Icône carte / navigation) -> Carte du territoire.
+     * ⚙️ Paramètres (Basculer Thème Clair/Sombre, À propos).
+
+4. GESTION DES CLICS & ÉTATS :
+   - Pour les applications actives (WikiBase, Footballgram) : ouvre directement la vue/route correspondante.
+   - Pour les applications en développement : ouvre une modale façon "App Preview" élégante indiquant :
+     "Application en cours de déploiement par Caledora Digital Services • Bientôt disponible".
+
+5. DOCK FIXE EN BAS DU SMARTPHONE :
+   - Un dock translucide (effet glassmorphism / blur) contenant 4 icônes prioritaires : Téléphone, Messages, WikiBase, Footballgram.
+
+Assure-toi que l'animation au clic (effet de zoom/rebond léger) soit fluide et responsive sur mobile et PC.
