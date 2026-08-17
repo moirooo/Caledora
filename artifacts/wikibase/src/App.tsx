@@ -1,7 +1,7 @@
 import 'flag-icons/css/flag-icons.min.css';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
-import { Archive, ArrowLeft, BookOpen, Check, ChevronRight, Clock3, Download, FileText, GitCompare, Image as ImageIcon, Menu, Pencil, Plus, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, X } from 'lucide-react';
+import { Archive, ArrowLeft, BarChart2, BookOpen, Check, ChevronRight, Clock3, Download, FileText, GitCompare, Heart, Image as ImageIcon, Menu, MessageCircle, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, X } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -440,7 +440,7 @@ function Shell({ children }: { children: ReactNode }) {
   const { appearance } = useAppearance();
 
   /* Hide the entire WikiBase chrome on the home dashboard */
-  const isHome = location === '/';
+  const isHome = location === '/' || location === '/twitter';
 
   const doSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -670,7 +670,7 @@ function Dashboard() {
     // Instagram — image covers tile naturally (gradient logo)
     { id: 'instagram', label: 'Instagram',        image: img('Instagram.png'),  bg: 'linear-gradient(145deg,#833ab4,#fd1d1d)', active: false },
     // Twitter/X — black logo → invert to white, keep dark tile
-    { id: 'twitter',   label: 'Twitter / X',      image: img('XLogo.png'),      bg: 'linear-gradient(145deg,#111827,#1f2937)', imgFit: 'contain', imgPad: true, imgFilter: 'brightness(0) invert(1)', active: false },
+    { id: 'twitter',   label: 'Twitter / X',      image: img('XLogo.png'),      bg: 'linear-gradient(145deg,#111827,#1f2937)', imgFit: 'contain', imgPad: true, imgFilter: 'brightness(0) invert(1)', active: true },
     // CFC Official
     { id: 'cfc',       label: 'CFC Official',     image: img('logo1.png'),      bg: 'linear-gradient(145deg,#1e3a8a,#2563eb)', imgFit: 'contain', imgPad: true,  active: false },
     // Caledora Airways
@@ -686,6 +686,7 @@ function Dashboard() {
   const handleApp = (app: DashApp) => {
     if (!app.active) { setComingSoon(app.label); return; }
     if (app.id === 'wikibase')  navigate('/wiki');
+    if (app.id === 'twitter')   navigate('/twitter');
     if (app.id === 'settings')  setShowSettings(true);
   };
 
@@ -2424,6 +2425,307 @@ function NotFound() {
   );
 }
 
+/* ─── X / Twitter Clone ─────────────────────────────────────────────────── */
+
+type XAccount = { handle: string; name: string; avatarUrl?: string; initials: string; avatarColor: string; badge: 'gold' | 'blue' | null; isSystem?: boolean };
+type XReply   = { id: string; acct: XAccount; text: string; likes: number; ts: number };
+type XTweet   = { id: string; acct: XAccount; text: string; imageUrl?: string; ts: number; likes: number; retweets: number; views: number; liked: boolean; retweeted: boolean; replies: XReply[] };
+
+const xColor  = (s: string) => { let h = 0; for (const c of s) h = (Math.imul(h, 31) + c.charCodeAt(0)) | 0; return `hsl(${((h >>> 0) % 360)},60%,42%)`; };
+const xHandle = (t: string) => '@' + t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9 ]/g, ' ').trim().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+const xInits  = (n: string) => { const p = n.trim().split(/\s+/); return (p.length >= 2 ? p[0][0] + p[p.length - 1][0] : n.slice(0, 2)).toUpperCase(); };
+const xBadge  = (cat: string): 'gold' | 'blue' | null => ['Sports & Football','Économie','Transports','Géographie','Monuments & Lieux'].includes(cat) ? 'gold' : ['Personnes & Organisations','Politique'].includes(cat) ? 'blue' : 'gold';
+const fmtN    = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n);
+const xAgo    = (ts: number) => { const s = Math.floor((Date.now() - ts) / 1000); if (s < 60) return `${s}s`; const m = Math.floor(s / 60); if (m < 60) return `${m}min`; const h = Math.floor(m / 60); if (h < 24) return `${h}h`; return new Date(ts).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }); };
+
+function wikiToXAcct(p: WikiPage): XAccount {
+  let avatarUrl: string | undefined;
+  if (p.infoboxImage) { const f = (p.infoboxImage.src || p.infoboxImage.filename).trim(); if (f) avatarUrl = /^(https?:\/\/|data:)/.test(f) ? f : import.meta.env.BASE_URL + f.replace(/^\/+/, ''); }
+  return { handle: xHandle(p.title), name: p.title, avatarUrl, initials: xInits(p.title), avatarColor: xColor(p.title), badge: xBadge(p.category) };
+}
+
+const XMEDIA: XAccount[] = [
+  { handle: '@CaledoraSport', name: 'Caledora Sport',   initials: 'CS', avatarColor: '#1d9bf0', badge: 'blue', isSystem: true },
+  { handle: '@MediaCaledora', name: 'Médias Caledora',  initials: 'MC', avatarColor: '#7856ff', badge: 'blue', isSystem: true },
+  { handle: '@InsiderCaled',  name: 'Caledora Insider', initials: 'CI', avatarColor: '#00ba7c', badge: null,   isSystem: true },
+  { handle: '@CFCFan07',      name: 'Fan CFC 🏟️',       initials: 'FC', avatarColor: '#ff7a00', badge: null,   isSystem: true },
+];
+
+const XTRENDS = [['#CFCvARS','42,1K tweets'],['#Caledora','18,7K tweets'],['#CaledoraSport','9,4K tweets'],['#OriaBankOpen','6,2K tweets'],['#CALNED','4,8K tweets']] as const;
+
+const xReplyTpl = (name: string) => [
+  `🔥 ${name} continue de marquer les esprits ! La communauté de Caledora est avec vous 💙 #Caledora`,
+  `On en parle ce soir sur @CaledoraSport ! Merci ${name} pour cette mise à jour 📺`,
+  `Notre analyse arrive bientôt sur @MediaCaledora — restez connectés 📰`,
+  `Quelle nouvelle ! ${name} fait avancer les choses dans la République 💪 #CaledoraCity`,
+  `Bravo ! Les fans attendaient ça depuis longtemps 🎉 #Caledora`,
+  `⚡ Le dynamisme de Caledora ne s'arrête jamais ! #CaledoraSport`,
+];
+
+const XSTORAGE = 'caledora-x-tweets';
+const XINIT: XTweet[] = [
+  { id:'xi1', ts:Date.now()-1000*60*35,  likes:847, retweets:234, views:12400, liked:false, retweeted:false, replies:[], acct:{ handle:'@CaledoraFC',      name:'Caledora FC',       initials:'CF', avatarColor:xColor('Caledora FC'),       avatarUrl:`${import.meta.env.BASE_URL}images/logo1.png`,    badge:'gold' }, text:'⚽ Matchday ! Caledora FC reçoit Arsenal ce samedi à 20h45 au Caledora Mare Stadium. Soyez nombreux dans les tribunes ! 💙🏟️ #CFCvARS #Caledora' },
+  { id:'xi2', ts:Date.now()-1000*60*90,  likes:312, retweets:89,  views:5800,  liked:false, retweeted:false, replies:[], acct:{ handle:'@OriaBank',         name:'Oria Bank',         initials:'OB', avatarColor:xColor('Oria Bank'),         avatarUrl:`${import.meta.env.BASE_URL}images/oriabank.png`, badge:'gold' }, text:'🏦 Oria Bank est fière d\'annoncer l\'ouverture de sa 12e agence à Caledora City ! Rendez-vous lundi pour l\'inauguration. #OriaBankOpen' },
+  { id:'xi3', ts:Date.now()-1000*60*180, likes:521, retweets:173, views:9100,  liked:false, retweeted:false, replies:[], acct:{ handle:'@CaledoraAirways', name:'Caledora Airways',  initials:'CA', avatarColor:xColor('Caledora Airways'), avatarUrl:`${import.meta.env.BASE_URL}images/airways2.jpg`,badge:'gold' }, text:'✈️ Nouvelle liaison directe Caledora City → Paris CDG dès le 1er septembre ! Réservez vos billets en avant-première. Bon vol à tous 🌍' },
+];
+
+function XAvtr({ acct, size = 40 }: { acct: XAccount; size?: number }) {
+  const [err, setErr] = useState(false);
+  if (acct.avatarUrl && !err) return <img src={acct.avatarUrl} alt={acct.name} onError={() => setErr(true)} className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />;
+  return <div className="rounded-full flex items-center justify-center text-white font-bold shrink-0" style={{ width: size, height: size, background: acct.avatarColor, fontSize: Math.round(size * 0.36) }}>{acct.initials}</div>;
+}
+
+function XBadgeIcon({ type }: { type: 'gold' | 'blue' | null }) {
+  if (!type) return null;
+  return <span title={type === 'gold' ? 'Organisation certifiée' : 'Personnalité certifiée'} style={{ color: type === 'gold' ? '#FFD700' : '#1d9bf0', fontSize: 12, lineHeight: 1 }}>✓</span>;
+}
+
+function XCard({ tweet, expanded, onToggleExpand, onLike, onRT, onSimulate }: { tweet: XTweet; expanded: boolean; onToggleExpand: () => void; onLike: () => void; onRT: () => void; onSimulate: () => void }) {
+  return (
+    <div style={{ borderBottom: '1px solid #2f3336' }}>
+      <div className="flex gap-3 px-4 py-3 hover:bg-white/[0.025] transition-colors">
+        <XAvtr acct={tweet.acct} size={44} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap leading-none">
+            <span className="font-bold text-[15px] text-white">{tweet.acct.name}</span>
+            <XBadgeIcon type={tweet.acct.badge} />
+            <span className="text-[#71767b] text-[13px]">{tweet.acct.handle} · {xAgo(tweet.ts)}</span>
+          </div>
+          <p className="text-[15px] text-white mt-1.5 leading-relaxed whitespace-pre-wrap break-words">{tweet.text}</p>
+          {tweet.imageUrl && (
+            <div className="mt-3 rounded-2xl overflow-hidden border border-[#2f3336]" style={{ maxHeight: 280 }}>
+              <img src={tweet.imageUrl} alt="" className="w-full object-cover" style={{ maxHeight: 280 }} />
+            </div>
+          )}
+          <div className="flex items-center gap-5 mt-3 text-[#71767b] text-[13px]">
+            <button onClick={onToggleExpand} className="flex items-center gap-1.5 hover:text-[#1d9bf0] transition-colors">
+              <MessageCircle size={16} />{tweet.replies.length > 0 && <span>{tweet.replies.length}</span>}
+            </button>
+            <button onClick={onRT} className="flex items-center gap-1.5 hover:text-[#00ba7c] transition-colors" style={{ color: tweet.retweeted ? '#00ba7c' : '#71767b' }}>
+              <Repeat2 size={16} />{tweet.retweets > 0 && <span>{fmtN(tweet.retweets)}</span>}
+            </button>
+            <button onClick={onLike} className="flex items-center gap-1.5 transition-colors" style={{ color: tweet.liked ? '#f91880' : '#71767b' }}>
+              <Heart size={16} fill={tweet.liked ? '#f91880' : 'none'} />{tweet.likes > 0 && <span>{fmtN(tweet.likes)}</span>}
+            </button>
+            <span className="flex items-center gap-1.5"><BarChart2 size={15} /><span>{fmtN(tweet.views)}</span></span>
+            <button onClick={onSimulate} className="flex items-center gap-1 ml-auto hover:text-[#7856ff] transition-colors text-[12px]">
+              <Sparkles size={13} /><span className="hidden sm:inline ml-0.5">Simuler</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      {expanded && tweet.replies.length > 0 && (
+        <div style={{ background: 'rgba(255,255,255,0.015)', borderTop: '1px solid #1e2732' }}>
+          {tweet.replies.map(r => (
+            <div key={r.id} className="flex gap-2 px-4 py-2.5 border-b border-[#1e2732] last:border-b-0 hover:bg-white/[0.02]">
+              <div className="flex flex-col items-center gap-1 shrink-0 w-10">
+                <div className="w-0.5 h-2 bg-[#2f3336]" /><XAvtr acct={r.acct} size={32} />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-1.5 text-[13px] flex-wrap">
+                  <span className="font-bold text-white">{r.acct.name}</span>
+                  <XBadgeIcon type={r.acct.badge} />
+                  <span className="text-[#71767b]">{r.acct.handle} · {xAgo(r.ts)}</span>
+                </div>
+                <p className="text-[14px] text-white mt-0.5 leading-relaxed">{r.text}</p>
+                <div className="flex gap-4 mt-1.5 text-[#71767b] text-[12px] items-center">
+                  <span className="flex items-center gap-1"><MessageCircle size={12} /></span>
+                  <span className="flex items-center gap-1"><Heart size={12} />{r.likes}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TwitterPage() {
+  const [, navigate] = useLocation();
+  const { pages } = usePages();
+
+  const wikiAccts = useMemo(() => pages.filter(p => !p.isTrashed).map(wikiToXAcct), [pages]);
+  const allAccts  = useMemo(() => [...wikiAccts, ...XMEDIA], [wikiAccts]);
+
+  const [tweets, setTweetsState] = useState<XTweet[]>(() => {
+    try { const s = localStorage.getItem(XSTORAGE); if (s) return JSON.parse(s); } catch {}
+    return XINIT;
+  });
+  const setTweets = (t: XTweet[]) => { setTweetsState(t); localStorage.setItem(XSTORAGE, JSON.stringify(t)); };
+
+  const [tab, setTab]           = useState<'foryou' | 'following'>('foryou');
+  const [draft, setDraft]       = useState('');
+  const [authorIdx, setAuthorIdx] = useState(0);
+  const [imgUrl, setImgUrl]     = useState('');
+  const [imgOpen, setImgOpen]   = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const author    = allAccts[authorIdx] ?? XINIT[0].acct;
+  const displayed = tab === 'foryou' ? tweets : tweets.filter(t => !t.acct.isSystem);
+
+  const postTweet = () => {
+    if (!draft.trim()) return;
+    const t: XTweet = { id: `xt_${Date.now()}`, acct: author, text: draft.trim(), imageUrl: imgUrl.trim() || undefined, ts: Date.now(), likes: 0, retweets: 0, views: Math.floor(Math.random() * 50) + 1, liked: false, retweeted: false, replies: [] };
+    setTweets([t, ...tweets]);
+    setDraft(''); setImgUrl('');
+  };
+
+  const toggleLike = (id: string) => setTweets(tweets.map(t => t.id === id ? { ...t, liked: !t.liked, likes: t.liked ? t.likes - 1 : t.likes + 1 } : t));
+  const toggleRT   = (id: string) => setTweets(tweets.map(t => t.id === id ? { ...t, retweeted: !t.retweeted, retweets: t.retweeted ? t.retweets - 1 : t.retweets + 1 } : t));
+
+  const simulate = (id: string) => {
+    const tw = tweets.find(t => t.id === id); if (!tw) return;
+    const pool = allAccts.filter(a => a.handle !== tw.acct.handle).sort(() => Math.random() - 0.5);
+    const tpl  = xReplyTpl(tw.acct.name);
+    const newReplies: XReply[] = pool.slice(0, 2 + Math.floor(Math.random() * 2)).map((acct, i) => ({ id: `xr_${Date.now()}_${i}`, acct, text: tpl[Math.floor(Math.random() * tpl.length)], likes: Math.floor(Math.random() * 120) + 1, ts: Date.now() - Math.floor(Math.random() * 600000) }));
+    setTweets(tweets.map(t => t.id === id ? { ...t, replies: [...t.replies, ...newReplies] } : t));
+    setExpanded(prev => new Set([...prev, id]));
+  };
+
+  const BASE      = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const knownImgs = ['logo1.png','site_logo.png','oriabank.png','airways2.jpg','airways.jpg'].map(f => ({ name: f, url: `${BASE}/images/${f}` }));
+
+  return (
+    <div className="flex h-screen bg-black text-white overflow-hidden" style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" }}>
+
+      {/* ── LEFT NAV ─────────────────────────────────────────── */}
+      <nav className="hidden md:flex flex-col w-[68px] xl:w-[258px] h-full py-3 px-2 xl:px-4 border-r border-[#2f3336] shrink-0">
+        <div className="p-3 mb-1">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </div>
+        {[{e:'🏠',l:'Accueil',a:true},{e:'🔍',l:'Explorer'},{e:'🔔',l:'Notifications'},{e:'👤',l:'Profil'}].map(item => (
+          <button key={item.l} className="flex items-center gap-4 px-3 py-3.5 rounded-full hover:bg-white/10 transition-colors text-left w-full" style={{ color: item.a ? '#fff' : '#e7e9ea' }}>
+            <span className="text-xl leading-none w-6 text-center">{item.e}</span>
+            <span className="hidden xl:block text-[18px] font-medium">{item.l}</span>
+          </button>
+        ))}
+        <button onClick={() => document.getElementById('x-compose-area')?.focus()} className="mt-4 h-12 w-12 xl:w-full rounded-full bg-[#1d9bf0] text-white font-bold text-[15px] hover:bg-[#1a8cd8] transition-colors flex items-center justify-center gap-2 self-start xl:self-stretch">
+          <span className="xl:hidden text-xl">✎</span><span className="hidden xl:block">Poster</span>
+        </button>
+        <div className="flex-1" />
+        <button onClick={() => navigate('/')} className="flex items-center gap-3 px-3 py-3 rounded-full hover:bg-white/10 transition-colors text-[#71767b] hover:text-white w-full">
+          <ArrowLeft size={20} className="shrink-0" /><span className="hidden xl:block text-[15px]">Retour au Hub</span>
+        </button>
+      </nav>
+
+      {/* ── CENTER ───────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0 border-r border-[#2f3336]" style={{ maxWidth: 598 }}>
+        {/* Sticky header */}
+        <div className="sticky top-0 z-20 bg-black/90 backdrop-blur-sm border-b border-[#2f3336]">
+          <div className="flex items-center justify-between px-4 py-3">
+            <h1 className="font-bold text-[19px]">Accueil</h1>
+            <button onClick={() => navigate('/')} className="md:hidden text-[#1d9bf0] text-sm font-semibold flex items-center gap-1"><ArrowLeft size={14}/>Hub</button>
+          </div>
+          <div className="flex">
+            {(['foryou','following'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)} className="flex-1 py-3 text-[14px] font-medium hover:bg-white/5 transition-colors relative" style={{ color: tab === t ? '#fff' : '#71767b' }}>
+                {t === 'foryou' ? 'Pour vous' : 'Abonnements'}
+                {tab === t && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-1 w-16 rounded-full bg-[#1d9bf0]" />}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Composer */}
+        <div className="px-4 pt-4 pb-3 border-b border-[#2f3336]">
+          <div className="flex gap-3">
+            <XAvtr acct={author} size={44} />
+            <div className="flex-1 min-w-0">
+              {allAccts.length > 0 && (
+                <select value={authorIdx} onChange={e => setAuthorIdx(Number(e.target.value))} style={{ background: '#000' }}
+                  className="mb-2 text-[12px] border border-[#2f3336] rounded-full px-3 py-1 text-[#1d9bf0] cursor-pointer outline-none hover:bg-white/5 max-w-full">
+                  {allAccts.map((a, i) => <option key={a.handle} value={i} style={{ background: '#111' }}>{a.name} {a.handle}</option>)}
+                </select>
+              )}
+              <textarea id="x-compose-area" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postTweet(); }}
+                placeholder="Quoi de neuf ?" rows={draft.length > 80 ? 3 : 2}
+                className="w-full bg-transparent text-[18px] placeholder-[#71767b] outline-none resize-none leading-relaxed" />
+              {imgUrl && (
+                <div className="relative mt-2 rounded-2xl overflow-hidden border border-[#2f3336]" style={{ maxHeight: 200 }}>
+                  <img src={imgUrl} alt="" className="w-full object-cover" style={{ maxHeight: 200 }} />
+                  <button onClick={() => setImgUrl('')} className="absolute top-2 right-2 bg-black/70 rounded-full p-1.5"><X size={13}/></button>
+                </div>
+              )}
+              <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-[#2f3336]">
+                <div className="relative">
+                  <button onClick={() => setImgOpen(v => !v)} className="text-[#1d9bf0] p-2 rounded-full hover:bg-[#1d9bf0]/10 transition-colors"><ImageIcon size={18}/></button>
+                  {imgOpen && (
+                    <div className="absolute left-0 top-10 z-30 bg-[#1c2938] border border-[#2f3336] rounded-2xl shadow-2xl p-3" style={{ minWidth: 210 }}>
+                      <p className="text-[10px] text-[#71767b] mb-2 uppercase tracking-wider">Images disponibles</p>
+                      {knownImgs.map(im => (
+                        <button key={im.name} onClick={() => { setImgUrl(im.url); setImgOpen(false); }} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-white/10 text-left text-sm text-white">
+                          <img src={im.url} alt="" className="w-7 h-7 rounded object-cover shrink-0"/>{im.name}
+                        </button>
+                      ))}
+                      <div className="mt-2 pt-2 border-t border-[#2f3336]">
+                        <input type="text" placeholder="URL d'image..." value={imgUrl} onChange={e => setImgUrl(e.target.value)} className="w-full bg-transparent text-[12px] text-white placeholder-[#71767b] outline-none px-2 py-1 border border-[#2f3336] rounded-lg"/>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[13px]" style={{ color: draft.length > 260 ? '#f4212e' : '#71767b' }}>{280 - draft.length}</span>
+                  <button onClick={postTweet} disabled={!draft.trim()} className="bg-[#1d9bf0] text-white font-bold px-5 py-1.5 rounded-full text-[15px] hover:bg-[#1a8cd8] transition-colors disabled:opacity-40">Poster</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Timeline */}
+        <div className="overflow-y-auto flex-1">
+          {displayed.length === 0 && <div className="py-16 text-center text-[#71767b]"><p className="text-4xl mb-3">📭</p><p>Aucun tweet. Soyez le premier à poster !</p></div>}
+          {displayed.map(t => (
+            <XCard key={t.id} tweet={t} expanded={expanded.has(t.id)}
+              onToggleExpand={() => setExpanded(prev => { const s = new Set(prev); s.has(t.id) ? s.delete(t.id) : s.add(t.id); return s; })}
+              onLike={() => toggleLike(t.id)} onRT={() => toggleRT(t.id)} onSimulate={() => simulate(t.id)} />
+          ))}
+        </div>
+      </div>
+
+      {/* ── RIGHT SIDEBAR ────────────────────────────────────── */}
+      <div className="hidden lg:flex flex-col w-[340px] h-full px-4 py-4 overflow-y-auto shrink-0 gap-4">
+        <div className="flex items-center gap-3 bg-[#202327] rounded-full px-4 py-2.5">
+          <Search size={15} className="text-[#71767b] shrink-0"/>
+          <input type="text" placeholder="Rechercher sur X" className="bg-transparent text-sm outline-none flex-1 placeholder-[#71767b] text-white"/>
+        </div>
+        <div className="bg-[#16181c] rounded-2xl overflow-hidden">
+          <p className="px-4 pt-4 pb-2 font-bold text-[18px]">Tendances pour vous</p>
+          {XTRENDS.map(([tag, count]) => (
+            <div key={tag} className="px-4 py-3 hover:bg-white/[0.04] transition-colors cursor-pointer border-t border-[#2f3336]">
+              <p className="text-[11px] text-[#71767b]">Caledora · Tendances</p>
+              <p className="font-bold text-[14px] mt-0.5">{tag}</p>
+              <p className="text-[11px] text-[#71767b]">{count}</p>
+            </div>
+          ))}
+        </div>
+        {wikiAccts.length > 0 && (
+          <div className="bg-[#16181c] rounded-2xl overflow-hidden">
+            <p className="px-4 pt-4 pb-2 font-bold text-[18px]">Suggestions</p>
+            {wikiAccts.slice(0, 4).map(acct => (
+              <div key={acct.handle} className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] border-t border-[#2f3336] transition-colors">
+                <XAvtr acct={acct} size={42}/>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1"><span className="font-bold text-[14px] truncate">{acct.name}</span><XBadgeIcon type={acct.badge}/></div>
+                  <p className="text-[11px] text-[#71767b] truncate">{acct.handle}</p>
+                </div>
+                <button className="bg-white text-black font-bold text-[13px] px-4 py-1.5 rounded-full hover:bg-white/90 shrink-0 transition-colors">Suivre</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="text-[11px] text-[#71767b] flex flex-wrap gap-x-2 gap-y-1 px-1 pb-4">
+          {['Conditions','Confidentialité','Cookies','À propos'].map(l => <span key={l} className="hover:underline cursor-pointer">{l}</span>)}
+          <span>© 2026 Caledora Digital Services</span>
+        </div>
+      </div>
+
+      {imgOpen && <div className="fixed inset-0 z-20" onClick={() => setImgOpen(false)}/>}
+    </div>
+  );
+}
+
 function Router() {
   return (
     <LightboxProvider>
@@ -2431,6 +2733,7 @@ function Router() {
         <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/wiki" component={WikiList} />
+        <Route path="/twitter" component={TwitterPage} />
         <Route path="/create" component={CreatePage} />
         <Route path="/page/:id/edit" component={EditPage} />
         <Route path="/page/:id/compare" component={ComparePage} />

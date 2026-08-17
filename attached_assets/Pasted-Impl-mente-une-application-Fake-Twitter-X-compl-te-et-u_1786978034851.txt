@@ -1,0 +1,30 @@
+Implémente une application Fake Twitter / X complète et ultra fidèle sur la route '/twitter' :
+
+1. DESIGN & INTERFACE (Clone fidèle de X / Twitter Web) :
+   - Thème sombre moderne (Dark/Dim style Twitter : fond #000000 ou #0f1419, bordures #2f3336).
+   - Layout 3 colonnes :
+     * Gauche : Barre de navigation (Logo X, Accueil, Explorer, Notifications, Profil, bouton "Poster", bouton de retour au Hub d'accueil).
+     * Centre : Timeline principale avec onglets "Pour vous" / "Abonnements", boîte de composition de tweet en haut, et liste des tweets déroulante.
+     * Droite : Widget "Tendances pour vous" (#CFCvARS, #Caledora, etc.) et "Suggestions d'abonnements".
+
+2. SYNC AUTO AVEC LES PROFILS WIKI :
+   - Scanne automatiquement la liste des articles WikiBase pour en faire des comptes sélectionnables :
+     * Nom du compte = [TITRE] de l'article (ex: Caledora FC, Caledora Airways, Oria Bank).
+     * Handle = @nom_normalisé (ex: @CaledoraFC, @CaledoraAirways).
+     * Avatar = image principale de l'infobox ou icône par défaut.
+     * Badge de certification doré (pour les entreprises/clubs) ou bleu (personnalités).
+
+3. ÉDITEUR DE TWEET AVEC SÉLECTEUR D'AUTEUR :
+   - En haut du fil, permets de sélectionner l'auteur du tweet via une liste déroulante (compte utilisateur par défaut ou n'importe quel profil Wiki).
+   - Saisie du texte, ajout facultatif d'une image (depuis public/images/).
+   - Dès qu'on clique sur "Poster", le tweet s'ajoute en tête de timeline.
+
+4. SIMULATEUR DE RÉPONSES AUTOMATIQUES (Interactions) :
+   - Ajoute sous chaque nouveau tweet un bouton d'action "✨ Simuler des réactions" (ou génération automatique) qui ajoute 2 à 3 réponses réalistes sous le tweet générées par :
+     * D'autres comptes officiels du Wiki (ex: Oria Bank qui répond à Caledora FC).
+     * Des comptes médias/insiders fictifs (ex: @CaledoraSport, @MediaCaledora).
+     * Des fans ou supporters lambda.
+   - Boutons interactifs sous chaque tweet : Like (incrémente le compteur et devient rose), Retweet (devient vert) et stats de vues.
+
+5. ACCÈS DEPUIS L'ACCUEIL :
+   - Connecte la tuile "Twitter / X" du dashboard d'accueil pour qu'elle redirige directement vers cette route '/twitter'.
