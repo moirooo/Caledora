@@ -436,25 +436,42 @@ function Shell({ children }: { children: ReactNode }) {
   const [mobile, setMobile] = useState(false);
   const [showAppearance, setShowAppearance] = useState(false);
   const [query, setQuery] = useState('');
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { appearance } = useAppearance();
+
+  /* Hide the entire WikiBase chrome on the home dashboard */
+  const isHome = location === '/';
 
   const doSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (query.trim()) setLocation(`/?q=${encodeURIComponent(query.trim())}`);
+    if (query.trim()) setLocation(`/wiki?q=${encodeURIComponent(query.trim())}`);
   };
 
   const maxW = appearance.width === 'large' ? 'max-w-[1300px]' : 'max-w-[960px]';
+
+  if (isHome) {
+    /* Full-screen dashboard — no header, no padding */
+    return <div className="min-h-[100dvh]">{children}</div>;
+  }
 
   return (
     <div className="min-h-[100dvh] bg-white dark:bg-background">
       {/* Top header */}
       <header className="border-b border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background sticky top-0 z-30">
         <div className={`${maxW} mx-auto flex items-center gap-3 px-4 py-2`}>
+          {/* Home button */}
+          <Link
+            href="/"
+            title="Retour à l'accueil CaledoraOS"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[var(--wiki-border)] dark:border-border text-muted-foreground hover:bg-[#eaecf0] dark:hover:bg-secondary transition"
+          >
+            ⌂
+          </Link>
+
           <button className="md:hidden text-muted-foreground" onClick={() => setMobile(!mobile)} aria-label="Menu">
             <Menu size={18} />
           </button>
-          <Link href="/" className="flex items-center gap-2 shrink-0">
+          <Link href="/wiki" className="flex items-center gap-2 shrink-0">
             <SiteLogo />
             <div className="leading-tight">
               <div className="font-bold text-[16px] leading-none">WikiBase</div>
@@ -499,7 +516,8 @@ function Shell({ children }: { children: ReactNode }) {
       {/* Mobile nav */}
       {mobile && (
         <div className="border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary px-4 py-3 text-sm">
-          <Link href="/" onClick={() => setMobile(false)} className="wiki-link block py-1">Tableau de bord</Link>
+          <Link href="/" onClick={() => setMobile(false)} className="wiki-link block py-1">⌂ Accueil</Link>
+          <Link href="/wiki" onClick={() => setMobile(false)} className="wiki-link block py-1">WikiBase</Link>
           <Link href="/create" onClick={() => setMobile(false)} className="wiki-link block py-1">Créer une page</Link>
           <Link href="/trash" onClick={() => setMobile(false)} className="wiki-link block py-1">Corbeille</Link>
         </div>
@@ -536,391 +554,340 @@ function usePages() {
 
 /* ─── CaledoraOS helpers ─────────────────────────────────────────────────── */
 
-type AppIcon = {
-  id: string; label: string; emoji: string;
-  g: [string, string]; active: boolean; badge?: string;
+/* ─── Dashboard app tile types & components ──────────────────────────────── */
+
+type DashApp = {
+  id: string;
+  label: string;
+  image?: string;          // URL to public image
+  emoji?: string;          // shown when no image
+  bg: string;              // gradient CSS (fallback background)
+  active: boolean;
+  activeBadge?: string;    // e.g. "Actif" or article count
 };
 
-function OsIcon({ app, size = 56, onClick }: { app: AppIcon; size?: number; onClick: () => void }) {
+function AppTile({ app, onClick }: { app: DashApp; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center gap-1 active:scale-90 transition-transform duration-100 select-none"
+      className="group flex flex-col items-center gap-2.5 active:scale-95 transition-transform duration-100 select-none"
     >
-      <div className="relative">
-        <div
-          className="flex items-center justify-center shadow-lg"
-          style={{
-            width: size, height: size, fontSize: size * 0.42,
-            background: `linear-gradient(145deg, ${app.g[0]}, ${app.g[1]})`,
-            borderRadius: '22%',
-          }}
-        >
-          {app.emoji}
-        </div>
-        {app.badge && (
-          <div className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-500 rounded-full flex items-center justify-center text-[10px] text-white font-bold px-1 leading-none">
-            {app.badge}
+      <div className="relative w-[88px] h-[88px] sm:w-24 sm:h-24 rounded-[22px] overflow-hidden shadow-2xl border border-white/10 group-hover:border-white/35 group-hover:-translate-y-1 transition-all duration-200">
+        {app.image
+          ? <img src={app.image} alt={app.label} className="w-full h-full object-cover" loading="lazy" />
+          : (
+            <div className="w-full h-full flex items-center justify-center text-[42px]" style={{ background: app.bg }}>
+              {app.emoji}
+            </div>
+          )
+        }
+        {/* Active badge */}
+        {app.activeBadge && (
+          <div className="absolute top-1.5 right-1.5 bg-[#4ade80] text-[#0a1628] text-[9px] font-extrabold px-1.5 py-0.5 rounded-full leading-none shadow">
+            {app.activeBadge}
           </div>
         )}
       </div>
-      <span className="text-white/90 text-[10px] text-center leading-tight line-clamp-1 w-full px-0.5">{app.label}</span>
+      <span className="text-white/75 text-[11.5px] sm:text-[12px] text-center font-medium group-hover:text-white transition-colors leading-tight">{app.label}</span>
     </button>
   );
 }
 
-function StarField() {
-  const pts: [number, number, number, number][] = [
-    [32,78,1,0.4],[88,118,1.5,0.6],[52,198,1,0.3],[195,62,1,0.5],[308,148,1.5,0.4],
-    [352,92,1,0.6],[148,298,1,0.3],[272,282,1.5,0.5],[82,352,1,0.4],[322,398,1,0.6],
-    [182,448,1,0.3],[62,498,1.5,0.5],[338,552,1,0.4],[118,618,1,0.6],[282,682,1.5,0.3],
-    [198,748,1,0.5],[28,702,1,0.4],[372,698,1.5,0.6],[102,152,1,0.3],[248,178,1,0.5],
-    [378,352,1,0.4],[165,532,1.5,0.6],[42,420,1,0.3],[295,498,1,0.5],
+/* Full-screen star field for the dashboard wallpaper */
+function DashStars() {
+  const stars: [number, number, number, number][] = [
+    [3,5,1,0.35],[8,22,1.5,0.5],[14,65,1,0.25],[22,38,1,0.4],[29,12,1.5,0.3],
+    [35,80,1,0.45],[42,48,1,0.3],[51,20,1.5,0.5],[57,72,1,0.25],[63,35,1,0.4],
+    [70,88,1,0.3],[77,55,1.5,0.45],[83,15,1,0.35],[88,68,1,0.3],[94,42,1.5,0.5],
+    [6,90,1,0.2],[18,50,1,0.3],[31,95,1.5,0.35],[45,8,1,0.4],[59,85,1,0.25],
+    [72,28,1,0.45],[86,75,1.5,0.3],[11,33,1,0.35],[26,78,1,0.4],[67,60,1.5,0.3],
+    [79,18,1,0.45],[91,50,1,0.3],[4,45,1.5,0.25],[38,92,1,0.4],[55,40,1,0.35],
   ];
   return (
-    <svg className="absolute inset-0 pointer-events-none" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      {pts.map(([x, y, r, o], i) => <circle key={i} cx={x} cy={y} r={r} fill="white" opacity={o} />)}
+    <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      {stars.map(([x, y, r, o], i) => <circle key={i} cx={x} cy={y} r={r * 0.35} fill="white" opacity={o} />)}
     </svg>
   );
 }
 
 function Dashboard() {
-  const [location, navigate] = useLocation();
-  const qs = new URLSearchParams(location.includes('?') ? location.split('?')[1] : '');
-  const urlQ = qs.get('q') ?? '';
-  const urlView = qs.get('view') ?? '';
-  const { pages, setPages } = usePages();
+  const [, navigate] = useLocation();
+  const { pages } = usePages();
   const { appearance, setAppearance } = useAppearance();
 
-  /* ── phone OS state ── */
-  const [osTime, setOsTime] = useState(new Date());
+  const [now, setNow] = useState(new Date());
   const [comingSoon, setComingSoon] = useState<string | null>(null);
-  const [showOsSettings, setShowOsSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
-  /* ── article list state ── */
-  const [query, setQuery] = useState(urlQ);
+  const active = pages.filter((p) => !p.isTrashed);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const dateStr = (() => {
+    const s = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  })();
+
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const img = (f: string) => `${BASE}/images/${f}`;
+
+  const apps: DashApp[] = [
+    { id: 'wikibase',  label: 'WikiBase',        image: img('site_logo.png'),   bg: 'linear-gradient(145deg,#1e40af,#3b82f6)', active: true,  activeBadge: active.length > 0 ? 'Actif' : undefined },
+    { id: 'instagram', label: 'Instagram',        image: img('Instagram.png'),   bg: 'linear-gradient(145deg,#833ab4,#fd1d1d)', active: false },
+    { id: 'twitter',   label: 'Twitter / X',      image: img('XLogo.png'),       bg: 'linear-gradient(145deg,#111827,#374151)', active: false },
+    { id: 'cfc',       label: 'CFC Official',     image: img('logo1.png'),       bg: 'linear-gradient(145deg,#1e3a8a,#2563eb)', active: false },
+    { id: 'airways',   label: 'Caledora Airways', emoji: '✈️',                   bg: 'linear-gradient(145deg,#0c4a6e,#0369a1)', active: false },
+    { id: 'bank',      label: 'Oria Bank',        image: img('oriabank.png'),    bg: 'linear-gradient(145deg,#78350f,#d97706)', active: false },
+    { id: 'maps',      label: 'Maps',             emoji: '🗺️',                   bg: 'linear-gradient(145deg,#14532d,#16a34a)', active: false },
+    { id: 'settings',  label: 'Paramètres',       emoji: '⚙️',                   bg: 'linear-gradient(145deg,#374151,#6b7280)', active: true  },
+  ];
+
+  const handleApp = (app: DashApp) => {
+    if (!app.active) { setComingSoon(app.label); return; }
+    if (app.id === 'wikibase')  navigate('/wiki');
+    if (app.id === 'settings')  setShowSettings(true);
+  };
+
+  const glass: React.CSSProperties = {
+    background: 'rgba(255,255,255,0.10)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    border: '1px solid rgba(255,255,255,0.13)',
+  };
+
+  return (
+    <div
+      className="relative w-full min-h-screen flex flex-col overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, #060c1a 0%, #0c1c38 45%, #060e1f 100%)' }}
+    >
+      {/* Background star field */}
+      <DashStars />
+
+      {/* ── TOP HUD ─────────────────────────────────────────────── */}
+      <div className="relative z-10 flex flex-col sm:flex-row sm:items-start justify-between gap-6 px-6 sm:px-12 lg:px-20 pt-10 sm:pt-14 pb-6">
+
+        {/* Clock + date */}
+        <div className="select-none">
+          <div
+            className="text-white font-extralight leading-none"
+            style={{ fontSize: 'clamp(72px, 14vw, 128px)', letterSpacing: -4 }}
+          >
+            {timeStr}
+          </div>
+          <div className="text-white/45 text-lg sm:text-xl mt-3 font-light">{dateStr}</div>
+        </div>
+
+        {/* Widgets */}
+        <div className="flex flex-row sm:flex-col gap-3 sm:pt-2">
+
+          {/* Weather */}
+          <div className="rounded-2xl px-5 py-4 text-white flex items-center gap-4 flex-1 sm:flex-none sm:min-w-[220px]" style={glass}>
+            <div className="text-[36px] leading-none">☀️</div>
+            <div>
+              <div className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Météo · Caledora City</div>
+              <div className="text-2xl font-bold leading-none">24°C</div>
+              <div className="text-[12px] text-white/55 mt-1">Ensoleillé</div>
+            </div>
+          </div>
+
+          {/* Match */}
+          <div className="rounded-2xl px-5 py-4 text-white flex-1 sm:flex-none sm:min-w-[220px]" style={glass}>
+            <div className="text-[10px] text-white/40 uppercase tracking-widest mb-3">⚽ Prochain Match</div>
+            <div className="flex items-center gap-3 mb-3">
+              {/* CFC */}
+              <div className="flex flex-col items-center gap-1">
+                <img src={img('logo1.png')} alt="Caledora FC" className="w-9 h-9 object-contain" />
+                <span className="text-[9px] text-white/50">CFC</span>
+              </div>
+              <div className="text-white/30 font-bold text-base px-1">vs</div>
+              {/* Arsenal */}
+              <div className="flex flex-col items-center gap-1">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-extrabold border border-white/20 shadow" style={{ background: '#EF0107', color: '#fff' }}>AFC</div>
+                <span className="text-[9px] text-white/50">Arsenal</span>
+              </div>
+            </div>
+            <div className="text-[10px] text-white/35 mb-1.5">Caledora Mare Stadium</div>
+            <div className="rounded-xl bg-white/10 px-2 py-1 text-center text-[11px] font-semibold">Samedi · 20:45</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── APP GRID ────────────────────────────────────────────── */}
+      <div className="relative z-10 flex-1 flex items-center justify-center px-6 sm:px-12 lg:px-20 pb-14">
+        <div className="grid grid-cols-4 gap-6 sm:gap-10 lg:gap-14 w-full max-w-2xl">
+          {apps.map((app) => (
+            <AppTile key={app.id} app={app} onClick={() => handleApp(app)} />
+          ))}
+        </div>
+      </div>
+
+      {/* ── COMING SOON MODAL ───────────────────────────────────── */}
+      {comingSoon && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-6"
+          style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}
+          onClick={() => setComingSoon(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl p-8 text-center text-white shadow-2xl"
+            style={{ background: 'rgba(10,20,40,0.98)', border: '1px solid rgba(255,255,255,0.1)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-6xl mb-4">🚀</div>
+            <div className="font-bold text-[20px] mb-2">{comingSoon}</div>
+            <div className="text-[14px] text-white/55 leading-relaxed mb-6">
+              Service en cours de déploiement<br/>dans la <strong className="text-white/75">République de Caledora</strong>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-[12px] text-white/45 mb-6" style={{ background: 'rgba(255,255,255,0.07)' }}>
+              ⏳ Bientôt disponible — Caledora Digital Services
+            </div>
+            <br />
+            <button onClick={() => setComingSoon(null)} className="text-[12px] text-white/25 hover:text-white/50 transition underline">Fermer</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── SETTINGS MODAL ──────────────────────────────────────── */}
+      {showSettings && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-6"
+          style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}
+          onClick={() => setShowSettings(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl p-8 text-white shadow-2xl"
+            style={{ background: 'rgba(10,20,40,0.98)', border: '1px solid rgba(255,255,255,0.1)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <span className="font-bold text-[18px]">Paramètres</span>
+              <button onClick={() => setShowSettings(false)} className="text-white/35 hover:text-white transition"><X size={20} /></button>
+            </div>
+
+            <div className="mb-5">
+              <div className="text-[11px] text-white/35 uppercase tracking-widest mb-3">Apparence</div>
+              <div className="flex gap-2">
+                {(['auto', 'light', 'dark'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setAppearance({ ...appearance, theme: t })}
+                    className={`flex-1 py-2.5 rounded-2xl text-[13px] font-medium transition-all ${appearance.theme === t ? 'bg-primary text-white shadow' : 'text-white/50 hover:text-white/80 hover:bg-white/10'}`}
+                    style={appearance.theme !== t ? { background: 'rgba(255,255,255,0.07)' } : undefined}
+                  >
+                    {t === 'auto' ? '🔄 Auto' : t === 'light' ? '☀️ Clair' : '🌙 Sombre'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-white/10 pt-5 space-y-1 text-[12px] text-white/25">
+              <div>CaledoraOS · Version 1.0</div>
+              <div>WikiBase · {active.length} article{active.length !== 1 ? 's' : ''} en base</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── WikiList ───────────────────────────────────────────────────────────── */
+
+function WikiList() {
+  const [location] = useLocation();
+  const qs = new URLSearchParams(location.includes('?') ? location.split('?')[1] : '');
+  const { pages, setPages } = usePages();
+  const [query, setQuery] = useState(qs.get('q') ?? '');
   const [filter, setFilter] = useState('Toutes');
-  const showList = !!(urlQ || urlView === 'list');
-  const [showAll, setShowAll] = useState(showList);
 
-  /* ── shared data ── */
   const active = pages.filter((p) => !p.isTrashed);
   const categories = ['Toutes', ...Array.from(new Set(active.map((p) => p.category)))];
   const visible = active.filter(
     (p) => allText(p).includes(query.toLowerCase()) && (filter === 'Toutes' || p.category === filter)
   );
 
-  /* ── live clock ── */
-  useEffect(() => {
-    const id = setInterval(() => setOsTime(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const timeStr = `${pad(osTime.getHours())}:${pad(osTime.getMinutes())}`;
-  const dateStr = (() => {
-    const s = osTime.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-    return s.charAt(0).toUpperCase() + s.slice(1);
-  })();
-
-  /* ── app definitions ── */
-  const apps: AppIcon[] = [
-    { id: 'wikibase',     label: 'WikiBase',     emoji: '📖', g: ['#1e40af','#3b82f6'], active: true,  badge: active.length > 0 ? String(active.length) : undefined },
-    { id: 'footballgram', label: 'Footballgram', emoji: '📸', g: ['#9333ea','#ec4899'], active: false },
-    { id: 'chirp',        label: 'Chirp',        emoji: '𝕏',  g: ['#111827','#374151'], active: false },
-    { id: 'cfc',          label: 'CFC Official', emoji: '⚽', g: ['#1e3a8a','#2563eb'], active: false },
-    { id: 'airways',      label: 'Caledora Air', emoji: '✈️', g: ['#0c4a6e','#0284c7'], active: false },
-    { id: 'bank',         label: 'Oria Bank',    emoji: '🏦', g: ['#78350f','#d97706'], active: false },
-    { id: 'maps',         label: 'Maps',         emoji: '🗺️', g: ['#14532d','#16a34a'], active: false },
-    { id: 'settings',     label: 'Paramètres',   emoji: '⚙️', g: ['#374151','#6b7280'], active: true  },
-  ];
-  const dockApps: AppIcon[] = [
-    { id: 'phone',        label: 'Téléphone',    emoji: '📞', g: ['#166534','#22c55e'], active: false },
-    { id: 'messages',     label: 'Messages',     emoji: '💬', g: ['#0369a1','#38bdf8'], active: false },
-    { id: 'wikibase',     label: 'WikiBase',     emoji: '📖', g: ['#1e40af','#3b82f6'], active: true  },
-    { id: 'footballgram', label: 'Footballgram', emoji: '📸', g: ['#9333ea','#ec4899'], active: false },
-  ];
-
-  const handleApp = (id: string, appActive: boolean, label: string) => {
-    if (!appActive) { setComingSoon(label); return; }
-    if (id === 'wikibase')  navigate('/?view=list');
-    if (id === 'settings')  setShowOsSettings(true);
-  };
-
-  /* ════════════════════════════════════════════════════════════════════
-     VIEW: ARTICLE LIST (WikiBase app or header search)
-  ════════════════════════════════════════════════════════════════════ */
-  if (showList) {
-    return (
-      <div className="animate-rise">
-        {/* Back bar */}
-        <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-[var(--wiki-border)] dark:border-border pb-4">
-          <button
-            onClick={() => navigate('/')}
-            className="inline-flex items-center gap-1.5 text-sm wiki-link"
-          >
-            <ArrowLeft size={14} /> CaledoraOS
-          </button>
-          <span className="text-muted-foreground">·</span>
-          <span className="font-editorial text-lg font-normal">WikiBase</span>
-          <Link href="/create" className="ml-auto inline-flex items-center gap-1 wiki-link text-sm">
-            <Plus size={13} /> Nouvel article
-          </Link>
-        </div>
-
-        {/* Filters */}
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <label className="relative block max-w-md flex-1">
-            <Search className="absolute left-2.5 top-2 text-muted-foreground" size={14} />
-            <input
-              data-testid="input-search-pages"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filtrer les pages…"
-              className="h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary pl-8 pr-3 text-sm outline-none focus:border-primary"
-            />
-          </label>
-          <div className="flex flex-wrap gap-1">
-            {categories.map((cat) => (
-              <button
-                data-testid={`button-filter-${cat}`}
-                key={cat}
-                onClick={() => setFilter(cat)}
-                className={`rounded-sm px-2 py-1 text-xs ${filter === cat ? 'bg-[#eaecf0] dark:bg-muted font-bold' : 'wiki-link hover:underline'}`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <BackupBar onImported={setPages} />
-
-        {visible.length ? (
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {visible.map((page, i) => {
-              const color = page.accentColor ?? categoryColor(page.category);
-              return (
-                <Link
-                  href={`/page/${page.id}`}
-                  data-testid={`card-page-${page.id}`}
-                  key={page.id}
-                  className={`group block rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4 hover:border-primary/50 transition ${i === 0 ? 'lg:col-span-2' : ''}`}
-                  style={{ borderTopWidth: 3, borderTopColor: color }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <Badge tone="green">Publié</Badge>
-                        <span>{page.category}</span><span>·</span>
-                        <span>{page.type}</span><span>·</span>
-                        <span>{formatDate(page.updatedAt)}</span>
-                      </div>
-                      <h2 data-testid={`text-page-title-${page.id}`} className={`wiki-link font-editorial ${i === 0 ? 'text-[1.6em]' : 'text-[1.3em]'} group-hover:underline`}>{page.title}</h2>
-                      {page.subtitle && <p className="text-sm text-muted-foreground mt-0.5 italic">{page.subtitle}</p>}
-                      <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{page.introduction}</p>
-                    </div>
-                    <ChevronRight size={15} className="shrink-0 text-muted-foreground mt-1" />
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[var(--wiki-border)] dark:border-border pt-2">
-                    {page.categories.slice(0, 4).map((c) => <span key={c} className="text-[11px] wiki-link">{c}</span>)}
-                    <span className="ml-auto text-[11px] text-muted-foreground">{page.sections.length} sections</span>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        ) : (
-          <Empty title="Aucune page trouvée" text="Modifiez votre recherche ou importez un nouveau fichier TXT." action={<Link href="/create" className="wiki-link text-sm">Créer une page</Link>} />
-        )}
-      </div>
-    );
-  }
-
-  /* ════════════════════════════════════════════════════════════════════
-     VIEW: CaledoraOS — smartphone interface
-  ════════════════════════════════════════════════════════════════════ */
-  const glass = { background: 'rgba(255,255,255,0.13)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' } as React.CSSProperties;
-
   return (
-    /* Outer stage — centers the phone on desktop, fills screen on mobile */
-    <div className="-mx-4 flex items-start justify-center py-0 sm:py-6 sm:px-4 min-h-[calc(100dvh-58px)]">
-      {/* ── Phone frame ── */}
-      <div
-        className="relative flex flex-col overflow-hidden w-full"
-        style={{
-          maxWidth: 390,
-          height: 'clamp(600px, calc(100dvh - 70px), 820px)',
-          borderRadius: 'clamp(0px, 4vw, 44px)',
-          border: '2px solid #3d3d3f',
-          boxShadow: '0 0 0 1px #1c1c1e, 0 30px 90px rgba(0,0,0,0.55)',
-          background: 'linear-gradient(165deg, #0d1b2a 0%, #1b3050 38%, #0f2540 65%, #0a1628 100%)',
-        }}
-      >
-        {/* Wallpaper stars */}
-        <StarField />
-
-        {/* ── Status bar ── */}
-        <div className="relative z-10 flex items-center justify-between px-6 pt-4 pb-1 text-white">
-          <span className="text-[13px] font-semibold tracking-tight">{timeStr}</span>
-          <span className="text-[9px] text-white/50 hidden xs:block">5G Caledora Telecom</span>
-          <div className="flex items-center gap-1.5">
-            {/* Signal */}
-            <svg width="17" height="12" viewBox="0 0 17 12" fill="white">
-              <rect x="0"   y="9"  width="3" height="3" rx="0.5"/>
-              <rect x="4.5" y="6"  width="3" height="6" rx="0.5"/>
-              <rect x="9"   y="3"  width="3" height="9" rx="0.5"/>
-              <rect x="13.5" y="0" width="3" height="12" rx="0.5"/>
-            </svg>
-            {/* Battery */}
-            <svg width="23" height="12" viewBox="0 0 23 12" fill="none">
-              <rect x="0.75" y="0.75" width="18.5" height="10.5" rx="2.25" stroke="white" strokeWidth="1.5"/>
-              <rect x="19.5" y="3.5" width="2.5" height="5" rx="1" fill="white"/>
-              <rect x="2"   y="2"   width="14" height="8" rx="1.5" fill="white"/>
-            </svg>
-          </div>
+    <div className="animate-rise">
+      {/* Header row */}
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground text-sm">{active.length} article{active.length !== 1 ? 's' : ''}</span>
         </div>
-
-        {/* ── Big clock ── */}
-        <div className="relative z-10 text-center pt-1 pb-3">
-          <div className="text-white font-extralight select-none" style={{ fontSize: 'clamp(52px,13vw,72px)', lineHeight: 1, letterSpacing: -3 }}>
-            {timeStr}
-          </div>
-          <div className="text-white/60 text-[13px] mt-1">{dateStr}</div>
-        </div>
-
-        {/* ── Scrollable content ── */}
-        <div className="relative z-10 flex-1 overflow-y-auto px-4 pb-28 space-y-4" style={{ scrollbarWidth: 'none' }}>
-
-          {/* Widgets row */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* Weather */}
-            <div className="rounded-2xl p-3.5 text-white" style={glass}>
-              <div className="text-[9px] text-white/50 uppercase tracking-widest mb-1.5">Météo</div>
-              <div className="text-[28px] leading-none mb-1">☀️</div>
-              <div className="text-[22px] font-bold leading-none">24°C</div>
-              <div className="text-[11px] text-white/60 mt-1.5 leading-tight">Caledora City<br/>Ensoleillé</div>
-            </div>
-            {/* Match Day */}
-            <div className="rounded-2xl p-3.5 text-white" style={glass}>
-              <div className="text-[9px] text-white/50 uppercase tracking-widest mb-1.5">Prochain Match</div>
-              <div className="text-[11px] font-bold">⚽ Caledora FC</div>
-              <div className="text-[10px] text-white/50 mt-0.5">vs Nova United</div>
-              <div className="text-[13px] font-semibold mt-2">Sam · 20:45</div>
-              <div className="text-[9px] text-white/40 mt-0.5">The Nova Arena</div>
-            </div>
-          </div>
-
-          {/* App grid — 4 columns */}
-          <div className="grid grid-cols-4 gap-x-3 gap-y-5 pt-1">
-            {apps.map((app) => (
-              <OsIcon key={app.id} app={app} size={58} onClick={() => handleApp(app.id, app.active, app.label)} />
-            ))}
-          </div>
-
-          {/* WikiBase quick-stats banner */}
-          <div className="rounded-2xl p-4 text-white" style={glass}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-[9px] text-white/50 uppercase tracking-widest mb-1">WikiBase</div>
-                <div className="text-sm font-semibold">
-                  {active.length > 0
-                    ? <>{active.length} article{active.length > 1 ? 's' : ''} disponible{active.length > 1 ? 's' : ''}</>
-                    : 'Aucun article'}
-                </div>
-                <div className="text-[10px] text-white/40 mt-0.5">Encyclopédie de Caledora</div>
-              </div>
-              <button
-                onClick={() => navigate('/?view=list')}
-                className="shrink-0 rounded-xl px-3 py-1.5 text-[11px] font-semibold transition hover:brightness-110"
-                style={{ background: 'rgba(255,255,255,0.2)' }}
-              >
-                Ouvrir →
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Dock ── */}
-        <div
-          className="absolute bottom-0 left-0 right-0 z-20 px-5 pb-4 pt-2"
-          style={{ background: 'rgba(10,20,35,0.45)', backdropFilter: 'blur(30px)', WebkitBackdropFilter: 'blur(30px)' }}
-        >
-          <div
-            className="rounded-[26px] px-3 py-3 flex items-center justify-around"
-            style={glass}
-          >
-            {dockApps.map((app) => (
-              <OsIcon key={app.id} app={app} size={48} onClick={() => handleApp(app.id, app.active, app.label)} />
-            ))}
-          </div>
-        </div>
-
-        {/* ── Coming soon modal ── */}
-        {comingSoon && (
-          <div
-            className="absolute inset-0 z-30 flex items-end justify-center pb-10"
-            style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
-            onClick={() => setComingSoon(null)}
-          >
-            <div
-              className="w-[85%] rounded-3xl p-6 text-center text-white"
-              style={{ background: 'rgba(18,28,45,0.97)' }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="text-5xl mb-3">🚀</div>
-              <div className="font-bold text-[17px] mb-1">{comingSoon}</div>
-              <div className="text-[13px] text-white/60 leading-relaxed mb-5">
-                Application en cours de déploiement par<br/>
-                <span className="text-white/80 font-medium">Caledora Digital Services</span>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[11px] text-white/50 mb-4" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                ⏳ Bientôt disponible
-              </div>
-              <br/>
-              <button onClick={() => setComingSoon(null)} className="text-[11px] text-white/30 underline">Fermer</button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Settings panel ── */}
-        {showOsSettings && (
-          <div
-            className="absolute inset-0 z-30"
-            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
-            onClick={() => setShowOsSettings(false)}
-          >
-            <div
-              className="absolute bottom-0 left-0 right-0 rounded-t-3xl p-6 text-white"
-              style={{ background: 'rgba(14,24,40,0.98)' }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-5">
-                <span className="font-bold text-[16px]">Paramètres</span>
-                <button onClick={() => setShowOsSettings(false)} className="text-white/40 hover:text-white transition"><X size={18} /></button>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <div className="text-[11px] text-white/40 uppercase tracking-widest mb-2">Apparence</div>
-                  <div className="flex gap-2">
-                    {(['auto', 'light', 'dark'] as const).map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => setAppearance({ ...appearance, theme: t })}
-                        className={`flex-1 py-2 rounded-xl text-[12px] font-medium transition ${appearance.theme === t ? 'bg-primary text-white' : 'bg-white/10 text-white/60 hover:bg-white/18'}`}
-                      >
-                        {t === 'auto' ? '🔄 Auto' : t === 'light' ? '☀️ Clair' : '🌙 Sombre'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="border-t border-white/10 pt-4 text-[12px] text-white/30">
-                  CaledoraOS 1.0 · WikiBase · {active.length} article{active.length !== 1 ? 's' : ''}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <Link href="/create" className="ml-auto inline-flex items-center gap-1 wiki-link text-sm">
+          <Plus size={13} /> Nouvel article
+        </Link>
       </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <label className="relative block max-w-md flex-1">
+          <Search className="absolute left-2.5 top-2 text-muted-foreground" size={14} />
+          <input
+            data-testid="input-search-pages"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filtrer les pages…"
+            className="h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary pl-8 pr-3 text-sm outline-none focus:border-primary"
+          />
+        </label>
+        <div className="flex flex-wrap gap-1">
+          {categories.map((cat) => (
+            <button
+              data-testid={`button-filter-${cat}`}
+              key={cat}
+              onClick={() => setFilter(cat)}
+              className={`rounded-sm px-2 py-1 text-xs ${filter === cat ? 'bg-[#eaecf0] dark:bg-muted font-bold' : 'wiki-link hover:underline'}`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <BackupBar onImported={setPages} />
+
+      {visible.length ? (
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {visible.map((page, i) => {
+            const color = page.accentColor ?? categoryColor(page.category);
+            return (
+              <Link
+                href={`/page/${page.id}`}
+                data-testid={`card-page-${page.id}`}
+                key={page.id}
+                className={`group block rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4 hover:border-primary/50 transition ${i === 0 ? 'lg:col-span-2' : ''}`}
+                style={{ borderTopWidth: 3, borderTopColor: color }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <Badge tone="green">Publié</Badge>
+                      <span>{page.category}</span><span>·</span>
+                      <span>{page.type}</span><span>·</span>
+                      <span>{formatDate(page.updatedAt)}</span>
+                    </div>
+                    <h2 data-testid={`text-page-title-${page.id}`} className={`wiki-link font-editorial ${i === 0 ? 'text-[1.6em]' : 'text-[1.3em]'} group-hover:underline`}>{page.title}</h2>
+                    {page.subtitle && <p className="text-sm text-muted-foreground mt-0.5 italic">{page.subtitle}</p>}
+                    <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{page.introduction}</p>
+                  </div>
+                  <ChevronRight size={15} className="shrink-0 text-muted-foreground mt-1" />
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[var(--wiki-border)] dark:border-border pt-2">
+                  {page.categories.slice(0, 4).map((c) => <span key={c} className="text-[11px] wiki-link">{c}</span>)}
+                  <span className="ml-auto text-[11px] text-muted-foreground">{page.sections.length} sections</span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      ) : (
+        <Empty title="Aucune page trouvée" text="Modifiez votre recherche ou importez un nouveau fichier TXT." action={<Link href="/create" className="wiki-link text-sm">Créer une page</Link>} />
+      )}
     </div>
   );
 }
@@ -2423,6 +2390,7 @@ function Router() {
       <Shell>
         <Switch>
         <Route path="/" component={Dashboard} />
+        <Route path="/wiki" component={WikiList} />
         <Route path="/create" component={CreatePage} />
         <Route path="/page/:id/edit" component={EditPage} />
         <Route path="/page/:id/compare" component={ComparePage} />

@@ -1,0 +1,29 @@
+Refais complètement la page d'accueil ('/') pour créer un Dashboard plein écran moderne (style Menu Principal de jeu vidéo / OS immersif) :
+
+1. GESTION DU HEADER & NAVIGATION :
+   - Masque totalement le header WikiBase (logo WikiBase, barre de recherche, boutons Créer/Corbeille) sur la page d'accueil ('/'). Le header WikiBase ne doit apparaître que lorsqu'on navigue sur les pages '/wiki' ou lors de la lecture d'un article.
+   - Supprime totalement le cadre / contour de faux smartphone : la page d'accueil prend tout l'écran (w-full min-h-screen) avec un beau fond sombre texturé/dégradé ou un wallpaper élégant.
+
+2. BANDEAU SUPÉRIEUR ET WIDGETS (Haut de l'écran) :
+   - En haut au centre/gauche : Heure en temps réel (HH:mm) en grand format moderne + Date du jour complète (ex: Lundi 17 août).
+   - Widget Météo : "Caledora City • 24°C • Ensoleillé" avec icône météo dynamique.
+   - Widget Prochain Match :
+     * Lieu : "Caledora Mare Stadium"
+     * Match : "Caledora FC vs Arsenal" (ou un club de Premier League)
+     * Logos : Affiche le logo de Caledora ('/images/logo1.png') face au logo PNG du club adverse avec le badge "Prochain Match • Samedi 20:45".
+
+3. GRILLE DES APPLICATIONS (Game Menu UI) :
+   Affiche une belle grille de cartes/icônes d'applications réparties harmonieusement au centre de l'écran :
+   * 📖 Wikipedia : Icône '/images/site_logo.png' (avec fond de contraste si mode sombre) • Badge vert "Actif" -> Redirige vers '/wiki'.
+   * 📸 Instagram : Icône '/images/Instagram.png' -> Redirige vers '/instagram' (affiche la modale "Bientôt disponible" si la route n'est pas encore connectée).
+   * 🐦 Twitter / X : Icône '/images/XLogo.png' (adaptée au thème) -> Ouvre la modale "Bientôt disponible".
+   * ⚽ CFC Official : Icône '/images/logo1.png' -> Ouvre la modale "Bientôt disponible".
+   * ✈️ Caledora Airways : Icône avion bleu marine stylisée -> Ouvre la modale "Bientôt disponible".
+   * 🏦 Oria Bank : Icône '/images/oriabank.png' -> Ouvre la modale "Bientôt disponible".
+   * 🗺️ Maps : Logo style Google Maps -> Ouvre la modale "Bientôt disponible".
+   * ⚙️ Paramètres : Bouton toggle clair/sombre + modale À propos.
+
+4. COMPORTEMENT DES ACTIONS :
+   - Seul le bouton Wikipedia est entièrement actif et mène vers la base Wiki.
+   - Les autres boutons ouvrent une élégante fenêtre modale épurée façon jeu vidéo : "Service en cours de déploiement dans la République de Caledora • Bientôt disponible".
+   - Sur les pages '/wiki', ajoute un bouton retour / icône "Accueil" dans le header pour revenir à ce dashboard principal à tout moment.
