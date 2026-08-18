@@ -1,0 +1,193 @@
+/* ===========================================================
+   Caledora Airways — Design tokens
+   DA: institutionnelle et sobre (référence Air France), teintée
+   de l'identité Caledora — marine profond, doré, horizon marin.
+   =========================================================== */
+
+:root {
+  /* Colour */
+  --ink:          #0B2340; /* texte principal, quasi-noir marine */
+  --navy:         #17365D; /* bleu de marque (couleur d'accent officielle) */
+  --navy-light:   #2C4C74;
+  --navy-pale:    #E4EAF0;
+  --gold:         #C89B3C; /* doré du rayon solaire */
+  --gold-light:   #E8C77A;
+  --gold-dark:    #8A5F1E; /* assombri pour un contraste AA correct sur fond clair */
+  --mist:         #EEF2F4; /* bleu-gris très pâle, brume marine */
+  --ivory:        #FBF9F5; /* fond principal, blanc cassé */
+  --white:        #FFFFFF;
+  --line:         rgba(11, 35, 64, 0.12); /* filet hairline */
+  --line-strong:  rgba(11, 35, 64, 0.22);
+  --shadow-soft:  0 20px 48px rgba(11, 35, 64, 0.10);
+
+  /* Type */
+  --font-display: "Fraunces", "Iowan Old Style", serif;
+  --font-body:    "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:    "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Layout */
+  --container: 1240px;
+  --radius: 3px;
+  --radius-sm: 2px;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--ivory);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  line-height: 1.1;
+  margin: 0;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+p { margin: 0; }
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; cursor: pointer; }
+ul { margin: 0; padding: 0; list-style: none; }
+img { max-width: 100%; display: block; }
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--gold-dark);
+  outline-offset: 3px;
+}
+
+/* ---------- Layout utilities ---------- */
+
+.container { max-width: var(--container); margin: 0 auto; padding: 0 32px; }
+.section { padding: 96px 0; }
+.section--tight { padding: 64px 0; }
+
+.section--navy { background: var(--navy); color: var(--white); }
+.section--navy h1, .section--navy h2, .section--navy h3 { color: var(--white); }
+.section--mist { background: var(--mist); }
+
+.hairline { height: 1px; background: var(--line); border: 0; margin: 0; }
+
+/* ---------- Typography utilities ---------- */
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold-dark);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.section--navy .eyebrow, .on-dark .eyebrow { color: var(--gold-light); }
+.eyebrow::before {
+  content: "";
+  width: 22px;
+  height: 1px;
+  background: currentColor;
+  display: inline-block;
+}
+
+.lede { font-size: 19px; line-height: 1.6; color: var(--navy-light); max-width: 54ch; }
+.section--navy .lede, .on-dark .lede { color: rgba(255,255,255,0.78); }
+
+.mono-tag { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.04em; }
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 28px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: opacity 0.18s ease, background 0.18s ease;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn--gold {
+  background: var(--gold);
+  color: var(--ink);
+}
+.btn--gold:hover { background: var(--gold-dark); color: var(--white); }
+
+.btn--outline {
+  background: transparent;
+  border-color: rgba(255,255,255,0.55);
+  color: var(--white);
+}
+.btn--outline:hover { border-color: var(--white); }
+
+.btn--outline-dark {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.btn--outline-dark:hover { border-color: var(--navy); }
+
+.btn--sm { padding: 10px 20px; font-size: 13.5px; }
+.btn--block { width: 100%; }
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---------- Other utilities ---------- */
+
+.link-underline {
+  position: relative;
+  display: inline-block;
+}
+.link-underline::after {
+  content: "";
+  position: absolute;
+  left: 0; bottom: -2px;
+  width: 100%; height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  opacity: 0.5;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.link-underline:hover::after { transform: scaleX(1); opacity: 1; }
+
+/* ---------- Grids / cards ---------- */
+
+.grid { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.card { background: var(--ivory); padding: 32px; }
+.card--white { background: var(--white); }
+
+::selection { background: var(--gold-light); color: var(--ink); }

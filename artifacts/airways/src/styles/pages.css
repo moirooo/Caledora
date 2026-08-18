@@ -1,0 +1,548 @@
+/* ---------- Hero ---------- */
+
+.hero {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+.hero__content {
+  position: relative;
+  z-index: 2;
+  color: var(--white);
+  padding-bottom: 0;
+  width: 100%;
+}
+
+.hero__eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+  opacity: 0.88;
+  display: block;
+  margin-bottom: 18px;
+}
+
+.hero h1 {
+  font-size: clamp(36px, 5.5vw, 72px);
+  color: var(--white);
+  max-width: 13ch;
+  margin-bottom: 22px;
+}
+
+.hero h1 em {
+  font-style: italic;
+  color: var(--gold-light);
+}
+
+.hero__lede {
+  font-size: clamp(16px, 1.5vw, 20px);
+  max-width: 52ch;
+  color: rgba(255,255,255,0.80);
+  margin-bottom: 36px;
+}
+
+.hero__ctas {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 64px;
+}
+
+/* ---------- Search bar (on hero) ---------- */
+
+.search-bar {
+  background: var(--white);
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: 1fr 44px 1fr 1fr auto;
+  gap: 0;
+  max-width: 900px;
+}
+
+.search-field {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px 18px;
+  border-right: 1px solid var(--line);
+}
+
+.search-field label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--navy-light);
+  margin-bottom: 6px;
+}
+
+.search-field input,
+.search-field select {
+  border: 0;
+  outline: none;
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--ink);
+  background: transparent;
+  font-family: var(--font-body);
+  padding: 0;
+}
+
+.search-field select:focus,
+.search-field input:focus { outline: none; }
+
+.search-bar__submit { padding-left: 20px; }
+
+.search-swap {
+  border: 1px solid var(--line-strong);
+  background: var(--white);
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--navy);
+  align-self: center;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.search-swap:hover { background: var(--navy-pale); transform: rotate(180deg); }
+
+@media (max-width: 1080px) {
+  .search-bar { grid-template-columns: 1fr 1fr; row-gap: 20px; }
+  .search-field { border-right: none; padding: 0; }
+  .search-bar__submit { grid-column: 1 / -1; }
+}
+
+/* ---------- Home: sections réseau, flotte, cabines, aurora teaser ---------- */
+
+.pillar-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--line);
+  background: var(--line);
+  gap: 1px;
+}
+.pillar {
+  background: var(--ivory);
+  padding: 40px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.pillar__index { font-family: var(--font-mono); font-size: 13px; color: var(--gold-dark); }
+.pillar h3 { font-size: 24px; }
+.pillar p { color: var(--navy-light); font-size: 15px; line-height: 1.6; }
+
+@media (max-width: 900px) {
+  .pillar-grid { grid-template-columns: 1fr; }
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 72px;
+  align-items: center;
+}
+.split--reverse { grid-template-columns: 1.1fr 0.9fr; }
+.split--reverse .split__media { order: 2; }
+
+@media (max-width: 900px) {
+  .split, .split--reverse { grid-template-columns: 1fr; gap: 40px; }
+  .split--reverse .split__media { order: 0; }
+}
+
+.split__media {
+  position: relative;
+  min-height: 340px;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.map-scene {
+  position: relative;
+  background: var(--navy);
+  min-height: 340px;
+  overflow: hidden;
+}
+
+.cta-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+/* ---------- Fleet page ---------- */
+
+.fleet-row {
+  display: grid;
+  grid-template-columns: 220px 140px 1fr;
+  gap: 32px;
+  padding: 32px 0;
+  border-bottom: 1px solid var(--line);
+  align-items: start;
+}
+.fleet-row:first-child { border-top: 1px solid var(--line); }
+.fleet-row__id h3 { font-size: 22px; margin-top: 6px; }
+.fleet-row__count { display: flex; flex-direction: column; }
+
+@media (max-width: 860px) {
+  .fleet-row { grid-template-columns: 1fr; gap: 12px; }
+}
+
+/* ---------- Cabins page ---------- */
+
+.cabin-row {
+  display: flex;
+  min-height: 320px;
+}
+.cabin-row__visual { flex: 0 0 40%; }
+.cabin-row__text { flex: 1; padding: 48px; display: flex; flex-direction: column; justify-content: center; }
+
+@media (max-width: 860px) {
+  .cabin-row { flex-direction: column !important; }
+  .cabin-row__visual { min-height: 200px; }
+  .cabin-row__text { padding: 32px 24px; }
+}
+
+/* ---------- Aurora page ---------- */
+
+.tier-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+.tier-card {
+  background: var(--white);
+  padding: 32px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.tier-card h3 { font-size: 24px; }
+.tier-card p { color: var(--navy-light); font-size: 14.5px; }
+.tier-card ul { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.tier-card li {
+  font-size: 13.5px;
+  padding-left: 14px;
+  position: relative;
+}
+.tier-card li::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 7px;
+  width: 4px; height: 4px;
+  background: var(--gold);
+}
+.tier-card--highlight {
+  background: var(--navy);
+  color: var(--white);
+}
+.tier-card--highlight h3 { color: var(--white); }
+.tier-card--highlight p { color: rgba(255,255,255,0.72); }
+.tier-card--highlight .eyebrow { color: var(--gold-light); }
+
+@media (max-width: 900px) {
+  .tier-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .tier-grid { grid-template-columns: 1fr; }
+}
+
+/* ---------- About page: timeline ---------- */
+
+.timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-left: 100px;
+}
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 68px;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--line-strong);
+}
+.timeline__item {
+  position: relative;
+  padding: 24px 0;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+.timeline__year {
+  position: absolute;
+  left: -100px;
+  top: 26px;
+  width: 60px;
+  text-align: right;
+  color: var(--gold-dark);
+  font-weight: 600;
+}
+.timeline__dot {
+  position: absolute;
+  left: -36px;
+  top: 30px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid var(--ivory);
+}
+.timeline__body h3 { font-size: 19px; margin-bottom: 6px; }
+.timeline__body p { color: var(--navy-light); font-size: 14.5px; max-width: 58ch; }
+
+@media (max-width: 640px) {
+  .timeline { padding-left: 20px; }
+  .timeline::before { left: 4px; }
+  .timeline__year { position: static; text-align: left; width: auto; display: block; margin-bottom: 6px; }
+  .timeline__dot { left: -20px; top: 6px; }
+}
+
+/* ---------- Ownership bar ---------- */
+
+.ownership-bar {
+  height: 8px;
+  background: var(--navy-pale);
+  overflow: hidden;
+}
+.ownership-bar__fill {
+  height: 100%;
+  background: var(--gold);
+}
+
+/* ---------- Booking flow ---------- */
+
+.booking-layout__header {
+  background: var(--mist);
+  padding: 40px 0 28px;
+  border-bottom: 1px solid var(--line);
+}
+
+.booking-form {
+  background: var(--white);
+  border: 1px solid var(--line);
+  padding: 40px;
+  max-width: 780px;
+}
+.booking-form__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.booking-form__field { display: flex; flex-direction: column; gap: 8px; }
+.booking-form__field label {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--navy-light);
+}
+.booking-form__field select,
+.booking-form__field input {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 15px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--white);
+}
+.booking-form__triptype {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.triptype-btn {
+  padding: 10px 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 600;
+  background: var(--white);
+  color: var(--navy-light);
+}
+.triptype-btn--active {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: var(--white);
+}
+.booking-form__swap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 640px) {
+  .booking-form { padding: 28px 20px; }
+  .booking-form__row { grid-template-columns: 1fr; }
+}
+
+/* ---------- Flight result cards ---------- */
+
+.flight-card {
+  background: var(--white);
+  border: 1px solid var(--line);
+  padding: 26px 28px;
+  display: grid;
+  grid-template-columns: 1fr 1.6fr auto;
+  gap: 28px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.flight-card__times {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.flight-card__times span.sep { color: var(--line-strong); font-weight: 400; }
+.flight-card__meta { display: flex; gap: 14px; margin-top: 8px; font-size: 13px; color: var(--navy-light); flex-wrap: wrap; }
+.flight-card__price { text-align: right; }
+.flight-card__price .amount { font-family: var(--font-display); font-size: 28px; color: var(--navy); display: block; }
+.flight-card__price .label { font-size: 12px; color: var(--navy-light); }
+
+@media (max-width: 900px) {
+  .flight-card { grid-template-columns: 1fr; text-align: left; }
+  .flight-card__price { text-align: left; }
+}
+
+.cabin-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+.cabin-toggle button {
+  padding: 10px 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--white);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--navy-light);
+}
+.cabin-toggle button.active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+/* ---------- Seat map ---------- */
+
+.seatmap-wrap {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 40px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .seatmap-wrap { grid-template-columns: 1fr; }
+}
+
+.seatmap {
+  background: var(--white);
+  border: 1px solid var(--line);
+  padding: 32px;
+}
+.seatmap__fuselage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.seatmap__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.seatmap__rownum {
+  width: 26px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--navy-light);
+  text-align: right;
+}
+.seatmap__aisle { width: 22px; }
+.seat {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px 5px 2px 2px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--navy-light);
+  background: var(--mist);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.seat--available { cursor: pointer; }
+.seat--available:hover { border-color: var(--gold); background: var(--gold-light); color: var(--ink); }
+.seat--occupied { background: var(--line-strong); color: transparent; cursor: not-allowed; opacity: 0.5; }
+.seat--extra { border-color: var(--navy-light); border-style: dashed; }
+.seat--selected { background: var(--navy); border-color: var(--navy); color: var(--white); }
+
+.seatmap-summary {
+  position: sticky;
+  top: 100px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  padding: 28px;
+}
+.seatmap-legend { display: flex; flex-direction: column; gap: 10px; margin: 20px 0; font-size: 13px; }
+.seatmap-legend__item { display: flex; align-items: center; gap: 10px; }
+
+.passenger-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 24px 0;
+}
+
+/* ---------- Confirmation ---------- */
+
+.confirmation-card {
+  background: var(--white);
+  border: 1px solid var(--line);
+  padding: 48px;
+  max-width: 640px;
+  text-align: center;
+}
+.confirmation-ref {
+  font-family: var(--font-mono);
+  font-size: 34px;
+  letter-spacing: 0.06em;
+  color: var(--navy);
+  margin: 18px 0;
+}
+.confirmation-details {
+  text-align: left;
+  border-top: 1px dashed var(--line-strong);
+  margin-top: 28px;
+  padding-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 14.5px;
+}
+.confirmation-details__row { display: flex; justify-content: space-between; }
+.confirmation-details__row span:first-child { color: var(--navy-light); }
+.confirmation-details__row span:last-child { font-weight: 600; }
