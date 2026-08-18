@@ -2702,7 +2702,11 @@ function TwitterPage() {
     const aiReplies = await fetchAIReplies(text, author, []);
     setAiPosting(false);
     if (aiReplies.length > 0) {
-      setTweets(prev => prev.map(tw => tw.id === tweetId ? { ...tw, replies: aiReplies } : tw));
+      setTweetsState(prev => {
+        const updated = prev.map(tw => tw.id === tweetId ? { ...tw, replies: aiReplies } : tw);
+        localStorage.setItem(XSTORAGE, JSON.stringify(updated));
+        return updated;
+      });
       setExpanded(prev => new Set([...prev, tweetId]));
     }
   };
@@ -2718,7 +2722,11 @@ function TwitterPage() {
     const aiReplies = await fetchAIReplies(tw.text, tw.acct, tw.replies);
     setAiLoading(prev => { const s = new Set(prev); s.delete(id); return s; });
     if (aiReplies.length > 0) {
-      setTweets(prev => prev.map(t => t.id === id ? { ...t, replies: [...t.replies, ...aiReplies] } : t));
+      setTweetsState(prev => {
+        const updated = prev.map(t => t.id === id ? { ...t, replies: [...t.replies, ...aiReplies] } : t);
+        localStorage.setItem(XSTORAGE, JSON.stringify(updated));
+        return updated;
+      });
     }
   };
 
