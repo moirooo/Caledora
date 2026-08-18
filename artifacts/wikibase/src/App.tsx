@@ -2514,7 +2514,7 @@ function XBadgeIcon({ type }: { type: 'gold' | 'blue' | null }) {
   return <span title={type === 'gold' ? 'Organisation certifiée' : 'Personnalité certifiée'} style={{ color: type === 'gold' ? '#FFD700' : '#1d9bf0', fontSize: 12, lineHeight: 1 }}>✓</span>;
 }
 
-function XCard({ tweet, expanded, onToggleExpand, onLike, onRT, onSimulate }: { tweet: XTweet; expanded: boolean; onToggleExpand: () => void; onLike: () => void; onRT: () => void; onSimulate: () => void }) {
+function XCard({ tweet, expanded, onToggleExpand, onLike, onRT, onSimulate, simulateLoading }: { tweet: XTweet; expanded: boolean; onToggleExpand: () => void; onLike: () => void; onRT: () => void; onSimulate: () => void; simulateLoading?: boolean }) {
   const showThread = expanded && tweet.replies.length > 0;
   return (
     <div style={{ borderBottom: '1px solid #2f3336' }}>
@@ -2551,8 +2551,11 @@ function XCard({ tweet, expanded, onToggleExpand, onLike, onRT, onSimulate }: { 
               <Heart size={16} fill={tweet.liked ? '#f91880' : 'none'} /><span>{fmtN(tweet.likes)}</span>
             </button>
             <span className="flex items-center gap-1.5 min-w-[44px]"><BarChart2 size={15} /><span>{fmtN(tweet.views)}</span></span>
-            <button onClick={onSimulate} className="flex items-center gap-1 ml-auto hover:text-[#7856ff] transition-colors text-[12px]">
-              <Sparkles size={13} /><span className="hidden sm:inline ml-0.5">Simuler</span>
+            <button onClick={onSimulate} disabled={simulateLoading} className="flex items-center gap-1 ml-auto hover:text-[#7856ff] transition-colors text-[12px] disabled:opacity-50">
+              {simulateLoading
+                ? <><svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10"/></svg><span className="hidden sm:inline ml-0.5">Génération…</span></>
+                : <><Sparkles size={13} /><span className="hidden sm:inline ml-0.5">Simuler</span></>
+              }
             </button>
           </div>
         </div>
@@ -2615,61 +2618,107 @@ function TwitterPage() {
   const [imgUrl, setImgUrl]     = useState('');
   const [imgOpen, setImgOpen]   = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [aiLoading, setAiLoading] = useState<Set<string>>(new Set());
+  const [aiPosting, setAiPosting] = useState(false);
 
   const author    = allAccts[authorIdx] ?? XINIT[0].acct;
   const displayed = tab === 'foryou' ? tweets : tweets.filter(t => !t.acct.isSystem);
 
-  const postTweet = () => {
-    if (!draft.trim()) return;
-    const mentions = extractMentions(draft);
-    const mentionReplies: XReply[] = mentions
-      .map(h => allAccts.find(a => a.handle.toLowerCase() === h.toLowerCase()))
-      .filter(Boolean)
-      .map((acct, i) => ({
-        id: `xr_m_${Date.now()}_${i}`,
-        acct: acct!,
-        text: genMentionReply(acct!, draft, author),
-        likes: Math.floor(Math.random() * 60) + 2,
-        ts: Date.now() + 1000 * (i + 1),
+  // Fetches AI-generated replies from the backend and maps them to XReply[]
+  const fetchAIReplies = async (
+    tweetText: string,
+    tweetAuthor: XAccount,
+    existingReplies: XReply[],
+  ): Promise<XReply[]> => {
+    const mentions = extractMentions(tweetText);
+    const alreadyReplied = new Set(existingReplies.map(r => r.acct.handle.toLowerCase()));
+    try {
+      const res = await fetch('/api/generate-replies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tweetText,
+          author: { handle: tweetAuthor.handle, name: tweetAuthor.name, badge: tweetAuthor.badge },
+          mentions,
+          availableAccounts: allAccts.map(a => ({ handle: a.handle, name: a.name, badge: a.badge, isSystem: a.isSystem })),
+        }),
+      });
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json() as { replies: Array<{ handle: string; name: string; content: string }> };
+      const aiReplies: XReply[] = [];
+      for (const [i, r] of data.replies.entries()) {
+        const normalHandle = r.handle.startsWith('@') ? r.handle : `@${r.handle}`;
+        if (alreadyReplied.has(normalHandle.toLowerCase())) continue;
+        // Find the matching account for avatar/badge, fallback to generated
+        const acct: XAccount = allAccts.find(a => a.handle.toLowerCase() === normalHandle.toLowerCase())
+          ?? { handle: normalHandle, name: r.name, initials: xInits(r.name), avatarColor: xColor(r.name), badge: null };
+        alreadyReplied.add(normalHandle.toLowerCase());
+        aiReplies.push({
+          id: `xr_ai_${Date.now()}_${i}`,
+          acct,
+          text: r.content,
+          likes: Math.floor(Math.random() * 120) + 2,
+          ts: Date.now() - Math.floor(Math.random() * 180000),
+        });
+      }
+      return aiReplies;
+    } catch {
+      // Fallback to local generation if AI fails
+      const mentionReplies: XReply[] = mentions
+        .map(h => allAccts.find(a => a.handle.toLowerCase() === h.toLowerCase()))
+        .filter(Boolean)
+        .filter(a => !alreadyReplied.has(a!.handle.toLowerCase()))
+        .map((acct, i) => ({
+          id: `xr_fb_${Date.now()}_${i}`,
+          acct: acct!,
+          text: genMentionReply(acct!, tweetText, tweetAuthor),
+          likes: Math.floor(Math.random() * 60) + 2,
+          ts: Date.now() - Math.floor(Math.random() * 120000),
+        }));
+      const usedHandles = new Set([tweetAuthor.handle.toLowerCase(), ...mentions.map(h => h.toLowerCase()), ...alreadyReplied]);
+      const pool = allAccts.filter(a => !usedHandles.has(a.handle.toLowerCase())).sort(() => Math.random() - 0.5);
+      const tpl = xReplyTpl(tweetAuthor.name);
+      const want = Math.max(0, 3 - mentionReplies.length);
+      const regularReplies: XReply[] = pool.slice(0, want).map((acct, i) => ({
+        id: `xr_fbr_${Date.now()}_${i}`, acct,
+        text: tpl[Math.floor(Math.random() * tpl.length)],
+        likes: Math.floor(Math.random() * 120) + 1,
+        ts: Date.now() - Math.floor(Math.random() * 600000),
       }));
-    const t: XTweet = { id: `xt_${Date.now()}`, acct: author, text: draft.trim(), imageUrl: imgUrl.trim() || undefined, ts: Date.now(), likes: 0, retweets: 0, views: Math.floor(Math.random() * 50) + 1, liked: false, retweeted: false, replies: mentionReplies };
+      return [...mentionReplies, ...regularReplies];
+    }
+  };
+
+  const postTweet = async () => {
+    if (!draft.trim() || aiPosting) return;
+    const text = draft.trim();
+    const imageUrl = imgUrl.trim() || undefined;
+    const tweetId = `xt_${Date.now()}`;
+    const t: XTweet = { id: tweetId, acct: author, text, imageUrl, ts: Date.now(), likes: 0, retweets: 0, views: Math.floor(Math.random() * 50) + 1, liked: false, retweeted: false, replies: [] };
     setTweets([t, ...tweets]);
-    if (mentionReplies.length > 0) setExpanded(prev => new Set([...prev, t.id]));
     setDraft(''); setImgUrl('');
+    setAiPosting(true);
+    const aiReplies = await fetchAIReplies(text, author, []);
+    setAiPosting(false);
+    if (aiReplies.length > 0) {
+      setTweets(prev => prev.map(tw => tw.id === tweetId ? { ...tw, replies: aiReplies } : tw));
+      setExpanded(prev => new Set([...prev, tweetId]));
+    }
   };
 
   const toggleLike = (id: string) => setTweets(tweets.map(t => t.id === id ? { ...t, liked: !t.liked, likes: t.liked ? t.likes - 1 : t.likes + 1 } : t));
   const toggleRT   = (id: string) => setTweets(tweets.map(t => t.id === id ? { ...t, retweeted: !t.retweeted, retweets: t.retweeted ? t.retweets - 1 : t.retweets + 1 } : t));
 
-  const simulate = (id: string) => {
+  const simulate = async (id: string) => {
     const tw = tweets.find(t => t.id === id); if (!tw) return;
-    const mentions = extractMentions(tw.text);
-    // Mentioned accounts reply first with contextualised text (skip if already replied)
-    const alreadyReplied = new Set(tw.replies.map(r => r.acct.handle.toLowerCase()));
-    const mentionReplies: XReply[] = mentions
-      .map(h => allAccts.find(a => a.handle.toLowerCase() === h.toLowerCase()))
-      .filter(Boolean)
-      .filter(a => !alreadyReplied.has(a!.handle.toLowerCase()))
-      .map((acct, i) => ({
-        id: `xr_m_${Date.now()}_${i}`,
-        acct: acct!,
-        text: genMentionReply(acct!, tw.text, tw.acct),
-        likes: Math.floor(Math.random() * 80) + 5,
-        ts: Date.now() - Math.floor(Math.random() * 120000),
-      }));
-    // Fill remaining slots with random accounts
-    const usedHandles = new Set([tw.acct.handle.toLowerCase(), ...mentions.map(h => h.toLowerCase()), ...alreadyReplied]);
-    const pool = allAccts.filter(a => !usedHandles.has(a.handle.toLowerCase())).sort(() => Math.random() - 0.5);
-    const tpl  = xReplyTpl(tw.acct.name);
-    const want = Math.max(0, 3 - mentionReplies.length);
-    const regularReplies: XReply[] = pool.slice(0, want).map((acct, i) => ({
-      id: `xr_r_${Date.now()}_${i}`, acct,
-      text: tpl[Math.floor(Math.random() * tpl.length)],
-      likes: Math.floor(Math.random() * 120) + 1,
-      ts: Date.now() - Math.floor(Math.random() * 600000),
-    }));
-    setTweets(tweets.map(t => t.id === id ? { ...t, replies: [...t.replies, ...mentionReplies, ...regularReplies] } : t));
+    if (aiLoading.has(id)) return;
+    setAiLoading(prev => new Set([...prev, id]));
     setExpanded(prev => new Set([...prev, id]));
+    const aiReplies = await fetchAIReplies(tw.text, tw.acct, tw.replies);
+    setAiLoading(prev => { const s = new Set(prev); s.delete(id); return s; });
+    if (aiReplies.length > 0) {
+      setTweets(prev => prev.map(t => t.id === id ? { ...t, replies: [...t.replies, ...aiReplies] } : t));
+    }
   };
 
   const BASE      = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -2755,7 +2804,10 @@ function TwitterPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-[13px]" style={{ color: draft.length > 260 ? '#f4212e' : '#71767b' }}>{280 - draft.length}</span>
-                  <button onClick={postTweet} disabled={!draft.trim()} className="bg-[#1d9bf0] text-white font-bold px-5 py-1.5 rounded-full text-[15px] hover:bg-[#1a8cd8] transition-colors disabled:opacity-40">Poster</button>
+                  <button onClick={postTweet} disabled={!draft.trim() || aiPosting} className="bg-[#1d9bf0] text-white font-bold px-5 py-1.5 rounded-full text-[15px] hover:bg-[#1a8cd8] transition-colors disabled:opacity-40 flex items-center gap-2">
+                    {aiPosting && <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>}
+                    {aiPosting ? 'Publication…' : 'Poster'}
+                  </button>
                 </div>
               </div>
             </div>
@@ -2768,7 +2820,8 @@ function TwitterPage() {
           {displayed.map(t => (
             <XCard key={t.id} tweet={t} expanded={expanded.has(t.id)}
               onToggleExpand={() => setExpanded(prev => { const s = new Set(prev); s.has(t.id) ? s.delete(t.id) : s.add(t.id); return s; })}
-              onLike={() => toggleLike(t.id)} onRT={() => toggleRT(t.id)} onSimulate={() => simulate(t.id)} />
+              onLike={() => toggleLike(t.id)} onRT={() => toggleRT(t.id)} onSimulate={() => simulate(t.id)}
+              simulateLoading={aiLoading.has(t.id)} />
           ))}
         </div>
       </div>
