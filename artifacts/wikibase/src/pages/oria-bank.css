@@ -1,0 +1,227 @@
+/*
+  Oria Bank responsive shell.
+  The supplied app is intentionally mobile-first; these rules turn the
+  phone dashboard into a spacious desktop banking workspace without
+  changing its existing interactions or data model.
+*/
+
+.oria-app-root {
+  min-height: 100dvh;
+}
+
+.oria-app-frame {
+  isolation: isolate;
+}
+
+.oria-scroll {
+  scrollbar-color: rgba(141, 164, 175, 0.32) transparent;
+  scrollbar-width: thin;
+}
+
+.oria-rail-brand {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .oria-app-root {
+    padding: 24px;
+    background:
+      radial-gradient(circle at 12% 8%, rgba(27, 110, 125, 0.25), transparent 28rem),
+      radial-gradient(circle at 88% 90%, rgba(212, 155, 40, 0.12), transparent 24rem),
+      #081418;
+  }
+
+  .oria-app-frame {
+    max-width: 1440px;
+    min-height: calc(100dvh - 48px);
+    max-height: calc(100dvh - 48px);
+    flex-direction: row;
+    overflow: hidden;
+    border: 1px solid rgba(22, 56, 69, 0.72);
+    border-radius: 28px;
+    box-shadow: 0 30px 100px rgba(0, 0, 0, 0.34);
+  }
+
+  .oria-scroll {
+    order: 2;
+    min-width: 0;
+    min-height: 0;
+    padding-bottom: 0 !important;
+  }
+
+  .oria-bottom-nav {
+    order: 1;
+    position: relative !important;
+    top: auto !important;
+    bottom: auto !important;
+    width: 236px;
+    min-width: 236px;
+    height: auto;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 30px;
+    padding: 28px 16px 20px;
+    border-top: 0;
+    border-right: 1px solid rgba(22, 56, 69, 0.48);
+    background: rgba(8, 20, 24, 0.9);
+  }
+
+  .oria-rail-brand {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: 22px;
+    padding: 0 12px 24px;
+    border-bottom: 1px solid rgba(22, 56, 69, 0.48);
+  }
+
+  .oria-rail-brand__logo {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+  }
+
+  .oria-rail-brand__hub {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #8da4af;
+    font-size: 12px;
+    font-weight: 600;
+    transition: color 180ms ease, background 180ms ease;
+  }
+
+  .oria-rail-brand__hub:hover {
+    color: #fff;
+  }
+
+  .oria-bottom-nav > button {
+    width: 100%;
+    flex: none;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 13px;
+    border-radius: 14px;
+    padding: 13px 14px;
+    text-align: left;
+  }
+
+  .oria-bottom-nav > button:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .oria-bottom-nav > button > span:last-child {
+    display: none;
+  }
+
+  .oria-bottom-nav > button > span:nth-child(2) {
+    font-size: 12px;
+  }
+
+  .oria-home {
+    display: grid;
+    grid-template-columns: minmax(340px, 0.82fr) minmax(480px, 1.18fr);
+    gap: 30px;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 42px 52px;
+  }
+
+  .oria-dashboard-header {
+    position: static !important;
+    grid-column: 1;
+    align-self: start;
+    padding: 38px 0 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+  }
+
+  .oria-dashboard-header > .mb-5 {
+    margin-bottom: 28px;
+  }
+
+  .oria-dashboard-header > .mb-4 {
+    margin-bottom: 18px;
+  }
+
+  .oria-dashboard-header > .rounded-3xl {
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18);
+  }
+
+  .oria-transactions {
+    grid-column: 2;
+    align-self: start;
+    min-width: 0;
+    padding: 38px 0 0 !important;
+  }
+
+  .oria-transactions > .relative.mb-4 {
+    margin-bottom: 24px;
+  }
+
+  .oria-transactions > .flex.flex-col.gap-2\.5 {
+    gap: 12px;
+  }
+
+  .oria-tab-page {
+    width: min(100%, 980px);
+    min-height: 100%;
+    margin: 0 auto;
+    padding: 52px 64px 72px !important;
+  }
+
+  .oria-tab-page > h2 {
+    font-size: 30px;
+    letter-spacing: -0.02em;
+  }
+
+  .oria-tab-page .rounded-2xl {
+    transition: border-color 180ms ease, background 180ms ease;
+  }
+
+  .oria-tab-page .rounded-2xl:hover {
+    border-color: rgba(212, 155, 40, 0.38);
+  }
+}
+
+@media (min-width: 1200px) {
+  .oria-home {
+    grid-template-columns: minmax(390px, 0.78fr) minmax(520px, 1.22fr);
+    gap: 54px;
+    padding-left: 56px;
+    padding-right: 56px;
+  }
+}
+
+@media (max-width: 899px) {
+  .oria-app-root {
+    overflow-x: hidden;
+  }
+
+  .oria-app-frame {
+    min-height: 100dvh;
+  }
+
+  .oria-rail-brand {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .oria-dashboard-header {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .oria-transactions {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .oria-bottom-nav > button,
+  .oria-tab-page .rounded-2xl {
+    transition: none;
+  }
+}

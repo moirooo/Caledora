@@ -17,6 +17,7 @@
 */
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import "./oria-bank.css";
 import {
   Home,
   CreditCard,
@@ -533,15 +534,15 @@ export default function App() {
 
   /* ---------------- Render ---------------- */
   return (
-    <div className="min-h-screen w-full bg-[#081418] flex justify-center">
-      <div className="relative flex min-h-screen w-full max-w-md flex-col justify-between bg-[#050C0F] text-slate-100 shadow-2xl">
+    <div className="oria-app-root min-h-screen w-full bg-[#081418] flex justify-center">
+      <div className="oria-app-frame relative flex min-h-screen w-full max-w-md flex-col justify-between bg-[#050C0F] text-slate-100 shadow-2xl">
         <Toast visible={toast.visible} message={toast.message} />
 
-        <div className="flex-1 overflow-y-auto pb-24">
+        <div className="oria-scroll flex-1 overflow-y-auto pb-24">
           {/* ===================== HOME ===================== */}
           {activeTab === "home" && (
-            <div>
-              <div className="sticky top-0 z-30 border-b border-[#163845]/40 bg-[#050C0F]/85 px-5 pb-4 pt-6 backdrop-blur-xl">
+            <div className="oria-home">
+              <div className="oria-dashboard-header sticky top-0 z-30 border-b border-[#163845]/40 bg-[#050C0F]/85 px-5 pb-4 pt-6 backdrop-blur-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <a
@@ -644,7 +645,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="px-5 pt-5">
+              <div className="oria-transactions px-5 pt-5">
                 {/* Search */}
                 <div className="relative mb-4">
                   <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8DA4AF]" />
@@ -721,7 +722,7 @@ export default function App() {
 
           {/* ===================== CARDS ===================== */}
           {activeTab === "cards" && (
-            <div className="px-5 pt-6">
+            <div className="oria-tab-page px-5 pt-6">
               <h2 className="mb-5 text-xl font-bold text-white">Mes cartes</h2>
 
               <div className="mb-5 flex rounded-full bg-white/5 p-1">
@@ -883,7 +884,7 @@ export default function App() {
 
           {/* ===================== TRANSFERS ===================== */}
           {activeTab === "transfers" && (
-            <div className="px-5 pt-6">
+            <div className="oria-tab-page px-5 pt-6">
               <h2 className="mb-5 text-xl font-bold text-white">Virements</h2>
 
               <div className="mb-5 flex rounded-full bg-white/5 p-1">
@@ -1024,7 +1025,7 @@ export default function App() {
 
           {/* ===================== ANALYTICS ===================== */}
           {activeTab === "analytics" && (
-            <div className="px-5 pt-6">
+            <div className="oria-tab-page px-5 pt-6">
               <h2 className="mb-5 text-xl font-bold text-white">Budget & Statistiques</h2>
 
               <div className="mb-6 flex rounded-full bg-white/5 p-1">
@@ -1094,7 +1095,7 @@ export default function App() {
 
           {/* ===================== VAULTS ===================== */}
           {activeTab === "vaults" && (
-            <div className="px-5 pt-6">
+            <div className="oria-tab-page px-5 pt-6">
               <h2 className="mb-5 text-xl font-bold text-white">Coffres & Multi-devises</h2>
 
               <h3 className="mb-3 text-[13px] font-bold text-white">Soldes multi-devises</h3>
@@ -1203,9 +1204,18 @@ export default function App() {
 
         {/* Bottom Navigation */}
         <div
-          className="sticky bottom-0 z-40 flex items-stretch justify-between border-t border-[#163845]/40 bg-[#081418]/90 px-2 backdrop-blur-lg"
+          className="oria-bottom-nav sticky bottom-0 z-40 flex items-stretch justify-between border-t border-[#163845]/40 bg-[#081418]/90 px-2 backdrop-blur-lg"
           style={{ paddingBottom: "env(safe-area-inset-bottom, 8px)" }}
         >
+          <div className="oria-rail-brand">
+            <a href="/" className="oria-rail-brand__logo" aria-label="Retour au Hub CaledoraOS">
+              <OriaLogo className="h-8 w-auto object-contain" />
+            </a>
+            <a href="/" className="oria-rail-brand__hub">
+              <ArrowLeft size={14} />
+              <span>Retour au Hub</span>
+            </a>
+          </div>
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = activeTab === item.id;
