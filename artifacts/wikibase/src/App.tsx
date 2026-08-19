@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { allText, demoSource, formatDate, loadPages, parseWikiText, savePages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
+import OriaBank from '@/pages/OriaBank.jsx';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
 
@@ -440,7 +441,7 @@ function Shell({ children }: { children: ReactNode }) {
   const { appearance } = useAppearance();
 
   /* Hide the entire WikiBase chrome on the home dashboard */
-  const isHome = location === '/' || location === '/twitter';
+  const isHome = location === '/' || location === '/twitter' || location === '/oria';
 
   const doSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -676,7 +677,7 @@ function Dashboard() {
     // Caledora Airways
     { id: 'airways',   label: 'Caledora Airways', image: img('airways2.jpg'),   bg: 'linear-gradient(145deg,#0c4a6e,#0369a1)', imgFit: 'cover', active: true  },
     // Oria Bank — white bg + padding so logo doesn't get cropped
-    { id: 'bank',      label: 'Oria Bank',        image: img('oriabank.png'),   imgBg: '#ffffff', imgFit: 'contain', imgPad: true,  bg: '#ffffff', active: false },
+    { id: 'bank',      label: 'Oria Bank',        image: img('oriabank.png'),   imgBg: '#ffffff', imgFit: 'contain', imgPad: true,  bg: '#ffffff', active: true },
     // Maps — custom Google Maps pin SVG
     { id: 'maps',      label: 'Maps',             imageNode: MapsPinSvg,        bg: '#ffffff',    imgBg: '#ffffff',  active: false },
     // Paramètres
@@ -688,6 +689,7 @@ function Dashboard() {
     if (app.id === 'wikibase')  navigate('/wiki');
     if (app.id === 'twitter')   navigate('/twitter');
     if (app.id === 'airways')   { window.location.href = '/airways'; return; }
+    if (app.id === 'bank')      { window.location.href = '/oria'; return; }
     if (app.id === 'settings')  setShowSettings(true);
   };
 
@@ -2884,6 +2886,7 @@ function Router() {
       <Shell>
         <Switch>
         <Route path="/" component={Dashboard} />
+        <Route path="/oria" component={OriaBank} />
         <Route path="/wiki" component={WikiList} />
         <Route path="/twitter" component={TwitterPage} />
         <Route path="/create" component={CreatePage} />
