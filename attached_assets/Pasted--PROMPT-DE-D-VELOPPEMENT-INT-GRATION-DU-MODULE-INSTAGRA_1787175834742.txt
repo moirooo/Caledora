@@ -1,0 +1,96 @@
+# PROMPT DE DÉVELOPPEMENT — INTÉGRATION DU MODULE INSTAGRAM
+
+Tu es le développeur principal en charge d'intégrer une application **Instagram** complète, ultra-réaliste et fonctionnelle en local dans notre environnement applicatif existant (qui intègre déjà un bureau virtuel avec WikiBase, Twitter/X, Maps, etc.).
+
+L'application doit reproduire pixel-perfect l'interface, les logos officiels et l'expérience utilisateur d'Instagram, tout en servant de bac à sable narratif local pour notre univers de football fictif (Caledora).
+
+---
+
+### 1. CONTEXTE ET SYNCHRONISATION AVEC L'ÉCOSYSTÈME EXISTANT
+
+1. **Nom et Branding :** L'application s'appelle officiellement **Instagram** (logo officiel Instagram, police d'écriture, icônes SVG natives : feed, explorer, reels, messages, notifications, profil, anneaux de story dégradés rose/orange/violet).
+2. **Synchronisation automatique avec WikiBase :**
+   - Chaque personne/entité ayant une page ou une existence dans WikiBase (joueurs, célébrités, artistes, dirigeants, clubs, etc.) doit automatiquement posséder un profil existant dans la base de données Instagram.
+   - Si un nouveau profil est créé dans WikiBase ou dans l'éditeur global, il est automatiquement instancié dans Instagram avec des valeurs par défaut intelligentes (dérivées de son nom).
+3. **Persistance locale :**
+   - Pas de compte externe requis. Toutes les données (profils, posts, stories, relations, commentaires) sont stockées localement (LocalStorage / IndexedDB).
+   - Les images ne sont pas stockées en Base64 lourd : elles sont placées dans le dossier statique `/images/instagram/` et référencées par leur simple nom de fichier (ex: `nico_bellori.jpg`, `match_derby.png`).
+   - Présence d'un système d'import/export d'une sauvegarde unique au format JSON.
+
+---
+
+### 2. GESTION DES PROFILS ET PERSONNALISATION COMPLÈTE
+
+Chaque profil existant doit être entièrement éditable depuis un panneau de gestion :
+- **Identité :** Nom affiché, pseudo `@username`, badge certifié (activable/désactivable), type de compte (*joueur, joueuse, club, coach, président, personnalité publique, femme/compagne, média*).
+- **Médias :** Photo de profil (avatar) et stories actives.
+- **Bio & Liens :** Texte de biographie personnalisable, liens cliquables, catégorie de profil.
+- **Paramètres narratifs (pour l'IA) :**
+  - Trait de réputation (*populaire, arrogant, discret, controversé, leader, clash*).
+  - Personnalité / Contexte (*langage familier, corpo, provocateur, timide*).
+  - Relations inter-profils : Définition des liens avec d'autres comptes (*coéquipier, club lié, rival, couple, ami proche, coach, famille*).
+
+---
+
+### 3. FONCTIONNALITÉS CŒUR DU MODULE INSTAGRAM
+
+#### A. Feed & Publications (Posts & Carrousels)
+- **Affichage Feed :** Header avec avatar, `@pseudo`, lieu optionnel, carrousel d'images, boutons d'interaction (Like avec compteur, Commentaire, Partage, Enregistrement), légende avec tags et mentions `@pseudo` cliquables, et liste des commentaires.
+- **Carrousels :** Prise en charge de posts à 1 ou plusieurs images avec navigation fluide (flèches + indicateurs à points en bas).
+- **Recadrage CSS (Aspect-Ratio) :** Pas de traitement d'image lourd côté client. L'utilisateur sélectionne le format à la création :
+  - Carré (`aspect-square` / 1:1)
+  - Portrait (`aspect-[4/5]`)
+  - Paysage (`aspect-video` / 16:9)
+  L'image s'ajuste parfaitement via `object-fit: cover`.
+
+#### B. Stories & Stories à la une (Highlights)
+- **Barre supérieure des Stories :** Affiche la liste des profils ayant une story active avec l'anneau dégradé officiel. Le premier item est toujours « Votre story » (+).
+- **Cycle de vie des Stories :** Les stories restent persistantes dans la base et possèdent un statut `active: true/false`. Elles ne sont pas détruites automatiquement afin de pouvoir être réactivées ou consultées à volonté.
+- **Visionneuse plein écran :** Ouverture immersive verticale avec barre de progression en haut, temps écoulé, avatar/pseudo, et possibilité de passer à la suivante/précédente ou de fermer.
+- **Stories à la une (Highlights sur profil) :** Bulles circulaires personnalisables sur la page de profil avec titre et image de couverture dédiée.
+
+#### C. Page Profil & Grille 3 Colonnes
+- En-tête profil (Avatar, compteurs : Publications, Abonnés, Abonnements, Nom, Bio, bouton Modifier / Suivre).
+- Section des Stories à la une (Highlights).
+- Onglets : Grille (3 colonnes avec miniatures carrées), Reels, Publications identifiées.
+- Clic sur une miniature de la grille : ouverture du post dans une modale détaillée avec affichage des commentaires à droite.
+
+---
+
+### 4. MOTEUR IA : LÉGENDES ET COMMENTAIRES DYNAMIQUES
+
+L'application doit intégrer des endpoints locaux reliés à l'API LLM pour simuler l'activité sociale :
+
+1. **Génération de légende IA :** Dans l'éditeur de post, un bouton génère la légende idéale selon le profil de l'auteur, le contexte du match/événement et le ton choisi (*célébration, défaite, clash, romance, officiel*).
+2. **Génération dynamique des commentaires :**
+   - **Règle absolue des mentions :** Si la légende contient `@pseudo`, le profil mentionné **doit obligatoirement** générer une réponse directe et adaptée à son lien avec l'auteur.
+   - **Prise en compte des relations :** Les rivaux viennent provoquer, les coéquipiers soutiennent ou chambrent, les clubs commentent avec emojis officiels, les compagnes/compagnons réagissent.
+   - **Supporters et Trolls :** Génération de commentaires réalistes de faux comptes de fans ou supporters selon la réputation du joueur.
+   - Un bouton « Régénérer les commentaires » est disponible en mode édition.
+
+---
+
+### 5. DUALITÉ DES MODES : VIEWER VS ÉDITEUR
+
+L'application dispose d'un toggle discret dans la barre de navigation :
+- **Mode Viewer (Par défaut) :** Navigation identique à l'application Instagram réelle (scroll fluide, ouverture des stories, consultation des profils, likes interactifs).
+- **Mode Éditeur :** Ajoute des boutons de gestion rapides :
+  - « + Nouveau Post » (sélection auteur, upload/sélection image dans `/images/instagram/`, choix du ratio, génération légende IA, publication).
+  - « + Nouvelle Story » (sélection auteur, image verticale, activation/désactivation).
+  - « Éditer ce profil » (sur chaque page profil pour modifier bio, relations, avatar, highlights).
+  - « Gérer les commentaires » sur n'importe quelle publication.
+  - Panneau « Import / Export JSON » de la base de données.
+
+---
+
+### 6. STACK ET SPÉCIFICATIONS TECHNIQUES
+
+- **Framework :** React + Vite avec Tailwind CSS (Dark mode natif Instagram par défaut : `#000000`, bordures `#262626`, accents bleus `#0095F6`).
+- **Composants :** Lucide React pour les icônes (Home, Search, Compass, MessageCircle, Heart, PlusSquare, Bookmark, etc.).
+- **Carrousel :** Composant carrousel léger avec `useState` ou Embla Carousel.
+- **Structure des dossiers :**
+  - `src/components/instagram/` (Feed, PostCard, StoryViewer, ProfileView, CreatePostModal, EditProfileModal, Highlights).
+  - `src/services/instagramStorage.js` (Gestion de l'état local et mapping avec WikiBase).
+  - `src/services/aiInstagramService.js` (Génération des légendes et commentaires contextuels).
+
+Mets en place la structure, le schéma de données et l'ensemble des composants nécessaires pour rendre l'application Instagram immédiatement utilisable au sein de notre OS.
