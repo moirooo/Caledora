@@ -32,6 +32,16 @@ export default function Home() {
     <div>
       {/* ---------------- HERO ---------------- */}
       <section className="hero">
+        <video
+          className="hero__video"
+          src="/images/videopub2.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+          aria-hidden="true"
+        />
+        <div className="hero__video-overlay" aria-hidden="true" />
         <HorizonScene />
         <div className="container hero__content">
           <span className="hero__eyebrow">CW · Compagnie aérienne nationale de Caledora</span>
@@ -80,6 +90,33 @@ export default function Home() {
               <button type="submit" className="btn btn--gold">Rechercher</button>
             </div>
           </form>
+        </div>
+      </section>
+
+      {/* ---------------- BRAND FILM ---------------- */}
+      <section className="brand-film section">
+        <div className="container brand-film__layout">
+          <div className="brand-film__copy">
+            <span className="eyebrow">À bord</span>
+            <h2>L'Expérience Caledora Airways</h2>
+            <p className="lede">
+              Un service attentif, une cuisine inspirée par la Méditerranée et le calme d'un voyage pensé jusque dans
+              les détails.
+            </p>
+            <p className="brand-film__caption">Regarder le film de marque</p>
+          </div>
+          <div className="brand-film__player">
+            <video
+              controls
+              playsInline
+              preload="auto"
+              aria-label="Film de marque Caledora Airways"
+            >
+              <source src="/images/videopubson.mp4" type="video/mp4" />
+              <source src={`${import.meta.env.BASE_URL}images/videopubson.mp4`} type="video/mp4" />
+              Votre navigateur ne prend pas en charge la lecture vidéo.
+            </video>
+          </div>
         </div>
       </section>
 

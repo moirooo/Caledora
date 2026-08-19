@@ -6,13 +6,16 @@ import { useBooking } from '../../context/BookingContext'
 import { generateFlights } from '../../data/flights'
 import { regionFor } from '../../data/destinations'
 
-const CABIN_OPTIONS = ['Economy', 'Premium Economy', 'Business', 'Première']
+const CABIN_OPTIONS = ['Economy', 'Premium Economy', 'Business', 'Première'] as const
+type Cabin = (typeof CABIN_OPTIONS)[number]
 
 export default function BookingResults() {
   const navigate = useNavigate()
   const { search, setSearch, setSelectedFlight, setSelectedReturnFlight } = useBooking()
   const [phase, setPhase] = useState<'aller' | 'retour'>('aller')
-  const [cabin, setCabin] = useState(search.cabin || 'Economy')
+  const [cabin, setCabin] = useState<Cabin>(() =>
+    CABIN_OPTIONS.includes(search.cabin as Cabin) ? (search.cabin as Cabin) : 'Economy'
+  )
 
   useEffect(() => {
     if (!search.origin || !search.destination || !search.date) {

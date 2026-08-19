@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { Logo } from './Logo'
 
 const LINKS = [
   { to: '/destinations', label: 'Destinations' },
@@ -33,7 +32,11 @@ export default function Navbar() {
     <header className={`navbar ${isDark ? 'navbar--transparent' : 'navbar--solid'}`}>
       <div className="container navbar__inner">
         <NavLink to="/" className="navbar__brand" aria-label="Accueil Caledora Airways">
-          <Logo dark={isDark} size={30} />
+          <img
+            src="/images/airways.jpg"
+            alt="Caledora Airways"
+            className="navbar__official-logo"
+          />
         </NavLink>
 
         <nav className="navbar__links" aria-label="Navigation principale">
