@@ -1,12 +1,13 @@
 import 'flag-icons/css/flag-icons.min.css';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
-import { Archive, ArrowLeft, BarChart2, BookOpen, Check, ChevronRight, Clock3, Download, FileText, GitCompare, Heart, Image as ImageIcon, Menu, MessageCircle, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, X } from 'lucide-react';
+import { Archive, ArrowLeft, BarChart2, BookOpen, Check, ChevronRight, Clock3, Download, FileText, GitCompare, Heart, Image as ImageIcon, Menu, MessageCircle, MoreHorizontal, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, X } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { allText, demoSource, formatDate, loadPages, parseWikiText, savePages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
 import OriaBank from '@/pages/OriaBank.jsx';
+import { TWITTER_ACCOUNTS, TWITTER_ACCOUNT_TEMPLATES, type TwitterAccountCategory } from '@/data/twitterAccounts';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
 
@@ -2430,9 +2431,32 @@ function NotFound() {
 
 /* ─── X / Twitter Clone ─────────────────────────────────────────────────── */
 
-type XAccount = { handle: string; name: string; avatarUrl?: string; initials: string; avatarColor: string; badge: 'gold' | 'blue' | null; isSystem?: boolean };
-type XReply   = { id: string; acct: XAccount; text: string; likes: number; ts: number };
-type XTweet   = { id: string; acct: XAccount; text: string; imageUrl?: string; ts: number; likes: number; retweets: number; views: number; liked: boolean; retweeted: boolean; replies: XReply[] };
+type XAccount = {
+  handle: string;
+  name: string;
+  avatarUrl?: string;
+  initials: string;
+  avatarColor: string;
+  badge: 'gold' | 'blue' | null;
+  category: TwitterAccountCategory;
+  country?: string;
+  isSystem?: boolean;
+};
+type XReply   = { id: string; acct: XAccount; text: string; likes: number; ts: number; editedAt?: number };
+type XTweet   = {
+  id: string;
+  acct: XAccount;
+  text: string;
+  imageUrl?: string;
+  ts: number;
+  likes: number;
+  retweets: number;
+  views: number;
+  liked: boolean;
+  retweeted: boolean;
+  replies: XReply[];
+  editedAt?: number;
+};
 
 const xColor  = (s: string) => { let h = 0; for (const c of s) h = (Math.imul(h, 31) + c.charCodeAt(0)) | 0; return `hsl(${((h >>> 0) % 360)},60%,42%)`; };
 const xHandle = (t: string) => '@' + t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9 ]/g, ' ').trim().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
@@ -2444,15 +2468,29 @@ const xAgo    = (ts: number) => { const s = Math.floor((Date.now() - ts) / 1000)
 function wikiToXAcct(p: WikiPage): XAccount {
   let avatarUrl: string | undefined;
   if (p.infoboxImage) { const f = (p.infoboxImage.src || p.infoboxImage.filename).trim(); if (f) avatarUrl = /^(https?:\/\/|data:)/.test(f) ? f : import.meta.env.BASE_URL + f.replace(/^\/+/, ''); }
-  return { handle: xHandle(p.title), name: p.title, avatarUrl, initials: xInits(p.title), avatarColor: xColor(p.title), badge: xBadge(p.category) };
+  return {
+    handle: xHandle(p.title),
+    name: p.title,
+    avatarUrl,
+    initials: xInits(p.title),
+    avatarColor: xColor(p.title),
+    badge: xBadge(p.category),
+    category: 'WIKI_OFFICIAL',
+  };
 }
 
 const XMEDIA: XAccount[] = [
-  { handle: '@CaledoraSport', name: 'Caledora Sport',   initials: 'CS', avatarColor: '#1d9bf0', badge: 'blue', isSystem: true },
-  { handle: '@MediaCaledora', name: 'Médias Caledora',  initials: 'MC', avatarColor: '#7856ff', badge: 'blue', isSystem: true },
-  { handle: '@InsiderCaled',  name: 'Caledora Insider', initials: 'CI', avatarColor: '#00ba7c', badge: null,   isSystem: true },
-  { handle: '@CFCFan07',      name: 'Fan CFC 🏟️',       initials: 'FC', avatarColor: '#ff7a00', badge: null,   isSystem: true },
+  { handle: '@CaledoraSport', name: 'Caledora Sport',   initials: 'CS', avatarColor: '#1d9bf0', badge: 'blue', category: 'WIKI_OFFICIAL', isSystem: true },
+  { handle: '@MediaCaledora', name: 'Médias Caledora',  initials: 'MC', avatarColor: '#7856ff', badge: 'blue', category: 'WIKI_OFFICIAL', isSystem: true },
+  { handle: '@InsiderCaled',  name: 'Caledora Insider', initials: 'CI', avatarColor: '#00ba7c', badge: null,   category: 'WIKI_OFFICIAL', isSystem: true },
+  { handle: '@CFCFan07',      name: 'Fan CFC 🏟️',       initials: 'FC', avatarColor: '#ff7a00', badge: null,   category: 'WIKI_OFFICIAL', isSystem: true },
 ];
+
+const XREGISTRY: XAccount[] = TWITTER_ACCOUNTS.map(acct => ({
+  ...acct,
+  initials: xInits(acct.name),
+  avatarColor: xColor(acct.name),
+}));
 
 const XTRENDS = [['#CFCvARS','42,1K tweets'],['#Caledora','18,7K tweets'],['#CaledoraSport','9,4K tweets'],['#OriaBankOpen','6,2K tweets'],['#CALNED','4,8K tweets']] as const;
 
@@ -2464,6 +2502,27 @@ const xReplyTpl = (name: string) => [
   `Bravo ! Les fans attendaient ça depuis longtemps 🎉 #Caledora`,
   `⚡ Le dynamisme de Caledora ne s'arrête jamais ! #CaledoraSport`,
 ];
+
+type XTopic = 'MERCATO' | 'ANALYSIS' | 'FINANCE' | 'CULTURE' | 'BUSINESS';
+
+function classifyTweetTopic(text: string): XTopic {
+  const value = text.toLowerCase();
+  if (/(transfert|mercato|recrue|signature|contrat|here we go|prêt|loan|deadline)/.test(value)) return 'MERCATO';
+  if (/(tactique|analyse|data|stat|xg|pressing|système|formation|scout)/.test(value)) return 'ANALYSIS';
+  if (/(finance|budget|économie|géopolitique|investissement|dette|valorisation|salaire)/.test(value)) return 'FINANCE';
+  if (/(cinéma|film|série|culture|musique|festival|acteur)/.test(value)) return 'CULTURE';
+  return 'BUSINESS';
+}
+
+function contextCategories(topic: XTopic): TwitterAccountCategory[] {
+  if (topic === 'MERCATO') return ['MERCATO_GLOBAL', 'FRANCE_INSIDERS_MEDIAS', 'UK_INSIDERS_MEDIAS', 'SPAIN_INSIDERS_MEDIAS', 'ITALY_INSIDERS_MEDIAS', 'GERMANY_INSIDERS_MEDIAS'];
+  if (topic === 'ANALYSIS' || topic === 'FINANCE') return ['DATA_TACTICS_INVESTIGATION'];
+  return ['WIKI_OFFICIAL'];
+}
+
+function uniqueXAccounts(accounts: XAccount[]) {
+  return [...new Map(accounts.map(acct => [acct.handle.toLowerCase(), acct])).values()];
+}
 
 /** Extract all @handles from tweet text (unique, case-preserved) */
 const extractMentions = (text: string): string[] => [...new Set((text.match(/@[a-zA-Z0-9_]+/g) || []))];
@@ -2501,9 +2560,9 @@ function XTweetText({ text }: { text: string }) {
 
 const XSTORAGE = 'caledora-x-tweets';
 const XINIT: XTweet[] = [
-  { id:'xi1', ts:Date.now()-1000*60*35,  likes:847, retweets:234, views:12400, liked:false, retweeted:false, replies:[], acct:{ handle:'@CaledoraFC',      name:'Caledora FC',       initials:'CF', avatarColor:xColor('Caledora FC'),       avatarUrl:`${import.meta.env.BASE_URL}images/logo1.png`,    badge:'gold' }, text:'⚽ Matchday ! Caledora FC reçoit Arsenal ce samedi à 20h45 au Caledora Mare Stadium. Soyez nombreux dans les tribunes ! 💙🏟️ #CFCvARS #Caledora' },
-  { id:'xi2', ts:Date.now()-1000*60*90,  likes:312, retweets:89,  views:5800,  liked:false, retweeted:false, replies:[], acct:{ handle:'@OriaBank',         name:'Oria Bank',         initials:'OB', avatarColor:xColor('Oria Bank'),         avatarUrl:`${import.meta.env.BASE_URL}images/oriabank.png`, badge:'gold' }, text:'🏦 Oria Bank est fière d\'annoncer l\'ouverture de sa 12e agence à Caledora City ! Rendez-vous lundi pour l\'inauguration. #OriaBankOpen' },
-  { id:'xi3', ts:Date.now()-1000*60*180, likes:521, retweets:173, views:9100,  liked:false, retweeted:false, replies:[], acct:{ handle:'@CaledoraAirways', name:'Caledora Airways',  initials:'CA', avatarColor:xColor('Caledora Airways'), avatarUrl:`${import.meta.env.BASE_URL}images/airways2.jpg`,badge:'gold' }, text:'✈️ Nouvelle liaison directe Caledora City → Paris CDG dès le 1er septembre ! Réservez vos billets en avant-première. Bon vol à tous 🌍' },
+  { id:'xi1', ts:Date.now()-1000*60*35,  likes:847, retweets:234, views:12400, liked:false, retweeted:false, replies:[], acct:{ handle:'@CaledoraFC',      name:'Caledora FC',       initials:'CF', avatarColor:xColor('Caledora FC'),       avatarUrl:`${import.meta.env.BASE_URL}images/logo1.png`,    badge:'gold', category:'WIKI_OFFICIAL' }, text:'⚽ Matchday ! Caledora FC reçoit Arsenal ce samedi à 20h45 au Caledora Mare Stadium. Soyez nombreux dans les tribunes ! 💙🏟️ #CFCvARS #Caledora' },
+  { id:'xi2', ts:Date.now()-1000*60*90,  likes:312, retweets:89,  views:5800,  liked:false, retweeted:false, replies:[], acct:{ handle:'@OriaBank',         name:'Oria Bank',         initials:'OB', avatarColor:xColor('Oria Bank'),         avatarUrl:`${import.meta.env.BASE_URL}images/oriabank.png`, badge:'gold', category:'WIKI_OFFICIAL' }, text:'🏦 Oria Bank est fière d\'annoncer l\'ouverture de sa 12e agence à Caledora City ! Rendez-vous lundi pour l\'inauguration. #OriaBankOpen' },
+  { id:'xi3', ts:Date.now()-1000*60*180, likes:521, retweets:173, views:9100,  liked:false, retweeted:false, replies:[], acct:{ handle:'@CaledoraAirways', name:'Caledora Airways',  initials:'CA', avatarColor:xColor('Caledora Airways'), avatarUrl:`${import.meta.env.BASE_URL}images/airways2.jpg`,badge:'gold', category:'WIKI_OFFICIAL' }, text:'✈️ Nouvelle liaison directe Caledora City → Paris CDG dès le 1er septembre ! Réservez vos billets en avant-première. Bon vol à tous 🌍' },
 ];
 
 function XAvtr({ acct, size = 40 }: { acct: XAccount; size?: number }) {
@@ -2517,8 +2576,80 @@ function XBadgeIcon({ type }: { type: 'gold' | 'blue' | null }) {
   return <span title={type === 'gold' ? 'Organisation certifiée' : 'Personnalité certifiée'} style={{ color: type === 'gold' ? '#FFD700' : '#1d9bf0', fontSize: 12, lineHeight: 1 }}>✓</span>;
 }
 
-function XCard({ tweet, expanded, onToggleExpand, onLike, onRT, onSimulate, simulateLoading }: { tweet: XTweet; expanded: boolean; onToggleExpand: () => void; onLike: () => void; onRT: () => void; onSimulate: () => void; simulateLoading?: boolean }) {
+function XTweetMenu({ open, onToggle, onEdit, onDelete, label }: {
+  open: boolean;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  label: string;
+}) {
+  return (
+    <div className="relative ml-auto shrink-0">
+      <button
+        onClick={onToggle}
+        aria-label={`Actions pour ${label}`}
+        aria-expanded={open}
+        className="rounded-full p-1.5 text-[#71767b] transition-colors hover:bg-[#1d9bf0]/10 hover:text-[#1d9bf0]"
+      >
+        <MoreHorizontal size={17} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-8 z-30 min-w-[176px] overflow-hidden rounded-xl border border-[#2f3336] bg-[#16181c] py-1 shadow-2xl">
+          <button onClick={onEdit} className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] text-white transition-colors hover:bg-white/10">
+            <Pencil size={14} className="text-[#1d9bf0]" /> Modifier le tweet
+          </button>
+          <button onClick={onDelete} className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] text-[#f4212e] transition-colors hover:bg-[#f4212e]/10">
+            <Trash2 size={14} /> Supprimer le tweet
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type XEditTarget = { tweetId: string; replyId?: string } | null;
+
+function XCard({
+  tweet,
+  expanded,
+  onToggleExpand,
+  onLike,
+  onRT,
+  onSimulate,
+  simulateLoading,
+  menuId,
+  onToggleMenu,
+  onEditTweet,
+  onDeleteTweet,
+  onEditReply,
+  onDeleteReply,
+  editing,
+  editDraft,
+  onEditDraftChange,
+  onSaveEdit,
+  onCancelEdit,
+}: {
+  tweet: XTweet;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onLike: () => void;
+  onRT: () => void;
+  onSimulate: () => void;
+  simulateLoading?: boolean;
+  menuId: string | null;
+  onToggleMenu: (id: string) => void;
+  onEditTweet: () => void;
+  onDeleteTweet: () => void;
+  onEditReply: (reply: XReply) => void;
+  onDeleteReply: (replyId: string) => void;
+  editing: XEditTarget;
+  editDraft: string;
+  onEditDraftChange: (value: string) => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+}) {
   const showThread = expanded && tweet.replies.length > 0;
+  const editingTweet = editing?.tweetId === tweet.id && !editing.replyId;
   return (
     <div style={{ borderBottom: '1px solid #2f3336' }}>
       {/* ── Main tweet ── */}
@@ -2529,14 +2660,38 @@ function XCard({ tweet, expanded, onToggleExpand, onLike, onRT, onSimulate, simu
           {showThread && <div className="w-0.5 flex-1 bg-[#2f3336] mt-1.5 min-h-[14px]" />}
         </div>
         <div className="flex-1 min-w-0 pb-1">
-          <div className="flex items-center gap-1.5 flex-wrap leading-none mb-1.5">
-            <span className="font-bold text-[15px] text-white">{tweet.acct.name}</span>
-            <XBadgeIcon type={tweet.acct.badge} />
-            <span className="text-[#71767b] text-[13px]">{tweet.acct.handle} · {xAgo(tweet.ts)}</span>
+          <div className="flex items-start gap-1.5 mb-1.5">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 flex-wrap leading-none">
+              <span className="font-bold text-[15px] text-white">{tweet.acct.name}</span>
+              <XBadgeIcon type={tweet.acct.badge} />
+              <span className="text-[#71767b] text-[13px]">{tweet.acct.handle} · {xAgo(tweet.ts)}{tweet.editedAt ? ` · Modifié · ${new Date(tweet.editedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+            </div>
+            <XTweetMenu
+              label={tweet.acct.name}
+              open={menuId === `tweet:${tweet.id}`}
+              onToggle={() => onToggleMenu(`tweet:${tweet.id}`)}
+              onEdit={onEditTweet}
+              onDelete={onDeleteTweet}
+            />
           </div>
-          <p className="text-[15px] text-white leading-relaxed whitespace-pre-wrap break-words">
-            <XTweetText text={tweet.text} />
-          </p>
+          {editingTweet ? (
+            <div className="rounded-xl border border-[#1d9bf0]/60 bg-[#16181c] p-2.5">
+              <textarea
+                autoFocus
+                value={editDraft}
+                onChange={event => onEditDraftChange(event.target.value)}
+                className="min-h-[76px] w-full resize-none bg-transparent text-[15px] leading-relaxed text-white outline-none"
+              />
+              <div className="mt-2 flex justify-end gap-2">
+                <button onClick={onCancelEdit} className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-[#71767b] hover:bg-white/10">Annuler</button>
+                <button onClick={onSaveEdit} disabled={!editDraft.trim()} className="rounded-full bg-[#1d9bf0] px-3.5 py-1.5 text-[12px] font-bold text-white disabled:opacity-40">Enregistrer</button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[15px] text-white leading-relaxed whitespace-pre-wrap break-words">
+              <XTweetText text={tweet.text} />
+            </p>
+          )}
           {tweet.imageUrl && (
             <div className="mt-3 rounded-2xl overflow-hidden border border-[#2f3336]" style={{ maxHeight: 280 }}>
               <img src={tweet.imageUrl} alt="" className="w-full object-cover" style={{ maxHeight: 280 }} />
@@ -2578,14 +2733,38 @@ function XCard({ tweet, expanded, onToggleExpand, onLike, onRT, onSimulate, simu
                   {!isLast && <div className="w-0.5 flex-1 bg-[#2f3336] mt-1.5 min-h-[8px]" />}
                 </div>
                 <div className="flex-1 min-w-0 pb-1">
-                  <div className="flex items-center gap-1.5 text-[13px] flex-wrap leading-none mb-1">
-                    <span className="font-bold text-white">{r.acct.name}</span>
-                    <XBadgeIcon type={r.acct.badge} />
-                    <span className="text-[#71767b]">{r.acct.handle} · {xAgo(r.ts)}</span>
+                  <div className="flex items-start gap-1.5 mb-1">
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] flex-wrap leading-none">
+                      <span className="font-bold text-white">{r.acct.name}</span>
+                      <XBadgeIcon type={r.acct.badge} />
+                      <span className="text-[#71767b]">{r.acct.handle} · {xAgo(r.ts)}{r.editedAt ? ` · Modifié · ${new Date(r.editedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+                    </div>
+                    <XTweetMenu
+                      label={r.acct.name}
+                      open={menuId === `reply:${tweet.id}:${r.id}`}
+                      onToggle={() => onToggleMenu(`reply:${tweet.id}:${r.id}`)}
+                      onEdit={() => onEditReply(r)}
+                      onDelete={() => onDeleteReply(r.id)}
+                    />
                   </div>
-                  <p className="text-[14px] text-white leading-relaxed">
-                    <XTweetText text={r.text} />
-                  </p>
+                  {editing?.tweetId === tweet.id && editing.replyId === r.id ? (
+                    <div className="rounded-xl border border-[#1d9bf0]/60 bg-[#16181c] p-2.5">
+                      <textarea
+                        autoFocus
+                        value={editDraft}
+                        onChange={event => onEditDraftChange(event.target.value)}
+                        className="min-h-[64px] w-full resize-none bg-transparent text-[14px] leading-relaxed text-white outline-none"
+                      />
+                      <div className="mt-2 flex justify-end gap-2">
+                        <button onClick={onCancelEdit} className="rounded-full px-3 py-1 text-[11px] font-semibold text-[#71767b] hover:bg-white/10">Annuler</button>
+                        <button onClick={onSaveEdit} disabled={!editDraft.trim()} className="rounded-full bg-[#1d9bf0] px-3 py-1 text-[11px] font-bold text-white disabled:opacity-40">Enregistrer</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[14px] text-white leading-relaxed">
+                      <XTweetText text={r.text} />
+                    </p>
+                  )}
                   <div className="flex gap-5 mt-2 text-[#71767b] text-[12px] items-center">
                     <span className="flex items-center gap-1"><MessageCircle size={12} /></span>
                     <span className="flex items-center gap-1"><Heart size={12} /><span>{r.likes}</span></span>
@@ -2607,7 +2786,18 @@ function TwitterPage() {
   const { pages } = usePages();
 
   const wikiAccts = useMemo(() => pages.filter(p => !p.isTrashed).map(wikiToXAcct), [pages]);
-  const allAccts  = useMemo(() => [...wikiAccts, ...XMEDIA], [wikiAccts]);
+  const dynamicFanAccts = useMemo(() => wikiAccts.slice(0, 3).flatMap(acct =>
+    TWITTER_ACCOUNT_TEMPLATES.CLUB_ACTU.slice(0, 2).map(suffix => ({
+      handle: `${acct.handle}${suffix}`.replace(/[^@a-zA-Z0-9_]/g, ''),
+      name: `${acct.name} ${suffix}`,
+      initials: xInits(acct.name),
+      avatarColor: xColor(`${acct.name}${suffix}`),
+      badge: null,
+      category: 'WIKI_OFFICIAL' as const,
+      isSystem: true,
+    })),
+  ), [wikiAccts]);
+  const allAccts  = useMemo(() => uniqueXAccounts([...wikiAccts, ...XMEDIA, ...XREGISTRY, ...dynamicFanAccts]), [wikiAccts, dynamicFanAccts]);
 
   const [tweets, setTweetsState] = useState<XTweet[]>(() => {
     try { const s = localStorage.getItem(XSTORAGE); if (s) return JSON.parse(s); } catch {}
@@ -2623,6 +2813,9 @@ function TwitterPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [aiLoading, setAiLoading] = useState<Set<string>>(new Set());
   const [aiPosting, setAiPosting] = useState(false);
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<XEditTarget>(null);
+  const [editDraft, setEditDraft] = useState('');
 
   const author    = allAccts[authorIdx] ?? XINIT[0].acct;
   const displayed = tab === 'foryou' ? tweets : tweets.filter(t => !t.acct.isSystem);
@@ -2635,6 +2828,36 @@ function TwitterPage() {
   ): Promise<XReply[]> => {
     const mentions = extractMentions(tweetText);
     const alreadyReplied = new Set(existingReplies.map(r => r.acct.handle.toLowerCase()));
+    const topic = classifyTweetTopic(tweetText);
+    const knownMentions = mentions
+      .map(handle => allAccts.find(acct => acct.handle.toLowerCase() === handle.toLowerCase()))
+      .filter((acct): acct is XAccount => Boolean(acct))
+      .filter(acct => acct.handle.toLowerCase() !== tweetAuthor.handle.toLowerCase())
+      .filter(acct => !alreadyReplied.has(acct.handle.toLowerCase()));
+    const targetReplyCount = Math.max(2, Math.min(4, knownMentions.length + 2));
+    const contextualAccounts = allAccts
+      .filter(acct => contextCategories(topic).includes(acct.category))
+      .filter(acct => acct.handle.toLowerCase() !== tweetAuthor.handle.toLowerCase())
+      .filter(acct => !alreadyReplied.has(acct.handle.toLowerCase()));
+    const candidates = uniqueXAccounts([...knownMentions, ...contextualAccounts]).slice(0, 70);
+    const makeReply = (acct: XAccount, content: string, id: string): XReply => ({
+      id,
+      acct,
+      text: content,
+      likes: Math.floor(Math.random() * 120) + 2,
+      ts: Date.now() - Math.floor(Math.random() * 180000),
+    });
+    const buildFallback = (limit = targetReplyCount) => {
+      const required = knownMentions.map((acct, index) =>
+        makeReply(acct, genMentionReply(acct, tweetText, tweetAuthor), `xr_fb_mention_${Date.now()}_${index}`),
+      );
+      const used = new Set([tweetAuthor.handle.toLowerCase(), ...required.map(reply => reply.acct.handle.toLowerCase()), ...alreadyReplied]);
+      const extras = candidates
+        .filter(acct => !used.has(acct.handle.toLowerCase()))
+        .slice(0, Math.max(0, limit - required.length))
+        .map((acct, index) => makeReply(acct, xReplyTpl(tweetAuthor.name)[index % xReplyTpl(tweetAuthor.name).length], `xr_fb_context_${Date.now()}_${index}`));
+      return [...required, ...extras];
+    };
     try {
       const res = await fetch('/api/generate-replies', {
         method: 'POST',
@@ -2643,52 +2866,36 @@ function TwitterPage() {
           tweetText,
           author: { handle: tweetAuthor.handle, name: tweetAuthor.name, badge: tweetAuthor.badge },
           mentions,
-          availableAccounts: allAccts.map(a => ({ handle: a.handle, name: a.name, badge: a.badge, isSystem: a.isSystem })),
+          topic,
+          availableAccounts: candidates.map(a => ({ handle: a.handle, name: a.name, badge: a.badge, category: a.category, country: a.country, isSystem: a.isSystem })),
         }),
       });
       if (!res.ok) throw new Error('API error');
       const data = await res.json() as { replies: Array<{ handle: string; name: string; content: string }> };
-      const aiReplies: XReply[] = [];
-      for (const [i, r] of data.replies.entries()) {
+      const returned = new Map<string, { handle: string; name: string; content: string }>();
+      const rawReplies = Array.isArray(data.replies) ? data.replies : [];
+      for (const r of rawReplies) {
+        if (!r || typeof r.handle !== 'string' || typeof r.name !== 'string' || typeof r.content !== 'string') continue;
         const normalHandle = r.handle.startsWith('@') ? r.handle : `@${r.handle}`;
-        if (alreadyReplied.has(normalHandle.toLowerCase())) continue;
-        // Find the matching account for avatar/badge, fallback to generated
-        const acct: XAccount = allAccts.find(a => a.handle.toLowerCase() === normalHandle.toLowerCase())
-          ?? { handle: normalHandle, name: r.name, initials: xInits(r.name), avatarColor: xColor(r.name), badge: null };
-        alreadyReplied.add(normalHandle.toLowerCase());
-        aiReplies.push({
-          id: `xr_ai_${Date.now()}_${i}`,
-          acct,
-          text: r.content,
-          likes: Math.floor(Math.random() * 120) + 2,
-          ts: Date.now() - Math.floor(Math.random() * 180000),
-        });
+        if (!alreadyReplied.has(normalHandle.toLowerCase()) && r.content?.trim()) {
+          returned.set(normalHandle.toLowerCase(), { ...r, handle: normalHandle });
+        }
       }
-      return aiReplies;
+      const mentionReplies = knownMentions.map((acct, index) => {
+        const generated = returned.get(acct.handle.toLowerCase());
+        return makeReply(acct, generated?.content?.trim() || genMentionReply(acct, tweetText, tweetAuthor), `xr_ai_mention_${Date.now()}_${index}`);
+      });
+      const used = new Set([tweetAuthor.handle.toLowerCase(), ...alreadyReplied, ...mentionReplies.map(reply => reply.acct.handle.toLowerCase())]);
+      const regularReplies = [...returned.values()]
+        .map(reply => ({ reply, acct: candidates.find(acct => acct.handle.toLowerCase() === reply.handle.toLowerCase()) }))
+        .filter((value): value is { reply: { handle: string; name: string; content: string }; acct: XAccount } => Boolean(value.acct))
+        .filter(value => !used.has(value.acct.handle.toLowerCase()))
+        .slice(0, Math.max(0, targetReplyCount - mentionReplies.length))
+        .map((value, index) => makeReply(value.acct, value.reply.content.trim(), `xr_ai_context_${Date.now()}_${index}`));
+      const resolved = [...mentionReplies, ...regularReplies];
+      return resolved.length >= Math.min(2, Math.max(1, knownMentions.length)) ? resolved : buildFallback();
     } catch {
-      // Fallback to local generation if AI fails
-      const mentionReplies: XReply[] = mentions
-        .map(h => allAccts.find(a => a.handle.toLowerCase() === h.toLowerCase()))
-        .filter(Boolean)
-        .filter(a => !alreadyReplied.has(a!.handle.toLowerCase()))
-        .map((acct, i) => ({
-          id: `xr_fb_${Date.now()}_${i}`,
-          acct: acct!,
-          text: genMentionReply(acct!, tweetText, tweetAuthor),
-          likes: Math.floor(Math.random() * 60) + 2,
-          ts: Date.now() - Math.floor(Math.random() * 120000),
-        }));
-      const usedHandles = new Set([tweetAuthor.handle.toLowerCase(), ...mentions.map(h => h.toLowerCase()), ...alreadyReplied]);
-      const pool = allAccts.filter(a => !usedHandles.has(a.handle.toLowerCase())).sort(() => Math.random() - 0.5);
-      const tpl = xReplyTpl(tweetAuthor.name);
-      const want = Math.max(0, 3 - mentionReplies.length);
-      const regularReplies: XReply[] = pool.slice(0, want).map((acct, i) => ({
-        id: `xr_fbr_${Date.now()}_${i}`, acct,
-        text: tpl[Math.floor(Math.random() * tpl.length)],
-        likes: Math.floor(Math.random() * 120) + 1,
-        ts: Date.now() - Math.floor(Math.random() * 600000),
-      }));
-      return [...mentionReplies, ...regularReplies];
+      return buildFallback();
     }
   };
 
@@ -2715,6 +2922,37 @@ function TwitterPage() {
 
   const toggleLike = (id: string) => setTweets(tweets.map(t => t.id === id ? { ...t, liked: !t.liked, likes: t.liked ? t.likes - 1 : t.likes + 1 } : t));
   const toggleRT   = (id: string) => setTweets(tweets.map(t => t.id === id ? { ...t, retweeted: !t.retweeted, retweets: t.retweeted ? t.retweets - 1 : t.retweets + 1 } : t));
+
+  const beginEdit = (tweetId: string, reply?: XReply) => {
+    const tweet = tweets.find(item => item.id === tweetId);
+    if (!tweet) return;
+    setMenuId(null);
+    setEditing({ tweetId, ...(reply ? { replyId: reply.id } : {}) });
+    setEditDraft(reply?.text ?? tweet.text);
+  };
+  const cancelEdit = () => { setEditing(null); setEditDraft(''); };
+  const saveEdit = () => {
+    if (!editing || !editDraft.trim()) return;
+    const updated = tweets.map(tweet => {
+      if (tweet.id !== editing.tweetId) return tweet;
+      if (!editing.replyId) return { ...tweet, text: editDraft.trim(), editedAt: Date.now() };
+      return {
+        ...tweet,
+        replies: tweet.replies.map(reply => reply.id === editing.replyId ? { ...reply, text: editDraft.trim(), editedAt: Date.now() } : reply),
+      };
+    });
+    setTweets(updated);
+    cancelEdit();
+  };
+  const deleteTweet = (id: string) => {
+    setTweets(tweets.filter(tweet => tweet.id !== id));
+    setExpanded(prev => { const next = new Set(prev); next.delete(id); return next; });
+    setMenuId(null);
+  };
+  const deleteReply = (tweetId: string, replyId: string) => {
+    setTweets(tweets.map(tweet => tweet.id === tweetId ? { ...tweet, replies: tweet.replies.filter(reply => reply.id !== replyId) } : tweet));
+    setMenuId(null);
+  };
 
   const simulate = async (id: string) => {
     const tw = tweets.find(t => t.id === id); if (!tw) return;
@@ -2832,7 +3070,19 @@ function TwitterPage() {
             <XCard key={t.id} tweet={t} expanded={expanded.has(t.id)}
               onToggleExpand={() => setExpanded(prev => { const s = new Set(prev); s.has(t.id) ? s.delete(t.id) : s.add(t.id); return s; })}
               onLike={() => toggleLike(t.id)} onRT={() => toggleRT(t.id)} onSimulate={() => simulate(t.id)}
-              simulateLoading={aiLoading.has(t.id)} />
+              simulateLoading={aiLoading.has(t.id)}
+              menuId={menuId}
+              onToggleMenu={id => setMenuId(current => current === id ? null : id)}
+              onEditTweet={() => beginEdit(t.id)}
+              onDeleteTweet={() => deleteTweet(t.id)}
+              onEditReply={reply => beginEdit(t.id, reply)}
+              onDeleteReply={replyId => deleteReply(t.id, replyId)}
+              editing={editing}
+              editDraft={editDraft}
+              onEditDraftChange={setEditDraft}
+              onSaveEdit={saveEdit}
+              onCancelEdit={cancelEdit}
+            />
           ))}
         </div>
       </div>
