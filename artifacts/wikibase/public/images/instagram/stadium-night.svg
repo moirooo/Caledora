@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-label="Stade de Caledora">
+  <defs><linearGradient id="n" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#091229"/><stop offset="1" stop-color="#255e72"/></linearGradient><radialGradient id="l"><stop stop-color="#f7fbff"/><stop offset="1" stop-color="#bfe7ff" stop-opacity="0"/></radialGradient></defs>
+  <rect width="1200" height="900" fill="url(#n)"/>
+  <ellipse cx="600" cy="410" rx="560" ry="260" fill="#101b31" stroke="#92d9ff" stroke-width="8"/>
+  <ellipse cx="600" cy="470" rx="382" ry="155" fill="#1c784d"/>
+  <path d="M220 470h760M600 315v310M360 335q240 130 480 0M360 605q240-130 480 0" stroke="#d6ffe0" stroke-width="5" fill="none" opacity=".78"/>
+  <g fill="url(#l)"><circle cx="146" cy="158" r="152"/><circle cx="1054" cy="158" r="152"/></g>
+  <text x="600" y="815" text-anchor="middle" fill="#effaff" font-family="Arial, sans-serif" font-size="48" font-weight="700" letter-spacing="11">MATCH NIGHT</text>
+</svg>

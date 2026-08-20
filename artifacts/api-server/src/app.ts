@@ -25,7 +25,9 @@ app.use(
     },
   }),
 );
-app.use(cors());
+// All product surfaces are served through the shared same-origin proxy.
+// Do not expose local AI simulation endpoints to arbitrary browser origins.
+app.use(cors({ origin: false }));
 app.use(express.json({ limit: "32kb" }));
 app.use(express.urlencoded({ extended: true, limit: "32kb" }));
 

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Caledora">
+  <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#192552"/><stop offset=".57" stop-color="#63358d"/><stop offset="1" stop-color="#f08a68"/></linearGradient></defs>
+  <rect width="1200" height="800" fill="url(#sky)"/>
+  <circle cx="930" cy="190" r="72" fill="#ffc987" opacity=".85"/>
+  <path d="M0 590 170 440l130 105 125-198 159 194 118-99 96 78 153-166 159 161v285H0Z" fill="#10152d" opacity=".85"/>
+  <path d="M0 661c230-87 385 35 587-22 214-61 343 28 613-19v180H0Z" fill="#080a19" opacity=".9"/>
+  <text x="70" y="113" fill="#fff" font-family="Arial, sans-serif" font-size="62" font-weight="700" letter-spacing="8">CALEDORA</text>
+</svg>

@@ -8,6 +8,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { allText, demoSource, formatDate, loadPages, parseWikiText, savePages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
 import OriaBank from '@/pages/OriaBank.jsx';
 import { TWITTER_ACCOUNTS, TWITTER_ACCOUNT_TEMPLATES, type TwitterAccountCategory } from '@/data/twitterAccounts';
+import { InstagramApp } from '@/components/instagram/InstagramApp';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
 
@@ -442,7 +443,7 @@ function Shell({ children }: { children: ReactNode }) {
   const { appearance } = useAppearance();
 
   /* Hide the entire WikiBase chrome on the home dashboard */
-  const isHome = location === '/' || location === '/twitter' || location === '/oria';
+  const isHome = location === '/' || location === '/twitter' || location === '/oria' || location === '/instagram';
 
   const doSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -670,7 +671,7 @@ function Dashboard() {
     // WikiBase — white bg so the dark W logo is visible
     { id: 'wikibase',  label: 'WikiBase',        image: img('site_logo.png'),  imgBg: '#ffffff', imgFit: 'contain', imgPad: true,  bg: '#ffffff', active: true,  activeBadge: active.length > 0 ? 'Actif' : undefined },
     // Instagram — image covers tile naturally (gradient logo)
-    { id: 'instagram', label: 'Instagram',        image: img('Instagram.png'),  bg: 'linear-gradient(145deg,#833ab4,#fd1d1d)', active: false },
+    { id: 'instagram', label: 'Instagram',        image: img('Instagram.png'),  bg: 'linear-gradient(145deg,#833ab4,#fd1d1d)', active: true },
     // Twitter/X — black logo → invert to white, keep dark tile
     { id: 'twitter',   label: 'Twitter / X',      image: img('XLogo.png'),      bg: 'linear-gradient(145deg,#111827,#1f2937)', imgFit: 'contain', imgPad: true, imgFilter: 'brightness(0) invert(1)', active: true },
     // CFC Official
@@ -688,6 +689,7 @@ function Dashboard() {
   const handleApp = (app: DashApp) => {
     if (!app.active) { setComingSoon(app.label); return; }
     if (app.id === 'wikibase')  navigate('/wiki');
+    if (app.id === 'instagram') navigate('/instagram');
     if (app.id === 'twitter')   navigate('/twitter');
     if (app.id === 'airways')   { window.location.href = '/airways'; return; }
     if (app.id === 'bank')      { window.location.href = '/oria'; return; }
@@ -3129,6 +3131,11 @@ function TwitterPage() {
   );
 }
 
+function InstagramPage() {
+  const { pages } = usePages();
+  return <InstagramApp pages={pages} />;
+}
+
 
 function Router() {
   return (
@@ -3137,6 +3144,7 @@ function Router() {
         <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/oria" component={OriaBank} />
+        <Route path="/instagram" component={InstagramPage} />
         <Route path="/wiki" component={WikiList} />
         <Route path="/twitter" component={TwitterPage} />
         <Route path="/create" component={CreatePage} />
