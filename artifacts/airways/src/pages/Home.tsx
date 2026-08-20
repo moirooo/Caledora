@@ -262,17 +262,10 @@ function NetworkGlyph() {
 
 function FleetGlyph() {
   return (
-    <svg viewBox="0 0 400 340" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-hidden="true">
-      <rect width="400" height="340" fill="var(--navy)" />
-      <line x1="0" y1="230" x2="400" y2="230" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
-      {[
-        { x: 60, w: 46, h: 20 },
-        { x: 140, w: 60, h: 26 },
-        { x: 230, w: 74, h: 32 },
-        { x: 330, w: 40, h: 18 },
-      ].map((b, i) => (
-        <rect key={i} x={b.x} y={230 - b.h} width={b.w} height={b.h} fill="var(--gold-light)" opacity="0.85" rx="2" />
-      ))}
-    </svg>
+    <img
+      src="/images/airbus.png"
+      alt="Avion Airbus de la flotte Caledora Airways"
+      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+    />
   )
 }
