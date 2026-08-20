@@ -31,9 +31,18 @@ export async function generateInstagramCaption(author: InstagramProfile, context
 const localComment = (profile: InstagramProfile, relation?: string) => {
   if (relation === 'rival') return 'On vous attend sur le terrain. 👀';
   if (relation === 'coéquipier') return 'Toujours ensemble, quelle équipe. 💪';
-  if (relation === 'couple') return 'Tellement fière de toi. ❤️';
-  if (profile.accountType === 'club') return 'Toute la famille est derrière vous. 💙';
+  if (relation === 'conjoint(e)') return 'Tellement fière de toi. ❤️';
+  if (profile.accountType === 'club sportif') return 'Toute la famille est derrière vous. 💙';
   return profile.personality === 'provocateur' ? 'Ça parle beaucoup, mais on regarde. 🔥' : 'Magnifique énergie, continue comme ça. ✨';
+};
+
+const communityProfilesForCaption = (caption: string, candidates: InstagramProfile[]) => {
+  const normalized = caption.toLowerCase();
+  const intimateOrCasual = /(amour|cœur|coeur|famille|vacance|week-?end|souvenir|anniversaire|romance|intime|photo)/u.test(normalized);
+  const allowedIds = intimateOrCasual
+    ? new Set(['community-era', 'community-culture', 'community-vibes', 'community-circle'])
+    : new Set(['community-tribune', 'community-era', 'community-zone', 'community-stadium']);
+  return candidates.filter(profile => allowedIds.has(profile.id));
 };
 
 export async function generateInstagramComments(
@@ -42,8 +51,12 @@ export async function generateInstagramComments(
   candidates: InstagramProfile[],
 ): Promise<AiComment[]> {
   const mentions = [...caption.matchAll(/@([a-z0-9._]+)/gi)].map(match => match[1].toLowerCase());
-  const mentioned = candidates.filter(profile => mentions.includes(profile.username.toLowerCase()) && profile.id !== author.id);
   const eligible = candidates.filter(profile => profile.id !== author.id);
+  const profilesByUsername = new Map(eligible.map(profile => [profile.username.toLowerCase(), profile]));
+  const mentioned = [...new Set(mentions)].map(username => profilesByUsername.get(username)).filter((profile): profile is InstagramProfile => Boolean(profile));
+  const related = eligible.filter(profile => author.relations.some(relation => relation.profileId === profile.id) && !mentioned.some(item => item.id === profile.id));
+  const required = [...mentioned, ...related];
+  const community = communityProfilesForCaption(caption, eligible).filter(profile => !required.some(item => item.id === profile.id));
   try {
     const response = await fetch('/api/generate-instagram-comments', {
       method: 'POST',
@@ -64,17 +77,17 @@ export async function generateInstagramComments(
         byAuthor.set(comment.authorId, { authorId: comment.authorId, text: comment.text.trim().slice(0, 400) });
       }
     });
-    const required = mentioned.map(profile => byAuthor.get(profile.id) ?? { authorId: profile.id, text: localComment(profile, author.relations.find(item => item.profileId === profile.id)?.type) });
-    const extras = [...byAuthor.values()].filter(comment => !mentioned.some(profile => profile.id === comment.authorId)).slice(0, Math.max(0, 4 - required.length));
-    if (required.length + extras.length >= Math.min(2, Math.max(1, mentioned.length))) return [...required, ...extras];
+    const requiredComments = required.map(profile => byAuthor.get(profile.id) ?? { authorId: profile.id, text: localComment(profile, author.relations.find(item => item.profileId === profile.id)?.type) });
+    const extras = [...byAuthor.values()].filter(comment => community.some(profile => profile.id === comment.authorId) && !required.some(profile => profile.id === comment.authorId)).slice(0, Math.max(0, 4 - requiredComments.length));
+    if (requiredComments.length + extras.length >= Math.min(4, Math.max(1, required.length))) return [...requiredComments, ...extras];
   } catch {
     // Local fallback keeps publishing and mention rules usable offline.
   }
-  const used = new Set(mentioned.map(profile => profile.id));
-  const extras = eligible.filter(profile => !used.has(profile.id)).slice(0, Math.max(0, 3 - mentioned.length))
+  const used = new Set(required.map(profile => profile.id));
+  const extras = community.filter(profile => !used.has(profile.id)).slice(0, Math.max(0, 4 - required.length))
     .map(profile => ({ authorId: profile.id, text: localComment(profile, author.relations.find(item => item.profileId === profile.id)?.type) }));
   return [
-    ...mentioned.map(profile => ({ authorId: profile.id, text: localComment(profile, author.relations.find(item => item.profileId === profile.id)?.type) })),
+    ...required.map(profile => ({ authorId: profile.id, text: localComment(profile, author.relations.find(item => item.profileId === profile.id)?.type) })),
     ...extras,
   ];
 }

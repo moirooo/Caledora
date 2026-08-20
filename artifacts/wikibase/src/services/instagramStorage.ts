@@ -1,9 +1,14 @@
 import type { WikiPage } from '@/lib/wikibase';
 
 export type InstagramAccountType =
-  | 'joueur' | 'joueuse' | 'club' | 'coach' | 'président'
-  | 'personnalité publique' | 'femme/compagne' | 'média';
-export type InstagramRelationType = 'coéquipier' | 'club lié' | 'rival' | 'couple' | 'ami proche' | 'coach' | 'famille';
+  | 'athlète / joueur' | 'club sportif' | 'entreprise / marque'
+  | 'institution / ville' | 'artiste / personnalité' | 'média / presse'
+  | 'personnel / proche';
+export type InstagramRelationType = 'coéquipier' | 'club lié' | 'rival' | 'conjoint(e)' | 'ami proche' | 'coach' | 'famille' | 'sponsor' | 'partenaire';
+export type InstagramReputation = 'leader' | 'discret' | 'controversé' | 'populaire';
+export type InstagramPersonality = 'familier' | 'corpo' | 'provocateur' | 'modeste';
+export type InstagramCommunicationTone = 'institutionnel' | 'proche des fans' | 'luxe / prestige' | 'agressif / piquant';
+export type InstagramStatus = 'historique' | 'incontournable' | 'populaire' | 'disruptif';
 export type InstagramTone = 'célébration' | 'défaite' | 'clash' | 'romance' | 'officiel';
 export type InstagramRatio = 'square' | 'portrait' | 'landscape';
 
@@ -18,8 +23,10 @@ export type InstagramProfile = {
   bio: string;
   link?: string;
   avatar: string;
-  reputation: 'populaire' | 'arrogant' | 'discret' | 'controversé' | 'leader' | 'clash';
-  personality: 'familier' | 'corpo' | 'provocateur' | 'timide';
+  reputation: InstagramReputation;
+  personality: InstagramPersonality;
+  communicationTone: InstagramCommunicationTone;
+  status: InstagramStatus;
   followers: number;
   following: number;
   followingByViewer?: boolean;
@@ -43,8 +50,10 @@ export type InstagramPost = {
   location?: string;
   createdAt: number;
   likes: number;
+  commentCount?: number;
   likedByViewer?: boolean;
   savedByViewer?: boolean;
+  tags?: string[];
   comments: InstagramComment[];
 };
 
@@ -74,10 +83,12 @@ export type InstagramDatabase = {
 };
 
 const STORAGE_KEY = 'caledora-instagram-v1';
-const accountTypes: InstagramAccountType[] = ['joueur', 'joueuse', 'club', 'coach', 'président', 'personnalité publique', 'femme/compagne', 'média'];
-const reputations: InstagramProfile['reputation'][] = ['populaire', 'arrogant', 'discret', 'controversé', 'leader', 'clash'];
-const personalities: InstagramProfile['personality'][] = ['familier', 'corpo', 'provocateur', 'timide'];
-const relations: InstagramRelationType[] = ['coéquipier', 'club lié', 'rival', 'couple', 'ami proche', 'coach', 'famille'];
+export const instagramAccountTypes: InstagramAccountType[] = ['athlète / joueur', 'club sportif', 'entreprise / marque', 'institution / ville', 'artiste / personnalité', 'média / presse', 'personnel / proche'];
+export const instagramRelationTypes: InstagramRelationType[] = ['coéquipier', 'club lié', 'rival', 'conjoint(e)', 'ami proche', 'coach', 'famille', 'sponsor', 'partenaire'];
+export const instagramReputations: InstagramReputation[] = ['leader', 'discret', 'controversé', 'populaire'];
+export const instagramPersonalities: InstagramPersonality[] = ['familier', 'corpo', 'provocateur', 'modeste'];
+export const instagramCommunicationTones: InstagramCommunicationTone[] = ['institutionnel', 'proche des fans', 'luxe / prestige', 'agressif / piquant'];
+export const instagramStatuses: InstagramStatus[] = ['historique', 'incontournable', 'populaire', 'disruptif'];
 const ratios: InstagramRatio[] = ['square', 'portrait', 'landscape'];
 const legacyMedia: Record<string, string> = { 'Instagram.png': 'brand.svg', 'rivages.jpg': 'caledora-street.svg', 'airways.jpg': 'stadium-night.svg', 'airways2.jpg': 'stadium-night.svg', 'site_logo.png': 'profile.svg' };
 const text = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -92,6 +103,30 @@ const safeLink = (value: unknown) => {
   return /^https?:\/\/[^\s]+$/i.test(url) ? url : undefined;
 };
 
+const legacyAccountTypes: Record<string, InstagramAccountType> = {
+  joueur: 'athlète / joueur', joueuse: 'athlète / joueur', coach: 'athlète / joueur', président: 'athlète / joueur',
+  club: 'club sportif', 'personnalité publique': 'artiste / personnalité', 'femme/compagne': 'personnel / proche', média: 'média / presse',
+};
+const normaliseAccountType = (value: unknown): InstagramAccountType => {
+  const item = text(value, 60).toLowerCase();
+  return instagramAccountTypes.includes(item as InstagramAccountType) ? item as InstagramAccountType : legacyAccountTypes[item] ?? 'artiste / personnalité';
+};
+const normaliseReputation = (value: unknown): InstagramReputation => {
+  const item = text(value, 30).toLowerCase();
+  if (item === 'arrogant' || item === 'clash') return 'controversé';
+  return instagramReputations.includes(item as InstagramReputation) ? item as InstagramReputation : 'populaire';
+};
+const normalisePersonality = (value: unknown): InstagramPersonality => {
+  const item = text(value, 30).toLowerCase();
+  if (item === 'timide') return 'modeste';
+  return instagramPersonalities.includes(item as InstagramPersonality) ? item as InstagramPersonality : 'familier';
+};
+const normaliseRelationType = (value: unknown): InstagramRelationType | null => {
+  const item = text(value, 40).toLowerCase();
+  const mapped = item === 'couple' ? 'conjoint(e)' : item;
+  return instagramRelationTypes.includes(mapped as InstagramRelationType) ? mapped as InstagramRelationType : null;
+};
+
 export function usernameFrom(value: string) {
   const plain = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .replace(/[^a-z0-9]+/g, '.').replace(/(^\.|\.$)/g, '');
@@ -100,12 +135,13 @@ export function usernameFrom(value: string) {
 
 function kindFrom(page: WikiPage): InstagramAccountType {
   const context = `${page.type} ${page.category} ${page.categories.join(' ')}`.toLowerCase();
-  if (/(club|football|sport)/.test(context)) return 'club';
-  if (/(coach|entra[iî]neur)/.test(context)) return 'coach';
-  if (/(président|president|dirigeant)/.test(context)) return 'président';
-  if (/(média|media|journal|presse)/.test(context)) return 'média';
-  if (/(femme|compagne)/.test(context)) return 'femme/compagne';
-  return 'personnalité publique';
+  if (/(club|football|sport)/.test(context)) return 'club sportif';
+  if (/(média|media|journal|presse)/.test(context)) return 'média / presse';
+  if (/(ville|institution|ministère|mairie)/.test(context)) return 'institution / ville';
+  if (/(entreprise|marque|bank|banque)/.test(context)) return 'entreprise / marque';
+  if (/(femme|compagne|famille)/.test(context)) return 'personnel / proche';
+  if (/(joueur|joueuse|coach|entra[iî]neur|président|president|dirigeant)/.test(context)) return 'athlète / joueur';
+  return 'artiste / personnalité';
 }
 
 function profileFromPage(page: WikiPage): InstagramProfile {
@@ -117,14 +153,16 @@ function profileFromPage(page: WikiPage): InstagramProfile {
     wikiPageId: page.id,
     username: usernameFrom(title),
     displayName: title,
-    verified: type === 'club' || type === 'média',
+    verified: type === 'club sportif' || type === 'média / presse' || type === 'institution / ville',
     accountType: type,
     category: page.category || 'Caledora',
     bio: page.subtitle || `Compte officiel de ${title} · Caledora`,
     link: undefined,
     avatar,
-    reputation: type === 'club' ? 'leader' : 'populaire',
-    personality: type === 'club' ? 'corpo' : 'familier',
+    reputation: type === 'club sportif' ? 'leader' : 'populaire',
+    personality: type === 'club sportif' ? 'corpo' : 'familier',
+    communicationTone: type === 'club sportif' ? 'proche des fans' : 'institutionnel',
+    status: type === 'club sportif' ? 'incontournable' : 'populaire',
     followers: 1200 + title.length * 142,
     following: 64 + title.length * 3,
     relations: [],
@@ -138,17 +176,28 @@ function seedDatabase(pages: WikiPage[]): InstagramDatabase {
     username: 'caledora',
     displayName: 'Caledora',
     verified: true,
-    accountType: 'média',
+    accountType: 'média / presse',
     category: 'Média · Caledora',
     bio: 'Le quotidien du football et de la culture à Caledora.',
     avatar: 'brand.svg',
     reputation: 'leader',
     personality: 'corpo',
+    communicationTone: 'institutionnel',
+    status: 'incontournable',
     followers: 248000,
     following: 438,
     relations: [],
   };
-  const allProfiles = [official, ...profiles];
+  const communityProfiles: InstagramProfile[] = [
+    { id: 'community-tribune', username: 'tribunecaledora', displayName: 'Tribune Caledora', verified: false, accountType: 'média / presse', category: 'Supporters · Caledora', bio: 'Le regard des tribunes sur chaque moment fort.', avatar: 'profile.svg', reputation: 'populaire', personality: 'familier', communicationTone: 'proche des fans', status: 'populaire', followers: 18200, following: 316, relations: [] },
+    { id: 'community-era', username: 'caledoraera', displayName: 'Caledora Era', verified: false, accountType: 'personnel / proche', category: 'Communauté', bio: 'Fan account. Pour les grands soirs et les petites victoires.', avatar: 'profile.svg', reputation: 'populaire', personality: 'provocateur', communicationTone: 'proche des fans', status: 'disruptif', followers: 9400, following: 780, relations: [] },
+    { id: 'community-zone', username: 'caledorazone', displayName: 'Caledora Zone', verified: false, accountType: 'média / presse', category: 'Actualités sportives', bio: 'Infos, terrain et coulisses du football caledorien.', avatar: 'profile.svg', reputation: 'populaire', personality: 'corpo', communicationTone: 'institutionnel', status: 'populaire', followers: 53600, following: 224, relations: [] },
+    { id: 'community-stadium', username: 'stadecaledora', displayName: 'Stade Caledora', verified: false, accountType: 'personnel / proche', category: 'Supporters · Football', bio: 'Les soirs de match vus depuis les tribunes.', avatar: 'profile.svg', reputation: 'populaire', personality: 'familier', communicationTone: 'proche des fans', status: 'populaire', followers: 22100, following: 331, relations: [] },
+    { id: 'community-culture', username: 'caledoraculture', displayName: 'Caledora Culture', verified: false, accountType: 'artiste / personnalité', category: 'Culture · Ville', bio: 'La ville, ses visages et ses rendez-vous.', avatar: 'profile.svg', reputation: 'discret', personality: 'modeste', communicationTone: 'luxe / prestige', status: 'historique', followers: 12700, following: 418, relations: [] },
+    { id: 'community-vibes', username: 'caledoravibes', displayName: 'Caledora Vibes', verified: false, accountType: 'artiste / personnalité', category: 'Culture · Communauté', bio: 'Les instants simples qui font la ville.', avatar: 'profile.svg', reputation: 'populaire', personality: 'familier', communicationTone: 'proche des fans', status: 'disruptif', followers: 8600, following: 612, relations: [] },
+    { id: 'community-circle', username: 'cerclecaledora', displayName: 'Cercle Caledora', verified: false, accountType: 'personnel / proche', category: 'Communauté', bio: 'Des proches, des souvenirs et de belles énergies.', avatar: 'profile.svg', reputation: 'discret', personality: 'modeste', communicationTone: 'proche des fans', status: 'populaire', followers: 6300, following: 507, relations: [] },
+  ];
+  const allProfiles = [official, ...communityProfiles, ...profiles];
   const firstProfile = profiles[0] ?? official;
   return {
     version: 1,
@@ -163,6 +212,7 @@ function seedDatabase(pages: WikiPage[]): InstagramDatabase {
         location: 'Caledora City',
         createdAt: Date.now() - 1000 * 60 * 95,
         likes: 1842,
+        commentCount: 96,
         comments: [],
       },
       {
@@ -173,6 +223,7 @@ function seedDatabase(pages: WikiPage[]): InstagramDatabase {
         caption: `Ravi de vous retrouver ici. Suivez l’actualité de @caledora et les histoires de notre univers.`,
         createdAt: Date.now() - 1000 * 60 * 60 * 4,
         likes: 386,
+        commentCount: 24,
         comments: [],
       },
     ],
@@ -210,20 +261,25 @@ function normaliseInstagramDatabase(value: unknown, pages: WikiPage[]): Instagra
       username,
       displayName,
       verified: item.verified === true,
-      accountType: accountTypes.includes(item.accountType as InstagramAccountType) ? item.accountType as InstagramAccountType : 'personnalité publique',
+      accountType: normaliseAccountType(item.accountType),
       category: text(item.category, 80) || 'Caledora',
       bio: text(item.bio, 500),
       link: safeLink(item.link),
       avatar: safeMedia(item.avatar),
-      reputation: reputations.includes(item.reputation as InstagramProfile['reputation']) ? item.reputation as InstagramProfile['reputation'] : 'populaire',
-      personality: personalities.includes(item.personality as InstagramProfile['personality']) ? item.personality as InstagramProfile['personality'] : 'familier',
+      reputation: normaliseReputation(item.reputation),
+      personality: normalisePersonality(item.personality),
+      communicationTone: instagramCommunicationTones.includes(item.communicationTone as InstagramCommunicationTone) ? item.communicationTone as InstagramCommunicationTone : 'institutionnel',
+      status: instagramStatuses.includes(item.status as InstagramStatus) ? item.status as InstagramStatus : 'populaire',
       followers: safeNumber(item.followers, 0),
       following: safeNumber(item.following, 0),
       followingByViewer: item.followingByViewer === true,
       relations: [],
     });
   }
-  if (!profiles.some(profile => profile.id === 'caledora-official')) profiles.unshift(seedDatabase([]).profiles[0]);
+  const requiredProfiles = seedDatabase([]).profiles.filter(profile => profile.id === 'caledora-official' || profile.id.startsWith('community-'));
+  for (const profile of requiredProfiles.reverse()) {
+    if (!profiles.some(item => item.id === profile.id)) profiles.unshift(profile);
+  }
   const finalIds = new Set(profiles.map(profile => profile.id));
   for (const raw of value.profiles) {
     if (!raw || typeof raw !== 'object') continue;
@@ -235,8 +291,8 @@ function normaliseInstagramDatabase(value: unknown, pages: WikiPage[]): Instagra
       if (!relation || typeof relation !== 'object') return [];
       const value = relation as Record<string, unknown>;
       const profileId = safeId(value.profileId);
-      const type = text(value.type, 40) as InstagramRelationType;
-      if (!profileId || profileId === profile.id || !finalIds.has(profileId) || used.has(profileId) || !relations.includes(type)) return [];
+      const type = normaliseRelationType(value.type);
+      if (!profileId || profileId === profile.id || !finalIds.has(profileId) || used.has(profileId) || !type) return [];
       used.add(profileId);
       return [{ profileId, type }];
     }).slice(0, 60);
@@ -263,7 +319,8 @@ function normaliseInstagramDatabase(value: unknown, pages: WikiPage[]): Instagra
       commentIds.add(commentId);
       return [{ id: commentId, authorId: commentAuthor, text: commentText, createdAt: safeNumber(entry.createdAt, Date.now(), Number.MAX_SAFE_INTEGER), likes: safeNumber(entry.likes) }];
     }).slice(0, 150) : [];
-    posts.push({ id, authorId, media, ratio, caption: text(item.caption, 1200), location: text(item.location, 100) || undefined, createdAt: safeNumber(item.createdAt, Date.now(), Number.MAX_SAFE_INTEGER), likes: safeNumber(item.likes), likedByViewer: item.likedByViewer === true, savedByViewer: item.savedByViewer === true, comments });
+    const tags = Array.isArray(item.tags) ? [...new Set(item.tags.map(tag => text(tag, 40).replace(/^#/, '').replace(/[^a-zA-Z0-9_]/g, '')).filter(Boolean))].slice(0, 15) : [];
+    posts.push({ id, authorId, media, ratio, caption: text(item.caption, 1200), location: text(item.location, 100) || undefined, createdAt: safeNumber(item.createdAt, Date.now(), Number.MAX_SAFE_INTEGER), likes: safeNumber(item.likes), commentCount: Math.max(comments.length, safeNumber(item.commentCount, comments.length)), likedByViewer: item.likedByViewer === true, savedByViewer: item.savedByViewer === true, tags, comments });
   }
   const storyIds = new Set<string>();
   const stories: InstagramStory[] = [];
