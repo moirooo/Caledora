@@ -1,0 +1,32 @@
+Améliorations majeures et corrections pour le module Instagram (/instagram) :
+
+1. RENDU DE LA BIO (Mentions cliquables) :
+   - Détecte automatiquement les '@pseudo' et '#hashtags' dans le texte de biographie du profil :
+     * Affiche-les en bleu (#0095F6) et interactifs au survol.
+     * Au clic sur '@pseudo', navigue directement vers la page du profil ciblé.
+
+2. ÉDITION DE PROFIL & RELATIONS (Refonte UX) :
+   - Sélecteur de relations simplifié :
+     * Remplace la liste combinée par 2 champs séparés :
+       1. Menu déroulant / recherche du compte cible (@pseudo).
+       2. Menu déroulant du type de lien (coéquipier, rival, club lié, conjoint(e), ami proche, coach, famille, sponsor, partenaire).
+       3. Bouton "+ Ajouter le lien" qui ajoute la relation sous forme de tag supprimable.
+   - Types de comptes élargis (alignés avec WikiBase) :
+     * 'Athlète / Joueur', 'Club sportif', 'Entreprise / Marque', 'Institution / Ville', 'Artiste / Personnalité', 'Média / Presse', 'Personnel / Proche'.
+   - Adaptation des traits pour l'IA selon le type :
+     * Pour une personne : Réputation (Leader, Discret, Controversé, Populaire) & Personnalité (Familier, Corpo, Provocateur, Modeste).
+     * Pour un club / marque / institution : Ton de com (Institutionnel, Proche des fans, Luxe / Prestige, Agressif / Piquant) & Statut (Historique, Incontournable, Populaire, Disruptif).
+
+3. GESTION DES POSTS (Modifier & Supprimer) :
+   - Ajoute le menu contextuel (trois petits points '···') sur chaque post (dans le feed et dans la modale) :
+     * ✏️ 'Modifier la publication' : permet de changer la légende, le lieu et les tags.
+     * 🗑️ 'Supprimer la publication' : supprime le post et ses commentaires.
+   - Simulation des compteurs : Lors de la publication, génère un nombre total de likes et un total de commentaires réalistes (ex: "Afficher les 842 commentaires") calibré sur le statut du compte.
+
+4. MOTEUR DE COMMENTAIRES & FAUX COMPTES COMMUNAUTAIRES :
+   - Ajout manuel : Dans la zone de commentaire, permets à l'utilisateur de choisir avec quel compte il souhaite poster (son profil utilisateur ou n'importe quel profil Wiki).
+   - Gestion : Ajoute l'option de supprimer ou modifier n'importe quel commentaire individuel.
+   - Génération IA réaliste :
+     * RÈGLE 1 : Si un compte est mentionné (@) ou a une relation directe avec l'auteur (ex: coéquipier, conjoint, rival), il commente OBLIGATOIREMENT en premier avec une réaction adaptée.
+     * RÈGLE 2 : Génère 4 commentaires obligatoires issus d'une base de faux comptes réalistes (supporters, comptes stans @[Joueur]Era, comptes d'actu club @[Club]Zone, médias sportifs ou culturels selon le contexte).
+     * RÈGLE 3 : Bannis les commentaires absurdes (pas de radio locale ni d'institution publique qui commente sans raison un post intime ou casual).
