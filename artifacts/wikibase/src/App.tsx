@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { allText, demoSource, formatDate, loadPages, parseWikiText, savePages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
+import { getUploadedMedia, uploadMedia } from '@workspace/media-upload';
 import OriaBank from '@/pages/OriaBank.jsx';
 import { TWITTER_ACCOUNTS, TWITTER_ACCOUNT_TEMPLATES, type TwitterAccountCategory } from '@/data/twitterAccounts';
 import { InstagramApp } from '@/components/instagram/InstagramApp';
@@ -1919,11 +1920,20 @@ function BlockView({ block, pages }: { block: WBBlock; pages: WikiPage[] }) {
 
 function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; label: string; onChange: (image: WBImage) => void; onDelete: () => void }) {
   const previewSrc = resolveImageSrc(image);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
-  const pickFile = (file?: File) => {
+  const pickFile = async (file?: File) => {
     if (!file) return;
-    // Blob URL stays in memory this session only — src is stripped before saving.
-    onChange({ ...image, filename: file.name, src: URL.createObjectURL(file), missing: false });
+    setUploading(true); setUploadError('');
+    try {
+      const uploaded = await uploadMedia(file, 'wikibase');
+      onChange({ ...image, filename: uploaded.path, src: uploaded.path, missing: false });
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'Import impossible.');
+    } finally {
+      setUploading(false);
+    }
   };
   const set = (key: keyof WBImage, value: string) => onChange({ ...image, [key]: value });
 
@@ -1961,7 +1971,7 @@ function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; lab
             className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background px-2 text-xs font-normal font-mono"
           />
           <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">
-            Placez votre image dans <code className="bg-muted px-1 rounded">public/images/</code> et tapez <code className="bg-muted px-1 rounded">images/nom.png</code>
+            Utilisez le bouton ci-dessous pour l’enregistrer dans la médiathèque partagée.
           </span>
         </label>
         <label className="text-xs font-bold">Légende<input data-testid={`input-image-caption-${label}`} value={image.caption} onChange={(e) => set('caption', e.target.value)} className="mt-1 h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background px-2 text-xs font-normal" /></label>
@@ -1972,11 +1982,11 @@ function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; lab
         </div>
       </div>
 
-      {/* Session-only quick preview via file picker */}
-      <label className="mt-2 flex cursor-pointer items-center justify-center rounded border border-dashed border-primary/40 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/5" title="Aperçu immédiat cette session — non sauvegardé">
-        <Upload size={12} className="mr-1" /> Aperçu rapide (session)
-        <input data-testid={`input-replace-image-${label}`} type="file" accept="image/*" className="hidden" onChange={(e) => pickFile(e.target.files?.[0])} />
+      <label className={`mt-2 flex cursor-pointer items-center justify-center rounded border border-dashed border-primary/40 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/5 ${uploading ? 'pointer-events-none opacity-60' : ''}`}>
+        <Upload size={12} className="mr-1" /> {uploading ? 'Import en cours…' : 'Importer depuis mon ordinateur'}
+        <input data-testid={`input-replace-image-${label}`} type="file" accept=".jpg,.jpeg,.png,.webp,.svg,image/*" className="hidden" disabled={uploading} onChange={(e) => { void pickFile(e.target.files?.[0]); e.currentTarget.value = ''; }} />
       </label>
+      {uploadError && <p className="mt-1 text-[10px] text-destructive">{uploadError}</p>}
     </div>
   );
 }
@@ -2812,6 +2822,8 @@ function TwitterPage() {
   const [authorIdx, setAuthorIdx] = useState(0);
   const [imgUrl, setImgUrl]     = useState('');
   const [imgOpen, setImgOpen]   = useState(false);
+  const [imgUploading, setImgUploading] = useState(false);
+  const [imgUploadError, setImgUploadError] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [aiLoading, setAiLoading] = useState<Set<string>>(new Set());
   const [aiPosting, setAiPosting] = useState(false);
@@ -2973,7 +2985,10 @@ function TwitterPage() {
   };
 
   const BASE      = import.meta.env.BASE_URL.replace(/\/$/, '');
-  const knownImgs = ['logo1.png','site_logo.png','oriabank.png','airways2.jpg','airways.jpg'].map(f => ({ name: f, url: `${BASE}/images/${f}` }));
+  const knownImgs = [
+    ...['logo1.png','site_logo.png','oriabank.png','airways2.jpg','airways.jpg'].map(f => ({ name: f, url: `${BASE}/images/${f}` })),
+    ...getUploadedMedia().map(item => ({ name: `Médiathèque · ${item.filename}`, url: item.path })),
+  ];
 
   return (
     <div className="flex h-screen bg-black text-white overflow-hidden" style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" }}>
@@ -3048,6 +3063,18 @@ function TwitterPage() {
                         </button>
                       ))}
                       <div className="mt-2 pt-2 border-t border-[#2f3336]">
+                         <label className={`flex items-center justify-center gap-1.5 mb-2 rounded-lg border border-dashed border-[#1d9bf0]/60 px-2 py-1.5 text-xs text-[#1d9bf0] cursor-pointer ${imgUploading ? 'opacity-60 pointer-events-none' : ''}`}>
+                           <Upload size={14} /> {imgUploading ? 'Import en cours…' : 'Importer depuis mon ordinateur'}
+                           <input type="file" accept=".jpg,.jpeg,.png,.webp,.svg,image/*" className="hidden" disabled={imgUploading} onChange={async event => {
+                             const file = event.target.files?.[0]; event.currentTarget.value = '';
+                             if (!file) return;
+                             setImgUploading(true); setImgUploadError('');
+                             try { const uploaded = await uploadMedia(file, 'twitter'); setImgUrl(uploaded.path); setImgOpen(false); }
+                             catch (error) { setImgUploadError(error instanceof Error ? error.message : 'Import impossible.'); }
+                             finally { setImgUploading(false); }
+                           }} />
+                         </label>
+                         {imgUploadError && <p className="text-[10px] text-[#f4212e] mb-2">{imgUploadError}</p>}
                         <input type="text" placeholder="URL d'image..." value={imgUrl} onChange={e => setImgUrl(e.target.value)} className="w-full bg-transparent text-[12px] text-white placeholder-[#71767b] outline-none px-2 py-1 border border-[#2f3336] rounded-lg"/>
                       </div>
                     </div>

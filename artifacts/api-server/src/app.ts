@@ -3,6 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import path from "node:path";
 
 const app: Express = express();
 
@@ -30,6 +31,7 @@ app.use(
 app.use(cors({ origin: false }));
 app.use(express.json({ limit: "32kb" }));
 app.use(express.urlencoded({ extended: true, limit: "32kb" }));
+app.use("/api/images", express.static(path.resolve(import.meta.dirname, "../public/images")));
 
 app.use("/api", router);
 
