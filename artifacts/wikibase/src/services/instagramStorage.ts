@@ -1,4 +1,5 @@
 import type { WikiPage } from '@/lib/wikibase';
+import { instagramMediaObjectUrl } from './instagramMediaStorage';
 
 export type InstagramAccountType =
   | 'athlète / joueur' | 'club sportif' | 'entreprise / marque'
@@ -406,6 +407,8 @@ export function validateImportedInstagram(value: unknown, pages: WikiPage[]): In
 }
 
 export function mediaUrl(filename: string) {
+  const uploadedUrl = instagramMediaObjectUrl(filename);
+  if (uploadedUrl) return uploadedUrl;
   const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   return `${base}/images/instagram/${safeMedia(filename)}`;
 }

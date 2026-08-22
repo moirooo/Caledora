@@ -14,6 +14,7 @@ import {
   instagramReputations, instagramStatuses,
 } from '@/services/instagramStorage';
 import { generateInstagramCaption, generateInstagramComments } from '@/services/aiInstagramService';
+import { hydrateInstagramImages, saveInstagramImage } from '@/services/instagramMediaStorage';
 import '@/components/instagram/instagram.css';
 
 type View = 'feed' | 'explore' | 'profile';
@@ -213,6 +214,11 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
     });
   }, [pages]);
 
+  useEffect(() => {
+    const media = database.posts.flatMap(post => post.media).concat(database.stories.map(story => story.media));
+    void hydrateInstagramImages(media).catch(() => setNotice('Une image enregistrée n’a pas pu être rechargée.'));
+  }, [database.posts, database.stories]);
+
   const updateDatabase = (updater: (current: InstagramDatabase) => InstagramDatabase) => {
     setDatabase(current => {
       const next = updater(current);
@@ -340,7 +346,12 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
 
     {storyStart !== null && <StoryViewer stories={activeStories} profiles={profiles} start={storyStart} onClose={() => setStoryStart(null)} />}
     {selectedPost && <PostDetail post={database.posts.find(post => post.id === selectedPost.id) ?? selectedPost} profiles={profiles} editor={editor} onClose={() => setSelectedPost(null)} onProfile={openProfile} onAddComment={(authorId, text) => addComment(selectedPost.id, authorId, text)} onEditComment={(commentId, text) => updateDatabase(current => ({ ...current, posts: current.posts.map(post => post.id === selectedPost.id ? { ...post, comments: post.comments.map(comment => comment.id === commentId ? { ...comment, text } : comment) } : post) }))} onDeleteComment={commentId => updateDatabase(current => ({ ...current, posts: current.posts.map(post => post.id === selectedPost.id ? { ...post, comments: post.comments.filter(comment => comment.id !== commentId), commentCount: Math.max(post.comments.filter(comment => comment.id !== commentId).length, Math.max(0, commentTotal(post) - 1)) } : post) }))} onEditPost={() => { setEditingPost(selectedPost); setSelectedPost(null); }} onDeletePost={() => deletePost(selectedPost.id)} />}
-    {modal === 'post' && <CreatePostModal profiles={profiles} onClose={() => setModal(null)} onCreate={async (draft) => {
+    {modal === 'post' && <CreatePostModal profiles={profiles} onClose={() => setModal(null)} onUploadImage={async file => {
+      try { return await saveInstagramImage(file); } catch (error) {
+        setNotice(error instanceof Error && error.message === 'image_too_large' ? 'Image trop volumineuse (12 Mo maximum).' : 'Seules les images peuvent être enregistrées.');
+        throw error;
+      }
+    }} onCreate={async (draft) => {
       const author = profiles.find(profile => profile.id === draft.authorId); if (!author) return;
       const popularity = Math.max(700, author.followers);
       const likes = Math.max(36, Math.round(popularity * (0.015 + Math.min(0.035, author.followers / 1_000_000))));
@@ -381,7 +392,7 @@ function InstagramSettings({ database, onExport, onImport, onToggleStory, onCrea
   const [highlightTitle, setHighlightTitle] = useState('');
   const profiles = new Map(database.profiles.map(profile => [profile.id, profile]));
   return <div className="ig-settings">
-    <p>Les sauvegardes restent dans ce navigateur. Les médias sont référencés par leur nom de fichier local, sans contenu encodé.</p>
+    <p>Les publications et images importées restent enregistrées dans ce navigateur. Les fichiers importés sont stockés séparément et liés à leurs publications.</p>
     <button className="ig-primary" onClick={onExport}><Download size={17} /> Exporter la sauvegarde</button>
     <button className="ig-secondary" onClick={onImport}><Download size={17} /> Importer une sauvegarde</button>
     <div className="ig-manager-section"><h3>Stories</h3>{database.stories.length === 0 ? <p>Aucune story à gérer.</p> : database.stories.map(story => <div className="ig-story-manage" key={story.id}><img src={mediaUrl(story.media)} alt="" /><span><b>{profiles.get(story.authorId)?.displayName ?? 'Compte'}</b><small>{story.active ? 'Active' : 'Inactive'}</small></span><button className="ig-secondary" onClick={() => onToggleStory(story.id)}>{story.active ? 'Désactiver' : 'Activer'}</button></div>)}</div>
@@ -389,7 +400,7 @@ function InstagramSettings({ database, onExport, onImport, onToggleStory, onCrea
   </div>;
 }
 
-function CreatePostModal({ profiles, onClose, onCreate }: { profiles: InstagramProfile[]; onClose: () => void; onCreate: (value: { authorId: string; media: string[]; ratio: InstagramRatio; caption: string; location: string }) => void }) {
+function CreatePostModal({ profiles, onClose, onUploadImage, onCreate }: { profiles: InstagramProfile[]; onClose: () => void; onUploadImage: (file: File) => Promise<string>; onCreate: (value: { authorId: string; media: string[]; ratio: InstagramRatio; caption: string; location: string }) => void }) {
   const [authorId, setAuthorId] = useState(profiles[0]?.id ?? '');
   const [media, setMedia] = useState('stadium-night.svg');
   const [ratio, setRatio] = useState<InstagramRatio>('square');
@@ -398,10 +409,23 @@ function CreatePostModal({ profiles, onClose, onCreate }: { profiles: InstagramP
   const [tone, setTone] = useState<InstagramTone>('célébration');
   const [location, setLocation] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const generate = async () => { const author = profiles.find(profile => profile.id === authorId); if (!author) return; setGenerating(true); setCaption(await generateInstagramCaption(author, context, tone)); setGenerating(false); };
   return <Overlay title="Créer une publication" onClose={onClose}><form className="ig-form" onSubmit={event => { event.preventDefault(); const files = media.split(',').map(item => item.trim()).filter(Boolean); if (authorId && files.length && caption.trim()) onCreate({ authorId, media: files, ratio, caption: caption.trim(), location: location.trim() }); }}>
     <label>Auteur<select value={authorId} onChange={event => setAuthorId(event.target.value)}>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.displayName} · @{profile.username}</option>)}</select></label>
-    <label>Image ou carrousel<select value={media} onChange={event => setMedia(event.target.value)}>{availableMedia.map(item => <option key={item} value={item}>{item}</option>)}</select><small>Pour un carrousel, saisissez des noms de fichiers séparés par des virgules.</small><input value={media} onChange={event => setMedia(event.target.value)} /></label>
+    <label>Image ou carrousel<select value={media.startsWith('upload:') ? '' : media} onChange={event => setMedia(event.target.value)}><option value="">Choisir un média local…</option>{availableMedia.map(item => <option key={item} value={item}>{item}</option>)}</select><small>Les images importées sont enregistrées dans cette application et restent disponibles après rechargement.</small><input value={media} onChange={event => setMedia(event.target.value)} placeholder="ou noms de fichiers séparés par des virgules" /><input type="file" accept="image/*" multiple disabled={uploading} onChange={async event => {
+      const files = [...(event.target.files ?? [])];
+      if (!files.length) return;
+      setUploading(true);
+      try {
+        const ids = await Promise.all(files.map(file => onUploadImage(file)));
+        setMedia(current => {
+          const existing = availableMedia.includes(current.trim()) ? [] : current.split(',').map(item => item.trim()).filter(Boolean);
+          return [...existing, ...ids].join(', ');
+        });
+      } catch { /* The parent reports the validation error. */ }
+      finally { setUploading(false); event.currentTarget.value = ''; }
+    }} /><small>{uploading ? 'Enregistrement des images…' : 'PNG, JPG ou WEBP · 12 Mo maximum par image.'}</small></label>
     <label>Format<div className="ig-choice-row">{(['square', 'portrait', 'landscape'] as InstagramRatio[]).map(item => <button type="button" onClick={() => setRatio(item)} className={ratio === item ? 'selected' : ''} key={item}>{item === 'square' ? 'Carré' : item === 'portrait' ? 'Portrait' : 'Paysage'}</button>)}</div></label>
     <label>Contexte pour l’IA<input value={context} onChange={event => setContext(event.target.value)} placeholder="Match, événement, émotion…" /></label>
     <div className="ig-ai-row"><select value={tone} onChange={event => setTone(event.target.value as InstagramTone)}>{(['célébration', 'défaite', 'clash', 'romance', 'officiel'] as InstagramTone[]).map(item => <option key={item}>{item}</option>)}</select><button type="button" onClick={generate} disabled={generating} className="ig-secondary"><Sparkles size={16} /> {generating ? 'Création…' : 'Légende IA'}</button></div>
