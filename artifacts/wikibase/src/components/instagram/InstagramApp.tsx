@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import type { WikiPage } from '@/lib/wikibase';
 import {
-  loadInstagramDatabase, mediaUrl, reconcileInstagramDatabase, saveInstagramDatabase,
+  loadInstagramDatabase, mediaUrl, reconcileInstagramDatabase, saveInstagramDatabase, updateInstagramProfile,
   validateImportedInstagram, type InstagramComment, type InstagramDatabase, type InstagramPost,
   type InstagramProfile, type InstagramRatio, type InstagramStory, type InstagramTone,
   instagramAccountTypes, instagramCommunicationTones, instagramPersonalities, instagramRelationTypes,
@@ -119,6 +119,79 @@ function AutocompleteField({ value, onChange, profiles, hashtags = [], multiline
       {suggestions.map((suggestion, index) => <button type="button" id={`${menuId}-option-${index}`} role="option" aria-selected={index === activeIndex} className={index === activeIndex ? 'active' : ''} key={`${token?.kind}-${suggestion.id}`} onMouseDown={event => { event.preventDefault(); selectSuggestion(suggestion); }}>
         {suggestion.avatar ? <img src={mediaUrl(suggestion.avatar)} alt="" /> : <span className="ig-autocomplete-tag">#</span>}
         <span><b>{suggestion.label}</b><small>{suggestion.detail}</small></span>
+      </button>)}
+    </div>}
+  </div>;
+}
+
+function searchValue(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('fr-FR');
+}
+
+function ProfileSearchField({ profiles, value, onChange, excludeId, placeholder = 'Rechercher un compte…', ariaLabel, autoFocus = false }: {
+  profiles: InstagramProfile[];
+  value: string;
+  onChange: (profileId: string) => void;
+  excludeId?: string;
+  placeholder?: string;
+  ariaLabel?: string;
+  autoFocus?: boolean;
+}) {
+  const selectedProfile = profiles.find(profile => profile.id === value);
+  const [query, setQuery] = useState(() => selectedProfile?.displayName ?? '');
+  const [focused, setFocused] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const menuId = useId();
+  const suggestions = !focused || !query.trim() ? [] : profiles
+    .filter(profile => profile.id !== excludeId)
+    .filter(profile => `${searchValue(profile.displayName)} ${searchValue(profile.username)}`.includes(searchValue(query)))
+    .slice(0, 7);
+
+  useEffect(() => setActiveIndex(0), [query]);
+
+  const selectProfile = (profile: InstagramProfile) => {
+    onChange(profile.id);
+    setQuery(profile.displayName);
+    setFocused(false);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!suggestions.length) return;
+    if (event.key === 'ArrowDown') { event.preventDefault(); setActiveIndex(index => (index + 1) % suggestions.length); }
+    if (event.key === 'ArrowUp') { event.preventDefault(); setActiveIndex(index => (index - 1 + suggestions.length) % suggestions.length); }
+    if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); selectProfile(suggestions[activeIndex] ?? suggestions[0]); }
+    if (event.key === 'Escape') { event.preventDefault(); setFocused(false); }
+  };
+
+  return <div className="ig-autocomplete-field ig-profile-picker">
+    <input
+      value={query}
+      placeholder={placeholder}
+      className="ig-autocomplete-input"
+      aria-label={ariaLabel}
+      role="combobox"
+      aria-autocomplete="list"
+      aria-expanded={suggestions.length > 0}
+      aria-controls={menuId}
+      aria-activedescendant={suggestions.length > 0 ? `${menuId}-option-${activeIndex}` : undefined}
+      autoFocus={autoFocus}
+      onChange={event => { setQuery(event.target.value); if (value) onChange(''); }}
+      onFocus={() => setFocused(true)}
+      onKeyDown={handleKeyDown}
+      onBlur={() => setFocused(false)}
+    />
+    {suggestions.length > 0 && <div className="ig-autocomplete-menu" id={menuId} role="listbox" aria-label="Suggestions de comptes">
+      {suggestions.map((profile, index) => <button
+        type="button"
+        id={`${menuId}-option-${index}`}
+        role="option"
+        aria-selected={index === activeIndex}
+        className={index === activeIndex ? 'active' : ''}
+        key={profile.id}
+        onMouseDown={event => { event.preventDefault(); selectProfile(profile); }}
+      >
+        {profile.avatar ? <img src={mediaUrl(profile.avatar)} alt="" /> : <span className="ig-autocomplete-tag">{getInitials(profile.displayName)}</span>}
+        <span><b>{profile.displayName}</b><small>@{profile.username}</small></span>
       </button>)}
     </div>}
   </div>;
@@ -484,7 +557,7 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
     }} />}
     {editingPost && <EditPostModal post={database.posts.find(post => post.id === editingPost.id) ?? editingPost} profiles={profiles} hashtags={hashtags} onClose={() => setEditingPost(null)} onSave={patch => { editPost(editingPost.id, patch); setEditingPost(null); setNotice('Publication mise à jour.'); }} onDelete={() => deletePost(editingPost.id)} />}
     {modal === 'story' && <CreateStoryModal profiles={profiles} onClose={() => setModal(null)} onUploadImage={async file => (await uploadMedia(file, 'instagram')).path} onCreate={story => { updateDatabase(current => ({ ...current, stories: [story, ...current.stories] })); setModal(null); setNotice('Story ajoutée.'); }} />}
-    {modal === 'profile' && currentProfile && <EditProfileModal profile={currentProfile} profiles={profiles} onClose={() => setModal(null)} onUploadImage={async file => (await uploadMedia(file, 'instagram')).path} onSave={profile => { updateDatabase(current => ({ ...current, profiles: current.profiles.map(item => item.id === profile.id ? profile : item) })); setModal(null); setNotice('Profil mis à jour.'); }} />}
+     {modal === 'profile' && currentProfile && <EditProfileModal profile={currentProfile} profiles={profiles} onClose={() => setModal(null)} onUploadImage={async file => (await uploadMedia(file, 'instagram')).path} onSave={profile => { updateDatabase(current => updateInstagramProfile(current, profile)); setModal(null); setNotice('Profil mis à jour.'); }} />}
     {modal === 'settings' && <Overlay title="Gestion Instagram" onClose={() => setModal(null)}><InstagramSettings database={database} onExport={exportSave} onImport={() => uploadRef.current?.click()} onToggleStory={storyId => updateDatabase(current => ({ ...current, stories: current.stories.map(story => story.id === storyId ? { ...story, active: !story.active } : story) }))} onCreateHighlight={(storyId, title) => {
       const story = database.stories.find(item => item.id === storyId);
       if (!story) return;
@@ -532,8 +605,8 @@ function CreatePostModal({ profiles, hashtags, onClose, onUploadImage, onCreate 
   const [generating, setGenerating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const generate = async () => { const author = profiles.find(profile => profile.id === authorId); if (!author) return; setGenerating(true); setCaption(await generateInstagramCaption(author, context, tone)); setGenerating(false); };
-  return <Overlay title="Créer une publication" onClose={onClose}><form className="ig-form" onSubmit={event => { event.preventDefault(); const files = media.split(',').map(item => item.trim()).filter(Boolean); if (authorId && files.length && caption.trim()) onCreate({ authorId, media: files, ratio: files.length > 1 ? 'portrait' : 'square', caption: caption.trim(), context: context.trim(), location: location.trim() }); }}>
-    <label>Auteur<select value={authorId} onChange={event => setAuthorId(event.target.value)}>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.displayName} · @{profile.username}</option>)}</select></label>
+   return <Overlay title="Créer une publication" onClose={onClose}><form className="ig-form" onSubmit={event => { event.preventDefault(); const files = media.split(',').map(item => item.trim()).filter(Boolean); if (authorId && files.length && caption.trim()) onCreate({ authorId, media: files, ratio: files.length > 1 ? 'portrait' : 'square', caption: caption.trim(), context: context.trim(), location: location.trim() }); }}>
+     <label>Auteur<ProfileSearchField profiles={profiles} value={authorId} onChange={setAuthorId} placeholder="Rechercher par nom ou pseudo…" ariaLabel="Rechercher l’auteur de la publication" /></label>
     <label>Photos
       {media && <div className="ig-upload-preview">{media.split(',').map(item => item.trim()).filter(Boolean).map(item => <img key={item} src={mediaUrl(item)} alt="" />)}</div>}
       <input type="file" accept=".jpg,.jpeg,.png,.webp,.svg,image/*" multiple disabled={uploading} onChange={async event => {
@@ -558,7 +631,7 @@ function CreatePostModal({ profiles, hashtags, onClose, onUploadImage, onCreate 
     <div className="ig-ai-row"><select value={tone} onChange={event => setTone(event.target.value as InstagramTone)}>{(['célébration', 'défaite', 'clash', 'romance', 'officiel'] as InstagramTone[]).map(item => <option key={item}>{item}</option>)}</select><button type="button" onClick={generate} disabled={generating} className="ig-secondary"><Sparkles size={16} /> {generating ? 'Création…' : 'Légende IA'}</button></div>
     <label>Légende<AutocompleteField value={caption} onChange={setCaption} profiles={profiles} hashtags={hashtags} multiline rows={4} placeholder="Écrivez une légende ou générez-la avec l’IA." ariaLabel="Légende de la publication" /></label>
     <label>Lieu <input value={location} onChange={event => setLocation(event.target.value)} placeholder="Caledora City" /></label>
-    <button className="ig-primary" disabled={!caption.trim()}>Partager</button>
+     <button className="ig-primary" disabled={!authorId || !caption.trim()}>Partager</button>
   </form></Overlay>;
 }
 
@@ -612,12 +685,13 @@ function EditProfileModal({ profile, profiles, onClose, onUploadImage, onSave }:
     <label>Pseudo<input value={draft.username} onChange={event => update('username', event.target.value.replace(/^@/, '').toLowerCase().replace(/[^a-z0-9._]/g, ''))} /></label>
     <label>Type de compte<select value={draft.accountType} onChange={event => update('accountType', event.target.value as InstagramProfile['accountType'])}>{instagramAccountTypes.map(item => <option key={item}>{item}</option>)}</select></label>
     <label>Catégorie<input value={draft.category} onChange={event => update('category', event.target.value)} /></label>
+     <div className="ig-form-two"><label>Nombre d’abonnés<input type="number" min="0" step="1" inputMode="numeric" value={draft.followers} onChange={event => update('followers', Math.max(0, Number.parseInt(event.target.value, 10) || 0))} /></label><label>Nombre d’abonnements<input type="number" min="0" step="1" inputMode="numeric" value={draft.following} onChange={event => update('following', Math.max(0, Number.parseInt(event.target.value, 10) || 0))} /></label></div>
     <div className="grid gap-2"><label>Photo de profil<input value={draft.avatar} onChange={event => update('avatar', event.target.value)} /></label><label className={`flex cursor-pointer items-center justify-center rounded border border-dashed border-primary/40 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/5 ${avatarUploading ? 'pointer-events-none opacity-60' : ''}`}><Upload size={13} className="mr-1" />{avatarUploading ? 'Import en cours…' : 'Importer depuis mon ordinateur'}<input type="file" accept=".jpg,.jpeg,.png,.webp,.svg,image/*" className="hidden" disabled={avatarUploading} onChange={async event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (!file) return; setAvatarUploading(true); setAvatarUploadError(''); try { update('avatar', await onUploadImage(file)); } catch (error) { setAvatarUploadError(error instanceof Error ? error.message : 'Import impossible.'); } finally { setAvatarUploading(false); } }} /></label>{avatarUploadError && <small className="text-destructive">{avatarUploadError}</small>}</div>
     <label>Bio<AutocompleteField value={draft.bio} onChange={value => update('bio', value)} profiles={profiles} multiline rows={3} ariaLabel="Bio du profil" /></label>
     <label>Lien<input value={draft.link ?? ''} onChange={event => update('link', event.target.value)} /></label>
     {isOrganisation(draft.accountType) ? <div className="ig-form-two"><label>Ton de communication<select value={draft.communicationTone} onChange={event => update('communicationTone', event.target.value as InstagramProfile['communicationTone'])}>{instagramCommunicationTones.map(item => <option key={item}>{item}</option>)}</select></label><label>Statut<select value={draft.status} onChange={event => update('status', event.target.value as InstagramProfile['status'])}>{instagramStatuses.map(item => <option key={item}>{item}</option>)}</select></label></div> : <div className="ig-form-two"><label>Réputation<select value={draft.reputation} onChange={event => update('reputation', event.target.value as InstagramProfile['reputation'])}>{instagramReputations.map(item => <option key={item}>{item}</option>)}</select></label><label>Personnalité<select value={draft.personality} onChange={event => update('personality', event.target.value as InstagramProfile['personality'])}>{instagramPersonalities.map(item => <option key={item}>{item}</option>)}</select></label></div>}
     <label className="ig-check"><input type="checkbox" checked={draft.verified} onChange={event => update('verified', event.target.checked)} /> Compte certifié</label>
-    <div className="ig-relation-editor"><b>Relations</b><div><select value={relationProfileId} onChange={event => setRelationProfileId(event.target.value)}><option value="">Compte cible…</option>{otherProfiles.map(item => <option key={item.id} value={item.id}>@{item.username} · {item.displayName}</option>)}</select><select value={relationType} onChange={event => setRelationType(event.target.value as InstagramProfile['relations'][number]['type'])}>{instagramRelationTypes.map(item => <option key={item}>{item}</option>)}</select><button type="button" className="ig-secondary" onClick={addRelation} disabled={!relationProfileId}>+ Ajouter le lien</button></div></div>
+     <div className="ig-relation-editor"><b>Relations</b><div><ProfileSearchField profiles={otherProfiles} value={relationProfileId} onChange={setRelationProfileId} placeholder="Rechercher par nom ou pseudo…" ariaLabel="Rechercher un compte à relier" /><select value={relationType} onChange={event => setRelationType(event.target.value as InstagramProfile['relations'][number]['type'])}>{instagramRelationTypes.map(item => <option key={item}>{item}</option>)}</select><button type="button" className="ig-secondary" onClick={addRelation} disabled={!relationProfileId}>+ Ajouter le lien</button></div></div>
     {draft.relations.length > 0 && <div className="ig-relation-list">{draft.relations.map(item => <span key={item.profileId}>{otherProfiles.find(profile => profile.id === item.profileId)?.displayName ?? 'Compte'} · {item.type}<button type="button" onClick={() => update('relations', draft.relations.filter(relation => relation.profileId !== item.profileId))}><X size={12} /></button></span>)}</div>}
     <button className="ig-primary">Enregistrer</button>
   </form></Overlay>;

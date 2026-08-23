@@ -356,7 +356,7 @@ function normaliseInstagramDatabase(value: unknown, pages: WikiPage[]): Instagra
 export function reconcileInstagramDatabase(database: InstagramDatabase, pages: WikiPage[]): InstagramDatabase {
   const activePages = pages.filter(page => !page.isTrashed);
   const byWiki = new Map(database.profiles.filter(profile => profile.wikiPageId).map(profile => [profile.wikiPageId, profile]));
-  const profiles = database.profiles.filter(profile => !profile.wikiPageId || activePages.some(page => page.id === profile.wikiPageId));
+  let profiles = database.profiles.filter(profile => !profile.wikiPageId || activePages.some(page => page.id === profile.wikiPageId));
 
   for (const page of activePages) {
     const existing = byWiki.get(page.id);
@@ -378,6 +378,18 @@ export function reconcileInstagramDatabase(database: InstagramDatabase, pages: W
   }
 
   const profileIds = new Set(profiles.map(profile => profile.id));
+  profiles = profiles.map(profile => ({
+    ...profile,
+    relations: profile.relations.filter(relation => profileIds.has(relation.profileId)).map(relation => ({ ...relation })),
+  }));
+  for (const profile of profiles) {
+    for (const relation of profile.relations) {
+      const target = profiles.find(candidate => candidate.id === relation.profileId);
+      if (target && !target.relations.some(candidate => candidate.profileId === profile.id)) {
+        target.relations.push({ profileId: profile.id, type: relation.type });
+      }
+    }
+  }
   const posts = database.posts
     .filter(post => profileIds.has(post.authorId))
     .map(post => ({ ...post, comments: post.comments.filter(comment => profileIds.has(comment.authorId)) }));
@@ -387,6 +399,31 @@ export function reconcileInstagramDatabase(database: InstagramDatabase, pages: W
     .filter(highlight => profileIds.has(highlight.profileId))
     .map(highlight => ({ ...highlight, storyIds: highlight.storyIds.filter(id => storyIds.has(id)) }));
   return { ...database, profiles, posts, stories, highlights };
+}
+
+/**
+ * Saves one profile and makes its relation list authoritative for the reciprocal
+ * entry on every target profile. Removing a relation therefore removes the
+ * corresponding relation in both directions, while changing its type replaces
+ * the reciprocal type as well.
+ */
+export function updateInstagramProfile(database: InstagramDatabase, updatedProfile: InstagramProfile): InstagramDatabase {
+  const profileIds = new Set(database.profiles.map(profile => profile.id));
+  const relations = updatedProfile.relations
+    .filter(relation => relation.profileId !== updatedProfile.id && profileIds.has(relation.profileId))
+    .filter((relation, index, all) => all.findIndex(item => item.profileId === relation.profileId) === index);
+  const relationByTarget = new Map(relations.map(relation => [relation.profileId, relation.type]));
+
+  const profiles = database.profiles.map(profile => {
+    if (profile.id === updatedProfile.id) return { ...updatedProfile, relations };
+    const withoutUpdatedProfile = profile.relations.filter(relation => relation.profileId !== updatedProfile.id);
+    const reciprocalType = relationByTarget.get(profile.id);
+    return reciprocalType
+      ? { ...profile, relations: [...withoutUpdatedProfile, { profileId: updatedProfile.id, type: reciprocalType }] }
+      : { ...profile, relations: withoutUpdatedProfile };
+  });
+
+  return { ...database, profiles };
 }
 
 export function loadInstagramDatabase(pages: WikiPage[]): InstagramDatabase {

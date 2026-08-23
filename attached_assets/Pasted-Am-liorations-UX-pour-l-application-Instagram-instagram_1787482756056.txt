@@ -1,0 +1,25 @@
+Améliorations UX pour l'application Instagram (/instagram) : édition des compteurs de profil, recherche rapide par nom affiché et synchronisation bidirectionnelle des relations.
+
+1. ÉDITION DES COMPTEURS DU PROFIL (Abonnés / Abonnements) :
+   - Dans la modale "Éditer le profil" (EditProfileModal) :
+     * Ajoute deux champs numériques éditables : "Nombre d'abonnés" (followers) et "Nombre d'abonnements" (following).
+     * Enregistre ces valeurs dans le profil (IndexedDB / LocalStorage) pour mettre à jour instantanément les compteurs en haut de la page profil.
+
+2. AUTOCOMPLÉTION & RECHERCHE PAR "NOM AFFICHÉ" LORS DE LA CRÉATION DE POST :
+   - Dans la modale "Créer une publication" (CreatePostModal) :
+     * Remplace le menu déroulant complet des auteurs par un champ de recherche intelligent :
+       - L'utilisateur tape du texte (ex: "Elena", "Lucas", "Olyvea").
+       - Le système filtre instantanément en comparant avec le "Nom affiché" (displayName) ou le pseudo (@username).
+       - Un menu déroulant sous le champ affiche les correspondances avec avatar, Nom affiché et @pseudo.
+       - Le clic sur une suggestion sélectionne l'auteur du post.
+
+3. RECHERCHE PAR NOM AFFICHÉ POUR L'AJOUT DE RELATIONS :
+   - Dans la modale "Éditer le profil", pour le champ "Ajouter une relation" :
+     * Remplace la liste déroulante par le même champ de recherche avec autocomplétion basé sur le Nom affiché (displayName).
+
+4. SYNCHRONISATION BIDIRECTIONNELLE DES RELATIONS :
+   - Lors de l'ajout ou la suppression d'une relation entre deux comptes :
+     * Si l'utilisateur ajoute sur le profil A une relation avec le profil B (ex: A lie B en "coéquipier", "rival", "couple", "ami proche", "famille", "club lié") :
+       -> La relation réciproque correspondante doit automatiquement s'ajouter/se mettre à jour sur le profil B (ex: B a A en "coéquipier" / "couple" / "rival").
+     * Si une relation est supprimée sur le profil A, supprime-la également du profil B.
+   - Cette réciprocité garantit que le moteur IA détecte toujours le lien relationnel, peu importe qui publie le post.
