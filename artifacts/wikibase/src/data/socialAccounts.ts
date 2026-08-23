@@ -8,6 +8,12 @@ export type SocialAccountGroup = {
 };
 
 export const socialAccountGroups: readonly SocialAccountGroup[] = [
+  { id: 'caledora-journalists', label: 'Caledora · journalistes & insiders', keywords: ['caledora', 'calédora', 'caledorien', 'caledorienne', 'insider caledora', 'mercato caledora', 'ligue caledora', 'caledora fc'], accounts: [
+    ['Lucas Vaneck', 'LucasVaneck_'], ['Mateo Cassani', 'MateoCassaniFoot'], ['Adrien Solal', 'AdrienSolal_CAL'], ['Dario Benitez', 'BenitezInside'], ['Marc Valadier', 'ValadierSport'], ['Sébastien Alcaraz', 'AlcarazMedia'], ['Yanis Belkacem', 'YBelkacem_'], ['Romain Cazaux', 'CazauxMercato'], ['Hugo Vernet', 'HugoVernetFoot'], ['Alexandre Moratti', 'Moratti_CAL'],
+  ] },
+  { id: 'caledora-media', label: 'Caledora · médias, presse & émissions', keywords: ['média caledora', 'media caledora', 'presse caledora', 'caledora sport', 'caledora', 'caledora fc'], accounts: [
+    ['Caledora Sport 24', 'CaledoraSport24'], ['La Voix de Caledora', 'VoixCaledora'], ['Le Quotidien Calédorien', 'QuotidienCAL'], ['Caledora Tribune', 'CaledoraTribune'], ['After Foot Caledora', 'AfterCaledora'], ['Caledora TV Sport', 'CaledoraTVSport'], ['100% Caledora FC', '100CaledoraFC'], ['Riviera Foot News', 'RivieraFootNews'], ['Radio Caledora Sport', 'RadioCalSport'], ['Tribune Sud Caledora', 'TribuneSudCAL'],
+  ] },
   { id: 'insiders-global', label: 'Insiders mercato & transferts globaux', keywords: ['insider', 'mercato', 'transfert', 'transferts', 'transfer'], accounts: [
     ['Fabrizio Romano', 'FabrizioRomano'], ['David Ornstein', 'David_Ornstein'], ['Matteo Moretto', 'MatteMoretto'], ['Gianluca Di Marzio', 'DiMarzio'], ['Florian Plettenberg', 'Plettigoal'], ['Ben Jacobs', 'JacobsBen'], ['Sacha Tavolieri', 'sachatavolieri'], ['Nicolò Schira', 'NicoSchira'], ['Ekrem Konur', 'Ekremkonur'], ['Patrick Berger', 'berger_pj'],
   ] },
@@ -63,7 +69,7 @@ export const socialAccountProfiles: InstagramProfile[] = socialAccountGroups.fla
   id: socialId(username),
   username: username.toLowerCase(),
   displayName,
-  verified: /media|insider|journalists|investigation|tactics-data/.test(group.id),
+  verified: /media|insider|journalists|investigation|tactics-data|caledora/.test(group.id),
   accountType: 'média / presse',
   category: group.label,
   bio: `${group.label} · Compte de référence football`,

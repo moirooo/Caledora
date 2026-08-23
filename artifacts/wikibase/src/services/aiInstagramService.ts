@@ -53,6 +53,7 @@ export async function generateInstagramComments(
   context: string,
   author: InstagramProfile,
   candidates: InstagramProfile[],
+  postMeta: { location?: string; category?: string } = {},
 ): Promise<AiComment[]> {
   const mentions = [...caption.matchAll(/@([a-z0-9._]+)/gi)].map(match => match[1].toLowerCase());
   const eligible = candidates.filter(profile => profile.id !== author.id);
@@ -69,17 +70,21 @@ export async function generateInstagramComments(
     ...contextual,
     ...communityProfilesForCaption(caption, eligible),
   ]).filter(profile => !required.some(item => item.id === profile.id));
-  const candidatePool = uniqueProfiles([...required, ...community, ...eligible]).slice(0, 180);
+  const candidatePool = uniqueProfiles([...required, ...community, ...eligible]).slice(0, 80);
   try {
-    const response = await fetch('/api/generate-instagram-comments', {
+    const response = await fetch('/api/ai/comments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         caption,
         context,
         author,
-        requiredIds: required.map(profile => profile.id),
-        candidates: candidatePool,
+        post: { caption, context, location: postMeta.location ?? '', category: postMeta.category ?? author.category ?? '' },
+        mentions: mentioned.map(profile => profile.id),
+        contextRequests: explicitlyRequested.map(profile => profile.id),
+        relationships: author.relations,
+        atmosphere: context || 'spontané et naturel',
+        availableAccounts: candidatePool,
       }),
     });
     const data = await response.json() as { comments?: AiComment[] };

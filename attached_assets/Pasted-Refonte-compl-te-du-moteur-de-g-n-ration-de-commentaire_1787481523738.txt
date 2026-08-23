@@ -1,0 +1,31 @@
+Refonte complète du moteur de génération de commentaires IA pour Instagram (/instagram) :
+
+1. BACKEND API DÉDIÉ (artifacts/api-server/src/routes/ai.ts monté sur POST /api/ai/comments) :
+   - Configure l'appel LLM via le client Anthropic / Claude Haiku fourni par l'environnement Replit (AI_INTEGRATIONS_ANTHROPIC_BASE_URL et API_KEY).
+   - Construit un System Prompt d'expert des réseaux sociaux :
+     * Rôle : Simuler des commentaires réels, vivants et naturels sur Instagram en français.
+     * Style strict Instagram : 1 à 12 mots maximum par commentaire, langage naturel/parlé, ponctuation légère, émojis bien dosés, zéro hashtag, aucun préfixe ("Commentaire :", "User :").
+     * RÈGLE PRIORITAIRE 1 (Mentions @) : Tous les profils @mentionnés dans la légende DOIVENT impérativement commenter en premier en tenant compte de leur lien avec l'auteur.
+     * RÈGLE PRIORITAIRE 2 (Relations du compte) : Les comptes liés (coéquipiers, rivaux, club, proches) doivent réagir selon leur dynamique relationnelle.
+     * RÈGLE PRIORITAIRE 3 (Faux comptes & Base de données) : Sélectionne parmi les templates (comptes stans @[Joueur]Era, agrégateurs @[Club]Zone, insiders de la base de données) pour compléter les réactions manquantes (4 commentaires au total minimum).
+     * RÈGLE PRIORITAIRE 4 (Contexte libre) : Si le champ 'contexte' contient des consignes précises (ex: "je veux un compte supporter déçu et @NaraSol"), applique-les obligatoirement.
+   - Format de sortie JSON strict :
+     {
+       "comments": [
+         { "user": "pseudo_sans_arobase", "text": "texte du commentaire" }
+       ]
+     }
+   - Sécurisation & Nettoyage : Parse le JSON, retire les balises markdown ```json, supprime le '@' initial du pseudo, limite à 40 caractères pour le pseudo et 220 pour le texte, puis renvoie la réponse propre.
+
+2. FRONTEND INSTAGRAM (Préparation et affichage) :
+   - Lors de la création d'un post ou du clic sur '✨ Régénérer les commentaires' :
+     * Envoie la charge utile complète : { author, post: { caption, context, location, category }, mentions, relationships, atmosphere }.
+     * Appelle 'POST /api/ai/comments'.
+     * Affiche un indicateur de chargement discret pendant la génération.
+     * En cas d'erreur 503/502 (si l'IA n'est pas connectée), bascule proprement sur la génération de secours locale avec les faux comptes sans bloquer l'UI.
+
+3. ERGONOMIE DU FIL :
+   - Le bouton "Afficher les commentaires" sous un post du fil déplie directement la liste sous la légende (inline) sans ouvrir de modale avec l'image en double.
+   - Rends les @pseudos cliquables et en bleu (#0095F6).
+
+Implémente cette architecture complète pour rendre les commentaires dynamiques, intelligents et parfaitement intégrés !

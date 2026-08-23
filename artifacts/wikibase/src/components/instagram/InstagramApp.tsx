@@ -178,17 +178,17 @@ function PostMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => vo
 }
 
 function PostCard({
-  post, profiles, editor, commentsOpen, onProfile, onHashtag, onToggleLike, onToggleSave, onToggleComments, onRegenerate, onEdit, onDelete,
+  post, profiles, editor, commentsOpen, regenerating, onProfile, onHashtag, onToggleLike, onToggleSave, onToggleComments, onRegenerate, onEdit, onDelete,
 }: {
   post: InstagramPost; profiles: InstagramProfile[]; editor: boolean; onProfile: (id: string) => void;
-  commentsOpen: boolean; onHashtag: (tag: string) => void; onToggleLike: () => void; onToggleSave: () => void; onToggleComments: () => void; onRegenerate: () => void; onEdit: () => void; onDelete: () => void;
+  commentsOpen: boolean; regenerating: boolean; onHashtag: (tag: string) => void; onToggleLike: () => void; onToggleSave: () => void; onToggleComments: () => void; onRegenerate: () => void; onEdit: () => void; onDelete: () => void;
 }) {
   const [slide, setSlide] = useState(0);
   const author = profiles.find(profile => profile.id === post.authorId);
   if (!author) return null;
   const media = post.media.length ? post.media : ['Instagram.png'];
   return (
-    <article className="ig-post">
+    <article className="ig-post" aria-busy={regenerating}>
       <header className="ig-post-header">
         <Avatar profile={author} size={34} onClick={() => onProfile(author.id)} />
         <button className="ig-post-author" onClick={() => onProfile(author.id)}>
@@ -221,7 +221,7 @@ function PostCard({
         <button className="ig-comments-link" onClick={onToggleComments}>{commentsOpen ? 'Masquer les commentaires' : `Afficher les ${number(commentTotal(post))} commentaires`}</button>
         {commentsOpen && <InlineComments post={post} profiles={profiles} onProfile={onProfile} onHashtag={onHashtag} />}
         <p className="ig-date">{relativeTime(post.createdAt)}</p>
-        {editor && <button className="ig-editor-link" onClick={onRegenerate}><Sparkles size={14} /> Régénérer les commentaires</button>}
+        {editor && <button className="ig-editor-link" onClick={onRegenerate} disabled={regenerating}><Sparkles size={14} /> {regenerating ? 'Génération des commentaires…' : 'Régénérer les commentaires'}</button>}
       </div>
     </article>
   );
@@ -299,6 +299,7 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
   const [selectedPost, setSelectedPost] = useState<InstagramPost | null>(null);
   const [editingPost, setEditingPost] = useState<InstagramPost | null>(null);
   const [expandedCommentIds, setExpandedCommentIds] = useState<Set<string>>(() => new Set());
+  const [generatingPostId, setGeneratingPostId] = useState<string | null>(null);
   const [storyStart, setStoryStart] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
@@ -367,12 +368,18 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
     updateDatabase(current => ({ ...current, posts: current.posts.map(post => post.id === postId ? { ...post, comments: [...post.comments, comment], commentCount: Math.max(commentTotal(post) + 1, post.comments.length + 1) } : post) }));
   };
   const regenerate = async (post: InstagramPost) => {
+    if (generatingPostId) return;
     const author = profiles.find(profile => profile.id === post.authorId);
     if (!author) return;
+    setGeneratingPostId(post.id);
     setNotice('Commentaires en cours de génération…');
-    const generated = await generateInstagramComments(post.caption, post.context ?? '', author, profiles);
-    editPost(post.id, { comments: generated.map((comment, index) => ({ id: `ig-ai-${Date.now()}-${index}`, authorId: comment.authorId, text: comment.text, createdAt: Date.now(), likes: Math.floor(Math.random() * 48) })), commentCount: Math.max(commentTotal(post), generated.length) });
-    setNotice('Commentaires mis à jour.');
+    try {
+      const generated = await generateInstagramComments(post.caption, post.context ?? '', author, profiles, { location: post.location, category: author.category });
+      editPost(post.id, { comments: generated.map((comment, index) => ({ id: `ig-ai-${Date.now()}-${index}`, authorId: comment.authorId, text: comment.text, createdAt: Date.now(), likes: Math.floor(Math.random() * 48) })), commentCount: Math.max(commentTotal(post), generated.length) });
+      setNotice('Commentaires mis à jour.');
+    } finally {
+      setGeneratingPostId(null);
+    }
   };
 
   const exportSave = () => {
@@ -437,7 +444,7 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
             return profile ? <button className="ig-story-item" key={story.id} onClick={() => setStoryStart(index)}><Avatar profile={profile} size={58} story /><span>{profile.username}</span></button> : null;
           })}
         </div>
-        {feed.length === 0 ? <div className="ig-empty"><ImageIcon size={34} /><h2>Aucune publication</h2><p>Créez la première histoire de Caledora.</p></div> : feed.map(post => <PostCard key={post.id} post={post} profiles={profiles} editor={editor} commentsOpen={expandedCommentIds.has(post.id)} onProfile={openProfile} onHashtag={openHashtag} onToggleLike={() => toggleLike(post)} onToggleSave={() => editPost(post.id, { savedByViewer: !post.savedByViewer })} onToggleComments={() => setExpandedCommentIds(current => { const next = new Set(current); next.has(post.id) ? next.delete(post.id) : next.add(post.id); return next; })} onRegenerate={() => regenerate(post)} onEdit={() => setEditingPost(post)} onDelete={() => deletePost(post.id)} />)}
+        {feed.length === 0 ? <div className="ig-empty"><ImageIcon size={34} /><h2>Aucune publication</h2><p>Créez la première histoire de Caledora.</p></div> : feed.map(post => <PostCard key={post.id} post={post} profiles={profiles} editor={editor} commentsOpen={expandedCommentIds.has(post.id)} regenerating={generatingPostId === post.id} onProfile={openProfile} onHashtag={openHashtag} onToggleLike={() => toggleLike(post)} onToggleSave={() => editPost(post.id, { savedByViewer: !post.savedByViewer })} onToggleComments={() => setExpandedCommentIds(current => { const next = new Set(current); next.has(post.id) ? next.delete(post.id) : next.add(post.id); return next; })} onRegenerate={() => regenerate(post)} onEdit={() => setEditingPost(post)} onDelete={() => deletePost(post.id)} />)}
       </section>}
 
       {view === 'explore' && <section className="ig-explore">
@@ -466,9 +473,14 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
       const popularity = Math.max(700, author.followers);
       const likes = Math.max(36, Math.round(popularity * (0.015 + Math.min(0.035, author.followers / 1_000_000))));
       const post: InstagramPost = { id: `ig-post-${Date.now()}`, authorId: author.id, media: draft.media, ratio: draft.ratio, caption: draft.caption, context: draft.context || undefined, location: draft.location || undefined, createdAt: Date.now(), likes, commentCount: Math.max(4, Math.round(likes * 0.045)), tags: [...new Set([...draft.caption.matchAll(/#([\p{L}0-9_]+)/giu)].map(match => match[1]))].slice(0, 15), comments: [] };
-      updateDatabase(current => ({ ...current, posts: [post, ...current.posts] })); setModal(null); setView('feed'); setNotice('Publication partagée.');
-      const generated = await generateInstagramComments(post.caption, post.context ?? '', author, profiles);
-      editPost(post.id, { comments: generated.map((comment, index) => ({ id: `ig-ai-${Date.now()}-${index}`, authorId: comment.authorId, text: comment.text, createdAt: Date.now(), likes: 0 })), commentCount: Math.max(post.commentCount ?? 0, generated.length) });
+      updateDatabase(current => ({ ...current, posts: [post, ...current.posts] })); setModal(null); setView('feed'); setGeneratingPostId(post.id); setNotice('Publication partagée. Commentaires en cours de génération…');
+      try {
+        const generated = await generateInstagramComments(post.caption, post.context ?? '', author, profiles, { location: post.location, category: author.category });
+        editPost(post.id, { comments: generated.map((comment, index) => ({ id: `ig-ai-${Date.now()}-${index}`, authorId: comment.authorId, text: comment.text, createdAt: Date.now(), likes: 0 })), commentCount: Math.max(post.commentCount ?? 0, generated.length) });
+        setNotice('Publication et commentaires partagés.');
+      } finally {
+        setGeneratingPostId(null);
+      }
     }} />}
     {editingPost && <EditPostModal post={database.posts.find(post => post.id === editingPost.id) ?? editingPost} profiles={profiles} hashtags={hashtags} onClose={() => setEditingPost(null)} onSave={patch => { editPost(editingPost.id, patch); setEditingPost(null); setNotice('Publication mise à jour.'); }} onDelete={() => deletePost(editingPost.id)} />}
     {modal === 'story' && <CreateStoryModal profiles={profiles} onClose={() => setModal(null)} onUploadImage={async file => (await uploadMedia(file, 'instagram')).path} onCreate={story => { updateDatabase(current => ({ ...current, stories: [story, ...current.stories] })); setModal(null); setNotice('Story ajoutée.'); }} />}

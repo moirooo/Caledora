@@ -1,0 +1,32 @@
+Migration du moteur de génération de commentaires IA vers Google Gemini API (/instagram) :
+
+1. INSTALLATION & CONFIGURATION DU BACKEND (artifacts/api-server/src/routes/ai.ts ou équivalent) :
+   - Installe le SDK officiel Google Generative AI : 'npm install @google/generative-ai' (ou '@google/genai').
+   - Configure le client pour lire la clé API depuis la variable d'environnement : process.env.GEMINI_API_KEY.
+   - Utilise le modèle gratuit et rapide : 'gemini-1.5-flash'.
+   - Active le mode JSON natif dans la configuration de génération :
+     generationConfig: {
+       responseMimeType: "application/json",
+       temperature: 0.85,
+     }
+
+2. PROMPT SYSTÈME & RÈGLES DE GÉNÉRATION (POST /api/ai/comments) :
+   - Rôle : Expert des réseaux sociaux simulant des commentaires Instagram réels, vivants et naturels en français.
+   - Style strict : 1 à 12 mots maximum par commentaire, langage parlé/naturel d'Instagram, ponctuation légère, émojis pertinents, zéro hashtag, aucun préfixe ("Commentaire :", "User :").
+   - RÈGLE PRIORITAIRE 1 (Mentions @) : Tous les profils @mentionnés dans la légende DOIVENT obligatoirement commenter en premier selon leur relation ou statut avec l'auteur.
+   - RÈGLE PRIORITAIRE 2 (Relations du compte) : Les comptes liés à l'auteur (coéquipiers, rivaux, conjoint(e), club lié, amis) doivent commenter selon leur dynamique relationnelle.
+   - RÈGLE PRIORITAIRE 3 (Faux comptes & Base de données) : Sélectionne parmi les templates (comptes stans @[Joueur]Era, agrégateurs @[Club]Zone, insiders de football de src/data/socialAccounts.js) pour compléter (minimum 4 commentaires générés au total).
+   - RÈGLE PRIORITAIRE 4 (Contexte libre) : Si le champ 'contexte' de la publication contient des instructions particulières (ex: "je veux un compte de supporter énervé et @NaraSol qui félicite"), applique-les impérativement.
+   - Format de sortie JSON strict :
+     {
+       "comments": [
+         { "user": "pseudo_sans_arobase", "text": "texte court du commentaire" }
+       ]
+     }
+
+3. SÉCURISATION ET FALLBACK ROBUSTE :
+   - Nettoie la réponse (retrait du '@' initial si présent, limitation du pseudo à 40 caractères et du texte à 220 caractères).
+   - En cas d'absence de GEMINI_API_KEY ou d'erreur réseau/quota, bascule automatiquement et de manière transparente sur la génération locale avec les faux comptes sans faire crasher l'UI.
+
+4. COMPATIBILITÉ EXPORT LOCAL :
+   - Assure-toi que la clé est lue via 'dotenv' dans le serveur backend afin qu'un simple fichier '.env' avec GEMINI_API_KEY=xxx suffise pour faire tourner l'app en local sur une machine hors Replit.
