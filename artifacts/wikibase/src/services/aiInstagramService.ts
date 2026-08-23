@@ -1,4 +1,5 @@
 import type { InstagramProfile, InstagramTone } from './instagramStorage';
+import { socialAccountMatchesContext } from '@/data/socialAccounts';
 
 export type AiComment = { authorId: string; text: string };
 
@@ -45,8 +46,11 @@ const communityProfilesForCaption = (caption: string, candidates: InstagramProfi
   return candidates.filter(profile => allowedIds.has(profile.id));
 };
 
+const uniqueProfiles = (profiles: InstagramProfile[]) => [...new Map(profiles.map(profile => [profile.id, profile])).values()];
+
 export async function generateInstagramComments(
   caption: string,
+  context: string,
   author: InstagramProfile,
   candidates: InstagramProfile[],
 ): Promise<AiComment[]> {
@@ -55,17 +59,27 @@ export async function generateInstagramComments(
   const profilesByUsername = new Map(eligible.map(profile => [profile.username.toLowerCase(), profile]));
   const mentioned = [...new Set(mentions)].map(username => profilesByUsername.get(username)).filter((profile): profile is InstagramProfile => Boolean(profile));
   const related = eligible.filter(profile => author.relations.some(relation => relation.profileId === profile.id) && !mentioned.some(item => item.id === profile.id));
-  const required = [...mentioned, ...related];
-  const community = communityProfilesForCaption(caption, eligible).filter(profile => !required.some(item => item.id === profile.id));
+  const normalizedContext = context.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const contextual = socialAccountMatchesContext(context, eligible).filter(profile => !mentioned.some(item => item.id === profile.id) && !related.some(item => item.id === profile.id));
+  const explicitlyRequested = contextual.filter(profile => normalizedContext.includes(`@${profile.username.toLowerCase()}`)
+    || normalizedContext.includes(profile.username.toLowerCase())
+    || normalizedContext.includes(profile.displayName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()));
+  const required = uniqueProfiles([...explicitlyRequested, ...mentioned, ...related]);
+  const community = uniqueProfiles([
+    ...contextual,
+    ...communityProfilesForCaption(caption, eligible),
+  ]).filter(profile => !required.some(item => item.id === profile.id));
+  const candidatePool = uniqueProfiles([...required, ...community, ...eligible]).slice(0, 180);
   try {
     const response = await fetch('/api/generate-instagram-comments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         caption,
+        context,
         author,
-        mentions: mentioned.map(profile => profile.id),
-        candidates: eligible.slice(0, 50),
+        requiredIds: required.map(profile => profile.id),
+        candidates: candidatePool,
       }),
     });
     const data = await response.json() as { comments?: AiComment[] };

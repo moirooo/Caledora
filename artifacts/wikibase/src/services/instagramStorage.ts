@@ -1,5 +1,6 @@
 import type { WikiPage } from '@/lib/wikibase';
 import { instagramMediaObjectUrl } from './instagramMediaStorage';
+import { socialAccountProfiles } from '@/data/socialAccounts';
 
 export type InstagramAccountType =
   | 'athlète / joueur' | 'club sportif' | 'entreprise / marque'
@@ -48,6 +49,7 @@ export type InstagramPost = {
   media: string[];
   ratio: InstagramRatio;
   caption: string;
+  context?: string;
   location?: string;
   createdAt: number;
   likes: number;
@@ -201,7 +203,7 @@ function seedDatabase(pages: WikiPage[]): InstagramDatabase {
     { id: 'community-vibes', username: 'caledoravibes', displayName: 'Caledora Vibes', verified: false, accountType: 'artiste / personnalité', category: 'Culture · Communauté', bio: 'Les instants simples qui font la ville.', avatar: 'profile.svg', reputation: 'populaire', personality: 'familier', communicationTone: 'proche des fans', status: 'disruptif', followers: 8600, following: 612, relations: [] },
     { id: 'community-circle', username: 'cerclecaledora', displayName: 'Cercle Caledora', verified: false, accountType: 'personnel / proche', category: 'Communauté', bio: 'Des proches, des souvenirs et de belles énergies.', avatar: 'profile.svg', reputation: 'discret', personality: 'modeste', communicationTone: 'proche des fans', status: 'populaire', followers: 6300, following: 507, relations: [] },
   ];
-  const allProfiles = [official, ...communityProfiles, ...profiles];
+  const allProfiles = [official, ...communityProfiles, ...socialAccountProfiles, ...profiles];
   const firstProfile = profiles[0] ?? official;
   return {
     version: 1,
@@ -280,7 +282,7 @@ function normaliseInstagramDatabase(value: unknown, pages: WikiPage[]): Instagra
       relations: [],
     });
   }
-  const requiredProfiles = seedDatabase([]).profiles.filter(profile => profile.id === 'caledora-official' || profile.id.startsWith('community-'));
+  const requiredProfiles = seedDatabase([]).profiles;
   for (const profile of requiredProfiles.reverse()) {
     if (!profiles.some(item => item.id === profile.id)) profiles.unshift(profile);
   }
@@ -324,7 +326,7 @@ function normaliseInstagramDatabase(value: unknown, pages: WikiPage[]): Instagra
       return [{ id: commentId, authorId: commentAuthor, text: commentText, createdAt: safeNumber(entry.createdAt, Date.now(), Number.MAX_SAFE_INTEGER), likes: safeNumber(entry.likes) }];
     }).slice(0, 150) : [];
     const tags = Array.isArray(item.tags) ? [...new Set(item.tags.map(tag => text(tag, 40).replace(/^#/, '').replace(/[^a-zA-Z0-9_]/g, '')).filter(Boolean))].slice(0, 15) : [];
-    posts.push({ id, authorId, media, ratio, caption: text(item.caption, 1200), location: text(item.location, 100) || undefined, createdAt: safeNumber(item.createdAt, Date.now(), Number.MAX_SAFE_INTEGER), likes: safeNumber(item.likes), commentCount: Math.max(comments.length, safeNumber(item.commentCount, comments.length)), likedByViewer: item.likedByViewer === true, savedByViewer: item.savedByViewer === true, tags, comments });
+    posts.push({ id, authorId, media, ratio, caption: text(item.caption, 1200), context: text(item.context, 700) || undefined, location: text(item.location, 100) || undefined, createdAt: safeNumber(item.createdAt, Date.now(), Number.MAX_SAFE_INTEGER), likes: safeNumber(item.likes), commentCount: Math.max(comments.length, safeNumber(item.commentCount, comments.length)), likedByViewer: item.likedByViewer === true, savedByViewer: item.savedByViewer === true, tags, comments });
   }
   const storyIds = new Set<string>();
   const stories: InstagramStory[] = [];
