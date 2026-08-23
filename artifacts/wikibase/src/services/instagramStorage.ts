@@ -94,8 +94,10 @@ const ratios: InstagramRatio[] = ['square', 'portrait', 'landscape'];
 const legacyMedia: Record<string, string> = { 'Instagram.png': 'brand.svg', 'rivages.jpg': 'caledora-street.svg', 'airways.jpg': 'stadium-night.svg', 'airways2.jpg': 'stadium-night.svg', 'site_logo.png': 'profile.svg' };
 const text = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const safeId = (value: unknown) => text(value, 100).replace(/[^a-zA-Z0-9._-]/g, '');
+const uploadedMediaPath = /^\/api\/images\/(?:shared|instagram|wikibase|twitter|airways)\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,110}\.(?:svg|png|jpe?g|webp)$/i;
 const safeMedia = (value: unknown, fallback = 'profile.svg') => {
-  const file = text(value, 100);
+  const file = text(value, 180);
+  if (uploadedMediaPath.test(file)) return file;
   return /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}\.(?:svg|png|jpe?g|webp)$/i.test(file) ? file : legacyMedia[file] ?? fallback;
 };
 const safeNumber = (value: unknown, fallback = 0, max = 9_999_999) => Number.isFinite(value) ? Math.max(0, Math.min(max, Math.floor(Number(value)))) : fallback;
@@ -409,6 +411,7 @@ export function validateImportedInstagram(value: unknown, pages: WikiPage[]): In
 export function mediaUrl(filename: string) {
   const uploadedUrl = instagramMediaObjectUrl(filename);
   if (uploadedUrl) return uploadedUrl;
+  if (uploadedMediaPath.test(filename)) return filename;
   const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   return `${base}/images/instagram/${safeMedia(filename)}`;
 }
