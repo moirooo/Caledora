@@ -1,1 +1,2 @@
 - [Media upload paths](media-upload-paths.md) — anchor API media storage to the server location, not the workflow’s current directory.
+- [Instagram route hydration](instagram-route-hydration.md) — wait for WikiBase pages before reconciling saved Instagram data.

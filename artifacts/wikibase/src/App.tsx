@@ -3159,7 +3159,8 @@ function TwitterPage() {
 }
 
 function InstagramPage() {
-  const { pages } = usePages();
+  const { pages, ready } = usePages();
+  if (!ready) return <div className="min-h-[50vh] grid place-items-center text-sm text-[var(--wiki-text-muted)]">Chargement d’Instagram…</div>;
   return <InstagramApp pages={pages} />;
 }
 

@@ -298,12 +298,22 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
   const [notice, setNotice] = useState('');
   const [, setMediaRevision] = useState(0);
   const uploadRef = useRef<HTMLInputElement>(null);
+  const databaseRef = useRef<InstagramDatabase>(database);
+
+  const commitDatabase = (next: InstagramDatabase) => {
+    databaseRef.current = next;
+    saveInstagramDatabase(next);
+    setDatabase(next);
+  };
 
   useEffect(() => {
-    setDatabase(current => reconcileInstagramDatabase(current, pages));
+    commitDatabase(reconcileInstagramDatabase(databaseRef.current, pages));
   }, [pages]);
 
-  useEffect(() => { saveInstagramDatabase(database); }, [database]);
+  useEffect(() => {
+    databaseRef.current = database;
+    saveInstagramDatabase(database);
+  }, [database]);
 
   useEffect(() => {
     const media = database.posts.flatMap(post => post.media).concat(database.stories.map(story => story.media));
@@ -312,7 +322,7 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
       .catch(() => setNotice('Une image enregistrée n’a pas pu être rechargée.'));
   }, [database.posts, database.stories]);
 
-  const updateDatabase = (updater: (current: InstagramDatabase) => InstagramDatabase) => setDatabase(current => updater(current));
+  const updateDatabase = (updater: (current: InstagramDatabase) => InstagramDatabase) => commitDatabase(updater(databaseRef.current));
   const profiles = database.profiles;
   const hashtags = useMemo(() => {
     const counts = new Map<string, number>();
@@ -371,7 +381,7 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
       const parsed: unknown = JSON.parse(await file.text());
       const checked = validateImportedInstagram(parsed, pages);
       if (!checked) throw new Error('invalid');
-      setDatabase(checked); setNotice('Sauvegarde Instagram importée.');
+      commitDatabase(checked); setNotice('Sauvegarde Instagram importée.');
     } catch {
       setNotice('Ce fichier ne correspond pas à une sauvegarde Instagram valide.');
     }
