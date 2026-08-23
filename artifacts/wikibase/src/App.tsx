@@ -692,7 +692,7 @@ function Dashboard() {
     if (app.id === 'wikibase')  navigate('/wiki');
     if (app.id === 'instagram') navigate('/instagram');
     if (app.id === 'twitter')   navigate('/twitter');
-    if (app.id === 'airways')   { window.location.href = '/airways'; return; }
+    if (app.id === 'airways')   { window.location.href = '/airways/'; return; }
     if (app.id === 'bank')      { window.location.href = '/oria'; return; }
     if (app.id === 'settings')  setShowSettings(true);
   };

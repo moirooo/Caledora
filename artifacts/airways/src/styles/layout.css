@@ -15,6 +15,12 @@ main { flex: 1; }
   border-bottom: 1px solid transparent;
 }
 
+.navbar--home {
+  position: fixed;
+  inset: 0 0 auto;
+  width: 100%;
+}
+
 .navbar--solid {
   background: rgba(251, 249, 245, 0.92);
   backdrop-filter: blur(10px);
@@ -34,15 +40,16 @@ main { flex: 1; }
 }
 
 .navbar__brand { display: flex; align-items: center; }
-
-.navbar__official-logo {
-  display: block;
-  width: 198px;
-  height: 54px;
-  object-fit: contain;
-  object-position: left center;
-  border-radius: 2px;
+.navbar__logo-lockup {
+  display: inline-flex;
+  align-items: center;
+  color: var(--navy);
+  transition: filter 0.25s ease, transform 0.25s ease;
 }
+.navbar__logo-lockup--on-dark {
+  filter: drop-shadow(0 3px 9px rgba(0, 0, 0, 0.48));
+}
+.navbar__logo-lockup:hover { transform: translateY(-1px); }
 
 .navbar__links {
   display: flex;
@@ -106,7 +113,6 @@ main { flex: 1; }
 }
 
 @media (max-width: 920px) {
-  .navbar__official-logo { width: 166px; height: 48px; }
   .navbar__links { display: none; }
   .navbar__actions .btn { display: none; }
   .navbar__actions .navbar__hub-back { display: none; }
