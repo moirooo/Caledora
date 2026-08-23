@@ -1,0 +1,24 @@
+Optimisations UX des commentaires, mentions en bleu et moteur IA contextuel (/instagram) :
+
+1. COMPORTEMENT DU BOUTON "AFFICHER LES COMMENTAIRES" (Pas de modale avec image en double) :
+   - Au clic sur "Afficher les X commentaires" (ou sur l'icône de commentaire) sous une publication du feed :
+     * Ne PAS ouvrir de grande modale pop-up réaffichant l'image à gauche.
+     * Déplie directement la liste complète des commentaires SOUS la légende dans le fil (inline feed), avec transition fluide.
+     * Change le texte du bouton en "Masquer les commentaires" pour pouvoir replier la liste.
+   - Conserve l'ouverture de la modale complète 2 colonnes UNIQUEMENT lors d'un clic sur une vignette dans la grille du profil.
+
+2. STYLAGE DES COMPTES MENTIONNÉS (@handle) EN BLEU INSTAGRAM :
+   - Dans toutes les légendes de publications, textes de biographie et commentaires :
+     * Détecte automatiquement les mentions '@pseudo' (et hashtags '#motcle').
+     * Rends-les visuellement distinctes avec la couleur officielle d'Instagram : bleu clair (#0095F6 / #00376B en light mode ou #E0F1FF en dark mode), avec effet de survol.
+     * Au clic sur une mention '@pseudo', navigue directement vers la page du profil ciblé.
+
+3. BASE DE DONNÉES DES COMPTES & MOTEUR IA ADAPTATIF :
+   - Enregistre et exporte la liste complète des comptes de football (Insiders globaux, journalistes/médias FR/UK/ES/IT/DE, data/tactique, et templates de faux comptes @[Club]Zone, @[Joueur]Era, etc.) dans 'src/data/socialAccounts.js'.
+   - Relie le champ textarea 'Contexte pour l'IA' dans l'éditeur de post :
+     * L'IA analyse ce texte et applique strictement les consignes : si un type de compte précis est demandé (ex: 'insider mercato', 'supporter énervé', 'média espagnol') ou si un profil existant spécifique est nommé (ex: @NaraSol, @CaledoraFC, @FabrizioRomano), ces comptes DOIVENT obligatoirement figurer parmi les commentaires générés.
+     * Complète avec les comptes mentionnés dans la légende et les relations directes de l'auteur.
+
+4. PERSISTANCE :
+   - Sauvegarde le champ 'contexte' dans l'objet du post pour permettre une régénération fidèle via '✨ Régénérer les commentaires'.
+```<FollowUp label="Veux-tu aussi ajouter un champ de réponse rapide directement sous les commentaires dépliés ?" query="Ajoute un champ de saisie 'Ajouter un commentaire...' directement sous la liste des commentaires dépliés dans le feed."/>

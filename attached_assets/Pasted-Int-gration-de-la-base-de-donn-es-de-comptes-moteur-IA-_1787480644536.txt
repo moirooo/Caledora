@@ -1,0 +1,21 @@
+Intégration de la base de données de comptes, moteur IA adaptatif sur le champ 'Contexte pour IA' et mise en forme bleue des mentions taguées (/instagram) :
+
+1. ENREGISTREMENT DE LA BASE DE DONNÉES (Créer/Mettre à jour 'src/data/socialAccounts.js') :
+   - Structure et exporte la liste complète des comptes de football (Insiders globaux, journalistes/médias FR/UK/ES/IT/DE, data/tactique, et templates de faux comptes @[Club]Zone, @[Joueur]Era, etc.) afin qu'elle soit partagée entre Instagram et Twitter.
+
+2. STYLAGE DES COMPTES TAGGUÉS EN BLEU INSTAGRAM (#0095F6 / #E0F1FF) :
+   - Dans toutes les légendes de publications, textes de biographie et commentaires :
+     * Détecte automatiquement les mentions '@pseudo' (et les hashtags '#motcle').
+     * Rends-les visuellement distinctes avec la couleur officielle d'Instagram : bleu (#0095F6 / #00376B en light mode ou #E0F1FF en dark mode), avec effet de survol.
+     * Au clic sur une mention '@pseudo', redirige immédiatement l'utilisateur vers la page de profil correspondante.
+
+3. MOTEUR DE PROMPT IA ADAPTATIF AVEC INSTRUCTIONS LIBRES :
+   - Dans la modale de création/édition de post, relie le champ textarea 'Contexte pour l'IA' (ex: "Je veux un commentaire de Fabrizio Romano, un compte fan énervé et @mon_autre_compte").
+   - L'endpoint '/api/generate-instagram-comments' (ou équivalent) doit injecter ce texte utilisateur directement dans le prompt système du LLM avec les consignes suivantes :
+     * CONSIGNE 1 (Obligation stricte du contexte) : Si l'utilisateur mentionne explicitement des types de comptes à faire réagir (ex: 'insider mercato', 'supporter déçu', 'média espagnol', 'compte tactique'), l'IA DOIT sélectionner en priorité ces profils dans la base.
+     * CONSIGNE 2 (Comptes spécifiques et profils existants) : Si l'utilisateur demande à faire intervenir un compte précis (qu'il soit dans la liste des journalistes ou issu des profils existants de WikiBase/Instagram comme @NaraSol ou @CaledoraFC), ce profil DOIT obligatoirement générer un commentaire.
+     * CONSIGNE 3 (Remplissage et cohérence) : Complète le fil avec les comptes mentionnés dans la légende (@handle), les comptes liés par relation, et des faux comptes cohérents pour atteindre le volume attendu (minimum 4 commentaires générés).
+
+4. PERSISTANCE :
+   - Sauvegarde le champ 'contexte' dans l'objet du post pour pouvoir relancer à tout moment une régénération conforme aux mêmes instructions via le bouton '✨ Régénérer les commentaires'.
+```<FollowUp label="Veux-tu aussi ajouter un sélecteur rapide de suggestions de comptes (@) lors de la frappe dans le champ Contexte ?" query="Ajoute un menu d'autocomplétion des @mentions directement dans le champ 'Contexte pour IA' pour sélectionner facilement les comptes existants."/>
