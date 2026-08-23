@@ -412,14 +412,19 @@ function CreatePostModal({ profiles, onClose, onUploadImage, onCreate }: { profi
     <label>Photos
       {media && <div className="ig-upload-preview">{media.split(',').map(item => item.trim()).filter(Boolean).map(item => <img key={item} src={mediaUrl(item)} alt="" />)}</div>}
       <input type="file" accept=".jpg,.jpeg,.png,.webp,.svg,image/*" multiple disabled={uploading} onChange={async event => {
-      const files = [...(event.target.files ?? [])];
+       const inputElement = event.currentTarget;
+       const files = [...(inputElement.files ?? [])];
       if (!files.length) return;
       setUploading(true);
       try {
         const ids = await Promise.all(files.map(file => onUploadImage(file)));
-         setMedia(ids.join(', '));
-      } catch { /* The parent reports the validation error. */ }
-      finally { setUploading(false); event.currentTarget.value = ''; }
+        setMedia(ids.join(', '));
+      } catch (error) {
+        console.error('[Instagram] Échec de l’import des photos :', error);
+      } finally {
+        setUploading(false);
+        if (inputElement) inputElement.value = '';
+      }
       }} />
       <small>{uploading ? 'Import en cours…' : 'Importer une photo depuis mon ordinateur. Si plusieurs photos sont sélectionnées, le mode carrousel s’active automatiquement.'}</small>
     </label>
