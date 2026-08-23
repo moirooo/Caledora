@@ -3,7 +3,7 @@ import { useLocation } from 'wouter';
 import {
   ArrowLeft, BadgeCheck, Bell, Bookmark, ChevronLeft, ChevronRight, Compass,
   Download, Grid3X3, Heart, Home, Image as ImageIcon, MessageCircle, MoreHorizontal,
-  Plus, Search, Send, Settings2, Share2, Sparkles, Trash2, UserRound, X,
+  Plus, Search, Send, Settings2, Share2, Sparkles, Trash2, Upload, UserRound, X,
 } from 'lucide-react';
 import type { WikiPage } from '@/lib/wikibase';
 import {
@@ -358,7 +358,7 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
     }} />}
     {editingPost && <EditPostModal post={database.posts.find(post => post.id === editingPost.id) ?? editingPost} onClose={() => setEditingPost(null)} onSave={patch => { editPost(editingPost.id, patch); setEditingPost(null); setNotice('Publication mise à jour.'); }} onDelete={() => deletePost(editingPost.id)} />}
     {modal === 'story' && <CreateStoryModal profiles={profiles} onClose={() => setModal(null)} onUploadImage={async file => (await uploadMedia(file, 'instagram')).path} onCreate={story => { updateDatabase(current => ({ ...current, stories: [story, ...current.stories] })); setModal(null); setNotice('Story ajoutée.'); }} />}
-    {modal === 'profile' && currentProfile && <EditProfileModal profile={currentProfile} profiles={profiles} onClose={() => setModal(null)} onSave={profile => { updateDatabase(current => ({ ...current, profiles: current.profiles.map(item => item.id === profile.id ? profile : item) })); setModal(null); setNotice('Profil mis à jour.'); }} />}
+    {modal === 'profile' && currentProfile && <EditProfileModal profile={currentProfile} profiles={profiles} onClose={() => setModal(null)} onUploadImage={async file => (await uploadMedia(file, 'instagram')).path} onSave={profile => { updateDatabase(current => ({ ...current, profiles: current.profiles.map(item => item.id === profile.id ? profile : item) })); setModal(null); setNotice('Profil mis à jour.'); }} />}
     {modal === 'settings' && <Overlay title="Gestion Instagram" onClose={() => setModal(null)}><InstagramSettings database={database} onExport={exportSave} onImport={() => uploadRef.current?.click()} onToggleStory={storyId => updateDatabase(current => ({ ...current, stories: current.stories.map(story => story.id === storyId ? { ...story, active: !story.active } : story) }))} onCreateHighlight={(storyId, title) => {
       const story = database.stories.find(item => item.id === storyId);
       if (!story) return;
@@ -462,10 +462,12 @@ function CreateStoryModal({ profiles, onClose, onUploadImage, onCreate }: { prof
   </form></Overlay>;
 }
 
-function EditProfileModal({ profile, profiles, onClose, onSave }: { profile: InstagramProfile; profiles: InstagramProfile[]; onClose: () => void; onSave: (profile: InstagramProfile) => void }) {
+function EditProfileModal({ profile, profiles, onClose, onUploadImage, onSave }: { profile: InstagramProfile; profiles: InstagramProfile[]; onClose: () => void; onUploadImage: (file: File) => Promise<string>; onSave: (profile: InstagramProfile) => void }) {
   const [draft, setDraft] = useState(profile);
   const [relationProfileId, setRelationProfileId] = useState('');
   const [relationType, setRelationType] = useState<InstagramProfile['relations'][number]['type']>('coéquipier');
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarUploadError, setAvatarUploadError] = useState('');
   const otherProfiles = profiles.filter(item => item.id !== profile.id);
   const update = <K extends keyof InstagramProfile>(key: K, value: InstagramProfile[K]) => setDraft(current => ({ ...current, [key]: value }));
   const addRelation = () => {
@@ -478,7 +480,7 @@ function EditProfileModal({ profile, profiles, onClose, onSave }: { profile: Ins
     <label>Pseudo<input value={draft.username} onChange={event => update('username', event.target.value.replace(/^@/, '').toLowerCase().replace(/[^a-z0-9._]/g, ''))} /></label>
     <label>Type de compte<select value={draft.accountType} onChange={event => update('accountType', event.target.value as InstagramProfile['accountType'])}>{instagramAccountTypes.map(item => <option key={item}>{item}</option>)}</select></label>
     <label>Catégorie<input value={draft.category} onChange={event => update('category', event.target.value)} /></label>
-    <label>Photo locale<input value={draft.avatar} onChange={event => update('avatar', event.target.value)} /></label>
+    <div className="grid gap-2"><label>Photo de profil<input value={draft.avatar} onChange={event => update('avatar', event.target.value)} /></label><label className={`flex cursor-pointer items-center justify-center rounded border border-dashed border-primary/40 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/5 ${avatarUploading ? 'pointer-events-none opacity-60' : ''}`}><Upload size={13} className="mr-1" />{avatarUploading ? 'Import en cours…' : 'Importer depuis mon ordinateur'}<input type="file" accept=".jpg,.jpeg,.png,.webp,.svg,image/*" className="hidden" disabled={avatarUploading} onChange={async event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (!file) return; setAvatarUploading(true); setAvatarUploadError(''); try { update('avatar', await onUploadImage(file)); } catch (error) { setAvatarUploadError(error instanceof Error ? error.message : 'Import impossible.'); } finally { setAvatarUploading(false); } }} /></label>{avatarUploadError && <small className="text-destructive">{avatarUploadError}</small>}</div>
     <label>Bio<textarea value={draft.bio} onChange={event => update('bio', event.target.value)} rows={3} /></label>
     <label>Lien<input value={draft.link ?? ''} onChange={event => update('link', event.target.value)} /></label>
     {isOrganisation(draft.accountType) ? <div className="ig-form-two"><label>Ton de communication<select value={draft.communicationTone} onChange={event => update('communicationTone', event.target.value as InstagramProfile['communicationTone'])}>{instagramCommunicationTones.map(item => <option key={item}>{item}</option>)}</select></label><label>Statut<select value={draft.status} onChange={event => update('status', event.target.value as InstagramProfile['status'])}>{instagramStatuses.map(item => <option key={item}>{item}</option>)}</select></label></div> : <div className="ig-form-two"><label>Réputation<select value={draft.reputation} onChange={event => update('reputation', event.target.value as InstagramProfile['reputation'])}>{instagramReputations.map(item => <option key={item}>{item}</option>)}</select></label><label>Personnalité<select value={draft.personality} onChange={event => update('personality', event.target.value as InstagramProfile['personality'])}>{instagramPersonalities.map(item => <option key={item}>{item}</option>)}</select></label></div>}
