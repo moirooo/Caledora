@@ -21,7 +21,7 @@ import '@/components/instagram/instagram.css';
 type View = 'feed' | 'explore' | 'profile';
 type Modal = 'post' | 'story' | 'settings' | 'profile' | null;
 const ratioStyle: Record<InstagramRatio, string> = { square: 'ig-ratio-square', portrait: 'ig-ratio-portrait', landscape: 'ig-ratio-landscape' };
-const availableMedia = ['stadium-night.svg', 'caledora-street.svg', 'matchday.svg', 'team-huddle.svg', 'brand.svg', 'profile.svg'];
+const availableMedia = ['caledora-street.svg', 'matchday.svg', 'team-huddle.svg', 'brand.svg', 'profile.svg'];
 
 const number = (value: number) => new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 const relativeTime = (timestamp: number) => {
@@ -398,7 +398,7 @@ function InstagramSettings({ database, onExport, onImport, onToggleStory, onCrea
 
 function CreatePostModal({ profiles, onClose, onUploadImage, onCreate }: { profiles: InstagramProfile[]; onClose: () => void; onUploadImage: (file: File) => Promise<string>; onCreate: (value: { authorId: string; media: string[]; ratio: InstagramRatio; caption: string; location: string }) => void }) {
   const [authorId, setAuthorId] = useState(profiles[0]?.id ?? '');
-  const [media, setMedia] = useState('stadium-night.svg');
+  const [media, setMedia] = useState('');
   const [ratio, setRatio] = useState<InstagramRatio>('square');
   const [caption, setCaption] = useState('');
   const [context, setContext] = useState('');
@@ -406,24 +406,23 @@ function CreatePostModal({ profiles, onClose, onUploadImage, onCreate }: { profi
   const [location, setLocation] = useState('');
   const [generating, setGenerating] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadedMedia, setUploadedMedia] = useState(() => getUploadedMedia().map(item => item.path));
   const generate = async () => { const author = profiles.find(profile => profile.id === authorId); if (!author) return; setGenerating(true); setCaption(await generateInstagramCaption(author, context, tone)); setGenerating(false); };
   return <Overlay title="Créer une publication" onClose={onClose}><form className="ig-form" onSubmit={event => { event.preventDefault(); const files = media.split(',').map(item => item.trim()).filter(Boolean); if (authorId && files.length && caption.trim()) onCreate({ authorId, media: files, ratio, caption: caption.trim(), location: location.trim() }); }}>
     <label>Auteur<select value={authorId} onChange={event => setAuthorId(event.target.value)}>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.displayName} · @{profile.username}</option>)}</select></label>
-    <label>Image ou carrousel<select value={media.startsWith('upload:') ? '' : media} onChange={event => setMedia(event.target.value)}><option value="">Choisir un média local…</option>{availableMedia.map(item => <option key={item} value={item}>{item}</option>)}{uploadedMedia.map(item => <option key={item} value={item}>Médiathèque · {item.split('/').pop()}</option>)}</select><small>Les images importées sont enregistrées dans la médiathèque partagée.</small><input value={media} onChange={event => setMedia(event.target.value)} placeholder="ou noms de fichiers séparés par des virgules" /><input type="file" accept="image/*" multiple disabled={uploading} onChange={async event => {
+    <label>Photos
+      {media && <div className="ig-upload-preview">{media.split(',').map(item => item.trim()).filter(Boolean).map(item => <img key={item} src={mediaUrl(item)} alt="" />)}</div>}
+      <input type="file" accept=".jpg,.jpeg,.png,.webp,.svg,image/*" multiple disabled={uploading} onChange={async event => {
       const files = [...(event.target.files ?? [])];
       if (!files.length) return;
       setUploading(true);
       try {
         const ids = await Promise.all(files.map(file => onUploadImage(file)));
-        setUploadedMedia(current => [...new Set([...current, ...ids])]);
-        setMedia(current => {
-          const existing = availableMedia.includes(current.trim()) ? [] : current.split(',').map(item => item.trim()).filter(Boolean);
-          return [...existing, ...ids].join(', ');
-        });
+         setMedia(ids.join(', '));
       } catch { /* The parent reports the validation error. */ }
       finally { setUploading(false); event.currentTarget.value = ''; }
-    }} /><small>{uploading ? 'Enregistrement des images…' : 'PNG, JPG ou WEBP · 12 Mo maximum par image.'}</small></label>
+      }} />
+      <small>{uploading ? 'Import en cours…' : 'Importer une photo depuis mon ordinateur. Si plusieurs photos sont sélectionnées, le mode carrousel s’active automatiquement.'}</small>
+    </label>
     <label>Format<div className="ig-choice-row">{(['square', 'portrait', 'landscape'] as InstagramRatio[]).map(item => <button type="button" onClick={() => setRatio(item)} className={ratio === item ? 'selected' : ''} key={item}>{item === 'square' ? 'Carré' : item === 'portrait' ? 'Portrait' : 'Paysage'}</button>)}</div></label>
     <label>Contexte pour l’IA<input value={context} onChange={event => setContext(event.target.value)} placeholder="Match, événement, émotion…" /></label>
     <div className="ig-ai-row"><select value={tone} onChange={event => setTone(event.target.value as InstagramTone)}>{(['célébration', 'défaite', 'clash', 'romance', 'officiel'] as InstagramTone[]).map(item => <option key={item}>{item}</option>)}</select><button type="button" onClick={generate} disabled={generating} className="ig-secondary"><Sparkles size={16} /> {generating ? 'Création…' : 'Légende IA'}</button></div>
