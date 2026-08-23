@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import {
   ArrowLeft, BadgeCheck, Bell, Bookmark, ChevronLeft, ChevronRight, Compass,
@@ -20,7 +20,6 @@ import '@/components/instagram/instagram.css';
 
 type View = 'feed' | 'explore' | 'profile';
 type Modal = 'post' | 'story' | 'settings' | 'profile' | null;
-const ratioStyle: Record<InstagramRatio, string> = { square: 'ig-ratio-square', portrait: 'ig-ratio-portrait', landscape: 'ig-ratio-landscape' };
 const availableMedia = ['caledora-street.svg', 'matchday.svg', 'team-huddle.svg', 'brand.svg', 'profile.svg'];
 
 const number = (value: number) => new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
@@ -33,6 +32,97 @@ const relativeTime = (timestamp: number) => {
 const getInitials = (name: string) => name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
 const commentTotal = (post: InstagramPost) => Math.max(post.comments.length, post.commentCount ?? 0);
 const isOrganisation = (type: InstagramProfile['accountType']) => ['club sportif', 'entreprise / marque', 'institution / ville', 'média / presse'].includes(type);
+type AutocompleteToken = { kind: 'mention' | 'hashtag'; query: string; start: number; end: number };
+type AutocompleteSuggestion = { id: string; label: string; detail: string; avatar?: string };
+
+function activeAutocompleteToken(value: string, cursor: number): AutocompleteToken | null {
+  const beforeCursor = value.slice(0, cursor);
+  const match = beforeCursor.match(/(?:^|[\s([{'"])([@#])([\p{L}\p{N}_.-]*)$/u);
+  if (!match || !match[2]) return null;
+  const token = `${match[1]}${match[2]}`;
+  return {
+    kind: match[1] === '@' ? 'mention' : 'hashtag',
+    query: match[2].toLocaleLowerCase('fr-FR'),
+    start: cursor - token.length,
+    end: cursor,
+  };
+}
+
+function AutocompleteField({ value, onChange, profiles, hashtags = [], multiline = false, rows, placeholder, className, ariaLabel, autoFocus = false }: {
+  value: string; onChange: (value: string) => void; profiles: InstagramProfile[]; hashtags?: string[];
+  multiline?: boolean; rows?: number; placeholder?: string; className?: string; ariaLabel?: string; autoFocus?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const menuId = useId();
+  const [focused, setFocused] = useState(false);
+  const [cursor, setCursor] = useState(value.length);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const token = activeAutocompleteToken(value, cursor);
+  const suggestions: AutocompleteSuggestion[] = !focused || !token?.query ? [] : token.kind === 'mention'
+    ? profiles.filter(profile => `${profile.username} ${profile.displayName}`.toLocaleLowerCase('fr-FR').includes(token.query)).slice(0, 5).map(profile => ({ id: profile.id, label: `@${profile.username}`, detail: profile.displayName, avatar: profile.avatar }))
+    : hashtags.filter(tag => tag.toLocaleLowerCase('fr-FR').includes(token.query)).slice(0, 5).map(tag => ({ id: tag, label: `#${tag}`, detail: 'Hashtag populaire' }));
+
+  useEffect(() => setActiveIndex(0), [token?.kind, token?.query]);
+
+  const selectSuggestion = (suggestion: typeof suggestions[number]) => {
+    if (!token) return;
+    const after = value.slice(token.end);
+    const spacer = after && /^\s/u.test(after) ? '' : ' ';
+    const next = `${value.slice(0, token.start)}${suggestion.label}${spacer}${after}`;
+    const nextCursor = token.start + suggestion.label.length + spacer.length;
+    onChange(next);
+    window.requestAnimationFrame(() => {
+      const field = multiline ? textareaRef.current : inputRef.current;
+      field?.focus();
+      field?.setSelectionRange(nextCursor, nextCursor);
+      setCursor(nextCursor);
+    });
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (!suggestions.length) return;
+    if (event.key === 'ArrowDown') { event.preventDefault(); setActiveIndex(index => (index + 1) % suggestions.length); }
+    if (event.key === 'ArrowUp') { event.preventDefault(); setActiveIndex(index => (index - 1 + suggestions.length) % suggestions.length); }
+    if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); selectSuggestion(suggestions[activeIndex] ?? suggestions[0]); }
+    if (event.key === 'Escape') { event.preventDefault(); setFocused(false); }
+  };
+
+  const commonProps = {
+    value,
+    placeholder,
+    className: 'ig-autocomplete-input',
+    'aria-label': ariaLabel,
+    role: 'combobox',
+    'aria-autocomplete': 'list' as const,
+    'aria-expanded': suggestions.length > 0,
+    'aria-controls': menuId,
+    'aria-activedescendant': suggestions.length > 0 ? `${menuId}-option-${activeIndex}` : undefined,
+    autoFocus,
+    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      onChange(event.target.value);
+      setCursor(event.target.selectionStart ?? event.target.value.length);
+    },
+    onFocus: (event: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      setFocused(true);
+      setCursor(event.currentTarget.selectionStart ?? value.length);
+    },
+    onClick: (event: React.MouseEvent<HTMLInputElement | HTMLTextAreaElement>) => setCursor(event.currentTarget.selectionStart ?? value.length),
+    onKeyUp: (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => setCursor(event.currentTarget.selectionStart ?? value.length),
+    onKeyDown: handleKeyDown,
+    onBlur: () => setFocused(false),
+  };
+
+  return <div className={`ig-autocomplete-field ${className ?? ''}`}>
+    {multiline ? <textarea {...commonProps} ref={textareaRef} rows={rows} /> : <input {...commonProps} ref={inputRef} type="text" />}
+    {suggestions.length > 0 && <div className="ig-autocomplete-menu" id={menuId} role="listbox" aria-label={token?.kind === 'mention' ? 'Suggestions de comptes' : 'Suggestions de hashtags'}>
+      {suggestions.map((suggestion, index) => <button type="button" id={`${menuId}-option-${index}`} role="option" aria-selected={index === activeIndex} className={index === activeIndex ? 'active' : ''} key={`${token?.kind}-${suggestion.id}`} onMouseDown={event => { event.preventDefault(); selectSuggestion(suggestion); }}>
+        {suggestion.avatar ? <img src={mediaUrl(suggestion.avatar)} alt="" /> : <span className="ig-autocomplete-tag">#</span>}
+        <span><b>{suggestion.label}</b><small>{suggestion.detail}</small></span>
+      </button>)}
+    </div>}
+  </div>;
+}
 
 function Avatar({ profile, size = 42, story = false, onClick }: { profile: InstagramProfile; size?: number; story?: boolean; onClick?: () => void }) {
   return (
@@ -103,7 +193,7 @@ function PostCard({
         </button>
         {editor && <PostMenu onEdit={onEdit} onDelete={onDelete} />}
       </header>
-      <div className={`ig-post-media ${ratioStyle[post.ratio]}`}>
+      <div className={`ig-post-media ${media.length > 1 ? 'ig-carousel-media ig-ratio-portrait' : 'ig-single-media'}`}>
         <img src={mediaUrl(media[slide])} alt={`Publication de ${author.displayName}`} />
         {media.length > 1 && <>
           {slide > 0 && <button className="ig-carousel-arrow ig-carousel-prev" onClick={() => setSlide(value => value - 1)} aria-label="Image précédente"><ChevronLeft size={22} /></button>}
@@ -164,8 +254,9 @@ function Overlay({ children, onClose, title }: { children: React.ReactNode; onCl
   </section></div>;
 }
 
-function PostDetail({ post, profiles, editor, onClose, onProfile, onAddComment, onEditComment, onDeleteComment, onEditPost, onDeletePost }: {
+function PostDetail({ post, profiles, hashtags, editor, onClose, onProfile, onAddComment, onEditComment, onDeleteComment, onEditPost, onDeletePost }: {
   post: InstagramPost; profiles: InstagramProfile[]; editor: boolean; onClose: () => void; onProfile: (id: string) => void;
+  hashtags: string[];
   onAddComment: (authorId: string, text: string) => void; onEditComment: (commentId: string, text: string) => void; onDeleteComment: (commentId: string) => void; onEditPost: () => void; onDeletePost: () => void;
 }) {
   const [comment, setComment] = useState('');
@@ -183,11 +274,11 @@ function PostDetail({ post, profiles, editor, onClose, onProfile, onAddComment, 
       <div className="ig-detail-author"><Avatar profile={author} size={36} onClick={() => onProfile(author.id)} /><p><b>{author.username}</b><br /><MentionText text={post.caption} profiles={profiles} onProfile={onProfile} /></p>{editor && <PostMenu onEdit={onEditPost} onDelete={onDeletePost} />}</div>
       <div className="ig-comment-list">{estimatedComments > 0 && <p className="ig-comment-estimate">{post.comments.length > 0 ? `${number(post.comments.length)} commentaire${post.comments.length > 1 ? 's' : ''} affiché${post.comments.length > 1 ? 's' : ''} · environ ${number(totalComments)} interactions` : `Environ ${number(totalComments)} commentaires simulés pour cette publication. Les réponses locales apparaîtront ici après leur génération.`}</p>}{post.comments.length === 0 && estimatedComments === 0 ? <p className="ig-empty-small">Pas encore de commentaire.</p> : post.comments.map(item => {
         const commenter = profiles.find(profile => profile.id === item.authorId);
-        return commenter ? <div className="ig-comment" key={item.id}><Avatar profile={commenter} size={28} onClick={() => onProfile(commenter.id)} />{editingCommentId === item.id ? <form className="ig-comment-edit" onSubmit={event => { event.preventDefault(); if (editingText.trim()) { onEditComment(item.id, editingText.trim()); setEditingCommentId(null); } }}><input autoFocus value={editingText} onChange={event => setEditingText(event.target.value)} /><div><button type="submit">Enregistrer</button><button type="button" onClick={() => setEditingCommentId(null)}>Annuler</button></div></form> : <p><b>{commenter.username}</b><br />{item.text}<small>{relativeTime(item.createdAt)}</small></p>}{editor && editingCommentId !== item.id && <span className="ig-comment-actions"><button onClick={() => { setEditingCommentId(item.id); setEditingText(item.text); }} aria-label="Modifier ce commentaire">Modifier</button><button className="ig-comment-delete" onClick={() => onDeleteComment(item.id)} aria-label="Supprimer ce commentaire"><Trash2 size={14} /></button></span>}</div> : null;
+        return commenter ? <div className="ig-comment" key={item.id}><Avatar profile={commenter} size={28} onClick={() => onProfile(commenter.id)} />{editingCommentId === item.id ? <form className="ig-comment-edit" onSubmit={event => { event.preventDefault(); if (editingText.trim()) { onEditComment(item.id, editingText.trim()); setEditingCommentId(null); } }}><AutocompleteField autoFocus value={editingText} onChange={setEditingText} profiles={profiles} hashtags={hashtags} ariaLabel="Modifier le commentaire" /><div><button type="submit">Enregistrer</button><button type="button" onClick={() => setEditingCommentId(null)}>Annuler</button></div></form> : <p><b>{commenter.username}</b><br />{item.text}<small>{relativeTime(item.createdAt)}</small></p>}{editor && editingCommentId !== item.id && <span className="ig-comment-actions"><button onClick={() => { setEditingCommentId(item.id); setEditingText(item.text); }} aria-label="Modifier ce commentaire">Modifier</button><button className="ig-comment-delete" onClick={() => onDeleteComment(item.id)} aria-label="Supprimer ce commentaire"><Trash2 size={14} /></button></span>}</div> : null;
       })}</div>
       {editor && <form className="ig-comment-form" onSubmit={event => { event.preventDefault(); if (comment.trim() && commentAuthorId) { onAddComment(commentAuthorId, comment.trim()); setComment(''); } }}>
         <select value={commentAuthorId} onChange={event => setCommentAuthorId(event.target.value)} aria-label="Compte qui commente">{profiles.map(profile => <option key={profile.id} value={profile.id}>@{profile.username}</option>)}</select>
-        <input value={comment} onChange={event => setComment(event.target.value)} placeholder="Ajouter un commentaire…" /><button disabled={!comment.trim()}>Publier</button>
+        <AutocompleteField value={comment} onChange={setComment} profiles={profiles} hashtags={hashtags} placeholder="Ajouter un commentaire…" className="ig-comment-composer" ariaLabel="Ajouter un commentaire" /><button disabled={!comment.trim()}>Publier</button>
       </form>}
     </div>
   </div></Overlay>;
@@ -205,29 +296,35 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
   const [storyStart, setStoryStart] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
+  const [, setMediaRevision] = useState(0);
   const uploadRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setDatabase(current => {
-      const next = reconcileInstagramDatabase(current, pages);
-      saveInstagramDatabase(next);
-      return next;
-    });
+    setDatabase(current => reconcileInstagramDatabase(current, pages));
   }, [pages]);
+
+  useEffect(() => { saveInstagramDatabase(database); }, [database]);
 
   useEffect(() => {
     const media = database.posts.flatMap(post => post.media).concat(database.stories.map(story => story.media));
-    void hydrateInstagramImages(media).catch(() => setNotice('Une image enregistrée n’a pas pu être rechargée.'));
+    void hydrateInstagramImages(media)
+      .then(() => setMediaRevision(revision => revision + 1))
+      .catch(() => setNotice('Une image enregistrée n’a pas pu être rechargée.'));
   }, [database.posts, database.stories]);
 
-  const updateDatabase = (updater: (current: InstagramDatabase) => InstagramDatabase) => {
-    setDatabase(current => {
-      const next = updater(current);
-      saveInstagramDatabase(next);
-      return next;
-    });
-  };
+  const updateDatabase = (updater: (current: InstagramDatabase) => InstagramDatabase) => setDatabase(current => updater(current));
   const profiles = database.profiles;
+  const hashtags = useMemo(() => {
+    const counts = new Map<string, number>();
+    database.posts.forEach(post => {
+      const values = [...(post.tags ?? []), ...[...post.caption.matchAll(/#([\p{L}0-9_]+)/giu)].map(match => match[1])];
+      values.forEach(tag => {
+        const normalized = tag.trim().replace(/^#/, '');
+        if (normalized) counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+      });
+    });
+    return [...counts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], 'fr')).map(([tag]) => tag);
+  }, [database.posts]);
   const currentProfile = profiles.find(profile => profile.id === profileId) ?? profiles[0];
   const activeStories = database.stories.filter(story => story.active && profiles.some(profile => profile.id === story.authorId));
   const feed = useMemo(() => [...database.posts].sort((a, b) => b.createdAt - a.createdAt), [database.posts]);
@@ -274,7 +371,7 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
       const parsed: unknown = JSON.parse(await file.text());
       const checked = validateImportedInstagram(parsed, pages);
       if (!checked) throw new Error('invalid');
-      setDatabase(checked); saveInstagramDatabase(checked); setNotice('Sauvegarde Instagram importée.');
+      setDatabase(checked); setNotice('Sauvegarde Instagram importée.');
     } catch {
       setNotice('Ce fichier ne correspond pas à une sauvegarde Instagram valide.');
     }
@@ -346,8 +443,8 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
     </nav>
 
     {storyStart !== null && <StoryViewer stories={activeStories} profiles={profiles} start={storyStart} onClose={() => setStoryStart(null)} />}
-    {selectedPost && <PostDetail post={database.posts.find(post => post.id === selectedPost.id) ?? selectedPost} profiles={profiles} editor={editor} onClose={() => setSelectedPost(null)} onProfile={openProfile} onAddComment={(authorId, text) => addComment(selectedPost.id, authorId, text)} onEditComment={(commentId, text) => updateDatabase(current => ({ ...current, posts: current.posts.map(post => post.id === selectedPost.id ? { ...post, comments: post.comments.map(comment => comment.id === commentId ? { ...comment, text } : comment) } : post) }))} onDeleteComment={commentId => updateDatabase(current => ({ ...current, posts: current.posts.map(post => post.id === selectedPost.id ? { ...post, comments: post.comments.filter(comment => comment.id !== commentId), commentCount: Math.max(post.comments.filter(comment => comment.id !== commentId).length, Math.max(0, commentTotal(post) - 1)) } : post) }))} onEditPost={() => { setEditingPost(selectedPost); setSelectedPost(null); }} onDeletePost={() => deletePost(selectedPost.id)} />}
-    {modal === 'post' && <CreatePostModal profiles={profiles} onClose={() => setModal(null)} onUploadImage={async file => (await uploadMedia(file, 'instagram')).path} onCreate={async (draft) => {
+    {selectedPost && <PostDetail post={database.posts.find(post => post.id === selectedPost.id) ?? selectedPost} profiles={profiles} hashtags={hashtags} editor={editor} onClose={() => setSelectedPost(null)} onProfile={openProfile} onAddComment={(authorId, text) => addComment(selectedPost.id, authorId, text)} onEditComment={(commentId, text) => updateDatabase(current => ({ ...current, posts: current.posts.map(post => post.id === selectedPost.id ? { ...post, comments: post.comments.map(comment => comment.id === commentId ? { ...comment, text } : comment) } : post) }))} onDeleteComment={commentId => updateDatabase(current => ({ ...current, posts: current.posts.map(post => post.id === selectedPost.id ? { ...post, comments: post.comments.filter(comment => comment.id !== commentId), commentCount: Math.max(post.comments.filter(comment => comment.id !== commentId).length, Math.max(0, commentTotal(post) - 1)) } : post) }))} onEditPost={() => { setEditingPost(selectedPost); setSelectedPost(null); }} onDeletePost={() => deletePost(selectedPost.id)} />}
+    {modal === 'post' && <CreatePostModal profiles={profiles} hashtags={hashtags} onClose={() => setModal(null)} onUploadImage={async file => (await uploadMedia(file, 'instagram')).path} onCreate={async (draft) => {
       const author = profiles.find(profile => profile.id === draft.authorId); if (!author) return;
       const popularity = Math.max(700, author.followers);
       const likes = Math.max(36, Math.round(popularity * (0.015 + Math.min(0.035, author.followers / 1_000_000))));
@@ -356,7 +453,7 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
       const generated = await generateInstagramComments(post.caption, author, profiles);
        editPost(post.id, { comments: generated.map((comment, index) => ({ id: `ig-ai-${Date.now()}-${index}`, authorId: comment.authorId, text: comment.text, createdAt: Date.now(), likes: 0 })), commentCount: Math.max(post.commentCount ?? 0, generated.length) });
     }} />}
-    {editingPost && <EditPostModal post={database.posts.find(post => post.id === editingPost.id) ?? editingPost} onClose={() => setEditingPost(null)} onSave={patch => { editPost(editingPost.id, patch); setEditingPost(null); setNotice('Publication mise à jour.'); }} onDelete={() => deletePost(editingPost.id)} />}
+    {editingPost && <EditPostModal post={database.posts.find(post => post.id === editingPost.id) ?? editingPost} profiles={profiles} hashtags={hashtags} onClose={() => setEditingPost(null)} onSave={patch => { editPost(editingPost.id, patch); setEditingPost(null); setNotice('Publication mise à jour.'); }} onDelete={() => deletePost(editingPost.id)} />}
     {modal === 'story' && <CreateStoryModal profiles={profiles} onClose={() => setModal(null)} onUploadImage={async file => (await uploadMedia(file, 'instagram')).path} onCreate={story => { updateDatabase(current => ({ ...current, stories: [story, ...current.stories] })); setModal(null); setNotice('Story ajoutée.'); }} />}
     {modal === 'profile' && currentProfile && <EditProfileModal profile={currentProfile} profiles={profiles} onClose={() => setModal(null)} onUploadImage={async file => (await uploadMedia(file, 'instagram')).path} onSave={profile => { updateDatabase(current => ({ ...current, profiles: current.profiles.map(item => item.id === profile.id ? profile : item) })); setModal(null); setNotice('Profil mis à jour.'); }} />}
     {modal === 'settings' && <Overlay title="Gestion Instagram" onClose={() => setModal(null)}><InstagramSettings database={database} onExport={exportSave} onImport={() => uploadRef.current?.click()} onToggleStory={storyId => updateDatabase(current => ({ ...current, stories: current.stories.map(story => story.id === storyId ? { ...story, active: !story.active } : story) }))} onCreateHighlight={(storyId, title) => {
@@ -396,10 +493,9 @@ function InstagramSettings({ database, onExport, onImport, onToggleStory, onCrea
   </div>;
 }
 
-function CreatePostModal({ profiles, onClose, onUploadImage, onCreate }: { profiles: InstagramProfile[]; onClose: () => void; onUploadImage: (file: File) => Promise<string>; onCreate: (value: { authorId: string; media: string[]; ratio: InstagramRatio; caption: string; location: string }) => void }) {
+function CreatePostModal({ profiles, hashtags, onClose, onUploadImage, onCreate }: { profiles: InstagramProfile[]; hashtags: string[]; onClose: () => void; onUploadImage: (file: File) => Promise<string>; onCreate: (value: { authorId: string; media: string[]; ratio: InstagramRatio; caption: string; location: string }) => void }) {
   const [authorId, setAuthorId] = useState(profiles[0]?.id ?? '');
   const [media, setMedia] = useState('');
-  const [ratio, setRatio] = useState<InstagramRatio>('square');
   const [caption, setCaption] = useState('');
   const [context, setContext] = useState('');
   const [tone, setTone] = useState<InstagramTone>('célébration');
@@ -407,7 +503,7 @@ function CreatePostModal({ profiles, onClose, onUploadImage, onCreate }: { profi
   const [generating, setGenerating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const generate = async () => { const author = profiles.find(profile => profile.id === authorId); if (!author) return; setGenerating(true); setCaption(await generateInstagramCaption(author, context, tone)); setGenerating(false); };
-  return <Overlay title="Créer une publication" onClose={onClose}><form className="ig-form" onSubmit={event => { event.preventDefault(); const files = media.split(',').map(item => item.trim()).filter(Boolean); if (authorId && files.length && caption.trim()) onCreate({ authorId, media: files, ratio, caption: caption.trim(), location: location.trim() }); }}>
+  return <Overlay title="Créer une publication" onClose={onClose}><form className="ig-form" onSubmit={event => { event.preventDefault(); const files = media.split(',').map(item => item.trim()).filter(Boolean); if (authorId && files.length && caption.trim()) onCreate({ authorId, media: files, ratio: files.length > 1 ? 'portrait' : 'square', caption: caption.trim(), location: location.trim() }); }}>
     <label>Auteur<select value={authorId} onChange={event => setAuthorId(event.target.value)}>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.displayName} · @{profile.username}</option>)}</select></label>
     <label>Photos
       {media && <div className="ig-upload-preview">{media.split(',').map(item => item.trim()).filter(Boolean).map(item => <img key={item} src={mediaUrl(item)} alt="" />)}</div>}
@@ -428,16 +524,16 @@ function CreatePostModal({ profiles, onClose, onUploadImage, onCreate }: { profi
       }} />
       <small>{uploading ? 'Import en cours…' : 'Importer une photo depuis mon ordinateur. Si plusieurs photos sont sélectionnées, le mode carrousel s’active automatiquement.'}</small>
     </label>
-    <label>Format<div className="ig-choice-row">{(['square', 'portrait', 'landscape'] as InstagramRatio[]).map(item => <button type="button" onClick={() => setRatio(item)} className={ratio === item ? 'selected' : ''} key={item}>{item === 'square' ? 'Carré' : item === 'portrait' ? 'Portrait' : 'Paysage'}</button>)}</div></label>
+    <small>{media.split(',').filter(Boolean).length > 1 ? 'Carrousel : les images seront harmonisées au format 4:5.' : 'Une photo seule conservera ses proportions originales.'}</small>
     <label>Contexte pour l’IA<input value={context} onChange={event => setContext(event.target.value)} placeholder="Match, événement, émotion…" /></label>
     <div className="ig-ai-row"><select value={tone} onChange={event => setTone(event.target.value as InstagramTone)}>{(['célébration', 'défaite', 'clash', 'romance', 'officiel'] as InstagramTone[]).map(item => <option key={item}>{item}</option>)}</select><button type="button" onClick={generate} disabled={generating} className="ig-secondary"><Sparkles size={16} /> {generating ? 'Création…' : 'Légende IA'}</button></div>
-    <label>Légende<textarea value={caption} onChange={event => setCaption(event.target.value)} rows={4} placeholder="Écrivez une légende ou générez-la avec l’IA." /></label>
+    <label>Légende<AutocompleteField value={caption} onChange={setCaption} profiles={profiles} hashtags={hashtags} multiline rows={4} placeholder="Écrivez une légende ou générez-la avec l’IA." ariaLabel="Légende de la publication" /></label>
     <label>Lieu <input value={location} onChange={event => setLocation(event.target.value)} placeholder="Caledora City" /></label>
     <button className="ig-primary" disabled={!caption.trim()}>Partager</button>
   </form></Overlay>;
 }
 
-function EditPostModal({ post, onClose, onSave, onDelete }: { post: InstagramPost; onClose: () => void; onSave: (patch: Partial<InstagramPost>) => void; onDelete: () => void }) {
+function EditPostModal({ post, profiles, hashtags, onClose, onSave, onDelete }: { post: InstagramPost; profiles: InstagramProfile[]; hashtags: string[]; onClose: () => void; onSave: (patch: Partial<InstagramPost>) => void; onDelete: () => void }) {
   const [caption, setCaption] = useState(post.caption);
   const [location, setLocation] = useState(post.location ?? '');
   const [tags, setTags] = useState((post.tags ?? []).join(', '));
@@ -446,7 +542,7 @@ function EditPostModal({ post, onClose, onSave, onDelete }: { post: InstagramPos
     const cleanTags = [...new Set(tags.split(',').map(tag => tag.trim().replace(/^#/, '').replace(/[^\p{L}0-9_]/gu, '')).filter(Boolean))].slice(0, 15);
     onSave({ caption: caption.trim(), location: location.trim() || undefined, tags: cleanTags });
   }}>
-    <label>Légende<textarea value={caption} onChange={event => setCaption(event.target.value)} rows={5} /></label>
+    <label>Légende<AutocompleteField value={caption} onChange={setCaption} profiles={profiles} hashtags={hashtags} multiline rows={5} ariaLabel="Modifier la légende" /></label>
     <label>Lieu<input value={location} onChange={event => setLocation(event.target.value)} placeholder="Caledora City" /></label>
     <label>Tags <input value={tags} onChange={event => setTags(event.target.value)} placeholder="football, Caledora, matchday" /><small>Séparez les tags par des virgules.</small></label>
     <div className="ig-form-actions"><button className="ig-primary" disabled={!caption.trim()}>Enregistrer</button><button type="button" className="ig-danger" onClick={onDelete}>Supprimer la publication</button></div>
@@ -486,7 +582,7 @@ function EditProfileModal({ profile, profiles, onClose, onUploadImage, onSave }:
     <label>Type de compte<select value={draft.accountType} onChange={event => update('accountType', event.target.value as InstagramProfile['accountType'])}>{instagramAccountTypes.map(item => <option key={item}>{item}</option>)}</select></label>
     <label>Catégorie<input value={draft.category} onChange={event => update('category', event.target.value)} /></label>
     <div className="grid gap-2"><label>Photo de profil<input value={draft.avatar} onChange={event => update('avatar', event.target.value)} /></label><label className={`flex cursor-pointer items-center justify-center rounded border border-dashed border-primary/40 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/5 ${avatarUploading ? 'pointer-events-none opacity-60' : ''}`}><Upload size={13} className="mr-1" />{avatarUploading ? 'Import en cours…' : 'Importer depuis mon ordinateur'}<input type="file" accept=".jpg,.jpeg,.png,.webp,.svg,image/*" className="hidden" disabled={avatarUploading} onChange={async event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (!file) return; setAvatarUploading(true); setAvatarUploadError(''); try { update('avatar', await onUploadImage(file)); } catch (error) { setAvatarUploadError(error instanceof Error ? error.message : 'Import impossible.'); } finally { setAvatarUploading(false); } }} /></label>{avatarUploadError && <small className="text-destructive">{avatarUploadError}</small>}</div>
-    <label>Bio<textarea value={draft.bio} onChange={event => update('bio', event.target.value)} rows={3} /></label>
+    <label>Bio<AutocompleteField value={draft.bio} onChange={value => update('bio', value)} profiles={profiles} multiline rows={3} ariaLabel="Bio du profil" /></label>
     <label>Lien<input value={draft.link ?? ''} onChange={event => update('link', event.target.value)} /></label>
     {isOrganisation(draft.accountType) ? <div className="ig-form-two"><label>Ton de communication<select value={draft.communicationTone} onChange={event => update('communicationTone', event.target.value as InstagramProfile['communicationTone'])}>{instagramCommunicationTones.map(item => <option key={item}>{item}</option>)}</select></label><label>Statut<select value={draft.status} onChange={event => update('status', event.target.value as InstagramProfile['status'])}>{instagramStatuses.map(item => <option key={item}>{item}</option>)}</select></label></div> : <div className="ig-form-two"><label>Réputation<select value={draft.reputation} onChange={event => update('reputation', event.target.value as InstagramProfile['reputation'])}>{instagramReputations.map(item => <option key={item}>{item}</option>)}</select></label><label>Personnalité<select value={draft.personality} onChange={event => update('personality', event.target.value as InstagramProfile['personality'])}>{instagramPersonalities.map(item => <option key={item}>{item}</option>)}</select></label></div>}
     <label className="ig-check"><input type="checkbox" checked={draft.verified} onChange={event => update('verified', event.target.checked)} /> Compte certifié</label>
