@@ -46,11 +46,12 @@ main { flex: 1; }
   height: 54px;
   object-fit: contain;
   object-position: left center;
-  border-radius: 4px;
   transition: filter 0.25s ease, transform 0.25s ease;
 }
 .navbar__official-logo--on-dark {
-  filter: drop-shadow(0 3px 9px rgba(0, 0, 0, 0.48));
+  /* A single ivory lockup keeps the official mark legible on the hero
+     without reintroducing the original JPEG's white backing. */
+  filter: brightness(0) invert(1) drop-shadow(0 3px 9px rgba(0, 0, 0, 0.48));
 }
 .navbar__official-logo:hover { transform: translateY(-1px); }
 

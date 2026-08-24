@@ -33,7 +33,7 @@ export default function Navbar() {
       <div className="container navbar__inner">
         <NavLink to="/" className="navbar__brand" aria-label="Accueil Caledora Airways">
           <img
-            src={`${import.meta.env.BASE_URL}images/airways.jpg`}
+            src={`${import.meta.env.BASE_URL}images/airways-transparent.png`}
             alt="Caledora Airways"
             className={`navbar__official-logo${isDark ? ' navbar__official-logo--on-dark' : ''}`}
           />
