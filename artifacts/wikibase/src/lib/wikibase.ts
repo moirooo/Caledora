@@ -325,14 +325,18 @@ export async function loadPages(): Promise<WikiPage[]> {
   return [page];
 }
 
+/** Persist pages to IndexedDB and wait for the operation to complete. */
+export async function savePagesAsync(pages: WikiPage[]): Promise<void> {
+  const { set } = await import('idb-keyval');
+  await set(IDB_KEY, pages.map(stripSrc));
+}
+
 /**
- * Persist pages to IndexedDB (fire-and-forget — never blocks the UI).
+ * Persist pages to IndexedDB without blocking the regular editor UI.
  * Image `src` blob URLs are always stripped before writing.
  */
 export function savePages(pages: WikiPage[]): void {
-  import('idb-keyval')
-    .then(({ set }) => set(IDB_KEY, pages.map(stripSrc)))
-    .catch((err) => console.error('[WikiBase] savePages failed:', err));
+  void savePagesAsync(pages).catch((err) => console.error('[WikiBase] savePages failed:', err));
 }
 export function formatDate(value: string) { return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value)); }
 export function allText(page: WikiPage) { return `${page.title} ${page.subtitle} ${page.introduction} ${page.categories.join(' ')}`.toLowerCase(); }

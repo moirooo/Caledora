@@ -42,6 +42,38 @@ export async function hydrateInstagramImages(media: string[]): Promise<void> {
   database.close();
 }
 
+export async function readInstagramImage(media: string): Promise<Blob | undefined> {
+  if (!media.startsWith('upload:')) return undefined;
+  const database = await openDatabase();
+  try {
+    return await new Promise<Blob | undefined>((resolve, reject) => {
+      const request = database.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(media);
+      request.onsuccess = () => resolve(request.result as Blob | undefined);
+      request.onerror = () => reject(request.error);
+    });
+  } finally {
+    database.close();
+  }
+}
+
+export async function restoreInstagramImage(blob: Blob): Promise<string> {
+  if (!blob.type.startsWith('image/')) throw new Error('image_required');
+  if (blob.size > 12 * 1024 * 1024) throw new Error('image_too_large');
+  const id = `upload:${crypto.randomUUID()}`;
+  const database = await openDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const request = database.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).put(blob, id);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } finally {
+    database.close();
+  }
+  mediaUrls.set(id, URL.createObjectURL(blob));
+  return id;
+}
+
 export function instagramMediaObjectUrl(media: string): string | undefined {
   return mediaUrls.get(media);
 }

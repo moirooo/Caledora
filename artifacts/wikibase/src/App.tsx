@@ -10,6 +10,7 @@ import { getUploadedMedia, uploadMedia } from '@workspace/media-upload';
 import OriaBank from '@/pages/OriaBank.jsx';
 import { TWITTER_ACCOUNTS, TWITTER_ACCOUNT_TEMPLATES, type TwitterAccountCategory } from '@/data/twitterAccounts';
 import { InstagramApp } from '@/components/instagram/InstagramApp';
+import { GlobalBackupPage } from '@/components/GlobalBackupPage';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
 
@@ -284,118 +285,7 @@ function AppearancePanel({ onClose }: { onClose: () => void }) {
         ))}
       </div>
 
-      {/* ── Export / sauvegarde ─────────────────────── */}
-      <div className="appearance-panel-section">
-        <div className="appearance-panel-label">Données</div>
-        <ExportButton />
-        <p className="text-[11px] text-muted-foreground px-1 pt-0.5">
-          Import complet disponible sur le <a href="/" className="wiki-link">tableau de bord</a>.
-        </p>
-      </div>
     </div>
-  );
-}
-
-/** Shared export logic — triggers browser download of a JSON backup. */
-function triggerExport() {
-  return loadPages().then((pages) => {
-    const payload = {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      pages: pages.filter((p) => !p.isTrashed),
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `wikibase-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    return pages.filter((p) => !p.isTrashed).length;
-  });
-}
-
-/**
- * Full backup bar — export + import side by side.
- * `onImported` receives the fully merged page list (existing + imported).
- */
-function BackupBar({ onImported }: { onImported: (pages: WikiPage[]) => void }) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [exportDone, setExportDone] = useState(false);
-  const [notice, setNotice] = useState<{ msg: string; ok: boolean } | null>(null);
-
-  function handleExport() {
-    triggerExport().then(() => {
-      setExportDone(true);
-      setTimeout(() => setExportDone(false), 2500);
-    });
-  }
-
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const json = JSON.parse(ev.target?.result as string);
-        const imported: WikiPage[] = Array.isArray(json) ? json : (json.pages ?? []);
-        if (!imported.length) throw new Error('Aucun article trouvé dans le fichier.');
-        const existing = await loadPages();
-        const byId = new Map(existing.map((p) => [p.id, p]));
-        for (const p of imported) byId.set(p.id, p);
-        const merged = [...byId.values()];
-        onImported(merged);
-        setNotice({ msg: `${imported.length} article${imported.length > 1 ? 's' : ''} importé${imported.length > 1 ? 's' : ''} avec succès !`, ok: true });
-      } catch (err) {
-        setNotice({ msg: `Erreur : ${err instanceof Error ? err.message : 'fichier invalide'}`, ok: false });
-      }
-      setTimeout(() => setNotice(null), 4000);
-      if (fileRef.current) fileRef.current.value = '';
-    };
-    reader.readAsText(file);
-  }
-
-  return (
-    <div className="mb-5 flex flex-wrap items-center gap-2">
-      <button
-        onClick={handleExport}
-        className="inline-flex items-center gap-1.5 rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-3 py-1.5 text-sm hover:bg-[#eaecf0] dark:hover:bg-muted transition"
-      >
-        {exportDone ? <Check size={13} className="text-green-600" /> : <Download size={13} />}
-        {exportDone ? 'Téléchargé !' : 'Exporter mes articles'}
-      </button>
-      <button
-        onClick={() => fileRef.current?.click()}
-        className="inline-flex items-center gap-1.5 rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-3 py-1.5 text-sm hover:bg-[#eaecf0] dark:hover:bg-muted transition"
-      >
-        <Upload size={13} />
-        Importer des articles
-      </button>
-      <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleFile} />
-      {notice && (
-        <span className={`text-sm ${notice.ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-          {notice.ok ? <Check size={13} className="inline mr-1" /> : null}
-          {notice.msg}
-        </span>
-      )}
-    </div>
-  );
-}
-
-/** Compact export-only button kept in the Appearance panel. */
-function ExportButton() {
-  const [done, setDone] = useState(false);
-  return (
-    <button
-      onClick={() => triggerExport().then(() => { setDone(true); setTimeout(() => setDone(false), 2500); })}
-      className="appearance-panel-option justify-between text-sm hover:bg-secondary rounded-sm px-1 py-1 w-full text-left transition"
-    >
-      <span className="flex items-center gap-1.5">
-        {done ? <Check size={14} className="text-green-600" /> : <Download size={14} />}
-        {done ? 'Téléchargé !' : 'Exporter la sauvegarde'}
-      </span>
-      <span className="text-[10px] text-muted-foreground">.json</span>
-    </button>
   );
 }
 
@@ -685,6 +575,7 @@ function Dashboard() {
     { id: 'maps',      label: 'Maps',             imageNode: MapsPinSvg,        bg: '#ffffff',    imgBg: '#ffffff',  active: false },
     // Paramètres
     { id: 'settings',  label: 'Paramètres',       emoji: '⚙️',                  bg: 'linear-gradient(145deg,#374151,#6b7280)', active: true  },
+    { id: 'backup',    label: 'Import / Export',  emoji: '⇅',                   bg: 'linear-gradient(145deg,#0d5c66,#22a0a9)', active: true  },
   ];
 
   const handleApp = (app: DashApp) => {
@@ -695,6 +586,7 @@ function Dashboard() {
     if (app.id === 'airways')   { window.location.href = '/airways/'; return; }
     if (app.id === 'bank')      { window.location.href = '/oria'; return; }
     if (app.id === 'settings')  setShowSettings(true);
+    if (app.id === 'backup')    navigate('/sauvegarde');
   };
 
   const glass: React.CSSProperties = {
@@ -896,8 +788,6 @@ function WikiList() {
           ))}
         </div>
       </div>
-
-      <BackupBar onImported={setPages} />
 
       {visible.length ? (
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -3175,6 +3065,7 @@ function Router() {
         <Route path="/instagram" component={InstagramPage} />
         <Route path="/wiki" component={WikiList} />
         <Route path="/twitter" component={TwitterPage} />
+        <Route path="/sauvegarde" component={GlobalBackupPage} />
         <Route path="/create" component={CreatePage} />
         <Route path="/page/:id/edit" component={EditPage} />
         <Route path="/page/:id/compare" component={ComparePage} />
