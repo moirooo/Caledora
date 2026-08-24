@@ -65,6 +65,7 @@ function isWikiPage(value: unknown): value is WikiPage {
   if (!isStringArray(value.aliases) || !isKeyValueArray(value.infobox) || !isStringArray(value.links)
     || !isKeyValueArray(value.references) || !isStringArray(value.bibliography) || !isStringArray(value.categories)) return false;
   if (value.infoboxImage !== undefined && !isImage(value.infoboxImage)) return false;
+  if (value.infoboxImageOverride !== undefined && !isImage(value.infoboxImageOverride)) return false;
   if (!Array.isArray(value.history) || !value.history.every(item => isRecord(item) && isString(item.timestamp) && isString(item.label) && isString(item.sourceText))) return false;
   if (!Array.isArray(value.sections) || !value.sections.every(section => isRecord(section) && isString(section.title) && isFiniteNumber(section.level)
     && Array.isArray(section.blocks) && section.blocks.every(block => isRecord(block) && (

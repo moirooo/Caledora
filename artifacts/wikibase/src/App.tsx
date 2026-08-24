@@ -5,7 +5,7 @@ import { Archive, ArrowLeft, BarChart2, BookOpen, Check, ChevronRight, Clock3, D
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
-import { allText, demoSource, formatDate, loadPages, parseWikiText, savePages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
+import { allText, demoSource, formatDate, getDisplayInfoboxImage, loadPages, parseWikiText, savePages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
 import { getUploadedMedia, uploadMedia } from '@workspace/media-upload';
 import OriaBank from '@/pages/OriaBank.jsx';
 import { TWITTER_ACCOUNTS, TWITTER_ACCOUNT_TEMPLATES, type TwitterAccountCategory } from '@/data/twitterAccounts';
@@ -1638,21 +1638,22 @@ function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
   const { open: openLightbox } = useContext(LightboxContext);
   const accentColor = page.accentColor ?? categoryColor(page.category);
   const headerTextColor = getContrastingColor(accentColor);
+  const infoboxImage = getDisplayInfoboxImage(page);
   return (
     <aside data-testid="content-infobox" className="wiki-infobox w-full lg:float-right lg:clear-right lg:ml-5 lg:mb-4 lg:w-[280px] lg:shrink-0 mb-4">
       <div className="wiki-infobox-header" style={{ background: accentColor, color: headerTextColor }}>{page.title}</div>
 
       {/* Optional image */}
-      {page.infoboxImage && (
+      {infoboxImage && (
         <div className="flex items-center justify-center border-b border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-muted py-2 text-center text-xs text-muted-foreground overflow-hidden" style={{ minHeight: 140 }}>
-          {resolveImageSrc(page.infoboxImage)
+          {resolveImageSrc(infoboxImage)
             ? <img
-                src={resolveImageSrc(page.infoboxImage)}
-                alt={page.infoboxImage.alt}
+                src={resolveImageSrc(infoboxImage)}
+                alt={infoboxImage.alt}
                 className="max-h-40 max-w-full object-contain cursor-zoom-in"
                 onClick={() => {
-                  const src = resolveImageSrc(page.infoboxImage!);
-                  if (src) openLightbox({ src, alt: page.infoboxImage!.alt, caption: page.infoboxImage!.caption });
+                  const src = resolveImageSrc(infoboxImage);
+                  if (src) openLightbox({ src, alt: infoboxImage.alt, caption: infoboxImage.caption });
                 }}
                 onError={(e) => {
                   console.error('[WikiBase] Image introuvable :', e.currentTarget.src);
@@ -1663,7 +1664,7 @@ function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
             : null
           }
           {/* Placeholder shown when img fails or no src */}
-          <span hidden={!!resolveImageSrc(page.infoboxImage)}>
+          <span hidden={!!resolveImageSrc(infoboxImage)}>
             <LogoPlaceholder initial={page.title[0]?.toUpperCase() ?? '?'} color={accentColor} />
           </span>
         </div>
@@ -1825,9 +1826,17 @@ function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; lab
   const previewSrc = resolveImageSrc(image);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [dragging, setDragging] = useState(false);
 
   const pickFile = async (file?: File) => {
     if (!file) return;
+    if (uploading) return;
+    const validImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    const validExtension = /\.(jpe?g|png|webp)$/i.test(file.name);
+    if (!validImageTypes.has(file.type) && !validExtension) {
+      setUploadError('Choisissez une image PNG, JPG ou WEBP.');
+      return;
+    }
     setUploading(true); setUploadError('');
     try {
       const uploaded = await uploadMedia(file, 'wikibase');
@@ -1841,7 +1850,23 @@ function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; lab
   const set = (key: keyof WBImage, value: string) => onChange({ ...image, [key]: value });
 
   return (
-    <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-3">
+    <div
+      data-testid={`dropzone-image-${label}`}
+      className={`rounded border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-3 transition-colors ${dragging ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : ''}`}
+      onDragEnter={(event) => {
+        event.preventDefault();
+        if (!uploading) setDragging(true);
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDragLeave={(event) => {
+        if (event.currentTarget === event.target) setDragging(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDragging(false);
+        void pickFile(event.dataTransfer.files?.[0]);
+      }}
+    >
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2"><ImageIcon size={14} className="text-primary" /><span className="text-sm font-bold truncate">{label}</span></div>
         <button data-testid={`button-delete-image-${label}`} onClick={onDelete} className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 size={14} /></button>
@@ -1885,9 +1910,9 @@ function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; lab
         </div>
       </div>
 
-      <label className={`mt-2 flex cursor-pointer items-center justify-center rounded border border-dashed border-primary/40 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/5 ${uploading ? 'pointer-events-none opacity-60' : ''}`}>
-        <Upload size={12} className="mr-1" /> {uploading ? 'Import en cours…' : 'Importer depuis mon ordinateur'}
-        <input data-testid={`input-replace-image-${label}`} type="file" accept=".jpg,.jpeg,.png,.webp,.svg,image/*" className="hidden" disabled={uploading} onChange={(e) => { void pickFile(e.target.files?.[0]); e.currentTarget.value = ''; }} />
+      <label className={`mt-2 flex cursor-pointer items-center justify-center rounded border border-dashed border-primary/40 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/5 ${uploading ? 'pointer-events-none opacity-60' : ''}`}>
+        <Upload size={12} className="mr-1" /> {uploading ? 'Import en cours…' : dragging ? 'Déposez l’image ici' : 'Déposer une image ou parcourir'}
+        <input data-testid={`input-replace-image-${label}`} type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" className="hidden" disabled={uploading} onChange={(e) => { void pickFile(e.target.files?.[0]); e.currentTarget.value = ''; }} />
       </label>
       {uploadError && <p className="mt-1 text-[10px] text-destructive">{uploadError}</p>}
     </div>
@@ -2125,12 +2150,29 @@ function EditPage() {
           </div>
         </div>
 
-        {page.infoboxImage && (
-          <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
-            <div className="mb-3 font-bold">Image de l'infobox</div>
-            <ImageEditor label="infobox" image={page.infoboxImage} onChange={(img) => update('infoboxImage', img)} onDelete={() => update('infoboxImage', undefined)} />
-          </div>
-        )}
+        <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
+          <div className="mb-1 font-bold">Image de l'infobox</div>
+          <p className="mb-3 text-xs leading-5 text-muted-foreground">
+            {page.infoboxImage && !page.infoboxImageOverride
+              ? 'Image détectée depuis le texte de l’article. Votre choix ci-dessous la remplace visuellement sans modifier la source.'
+              : page.infoboxImageOverride
+                ? 'Cette image est un choix visuel et ne modifie pas le texte brut de l’article.'
+                : 'Ajoutez une image visuelle sans modifier le texte brut de l’article.'}
+          </p>
+          <ImageEditor
+            label="infobox"
+            image={page.infoboxImageOverride ?? page.infoboxImage ?? {
+              filename: '',
+              caption: '',
+              alt: page.title,
+              alignment: 'centre',
+              size: '300',
+              missing: true,
+            }}
+            onChange={(img) => update('infoboxImageOverride', img)}
+            onDelete={() => update('infoboxImageOverride', undefined)}
+          />
+        </div>
 
         {/* Sections */}
         <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">

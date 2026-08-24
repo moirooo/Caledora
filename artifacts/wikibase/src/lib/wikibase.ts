@@ -21,11 +21,21 @@ export type WikiPage = {
   references: KV[]; bibliography: string[]; categories: string[]; category: string;
   type: string; sourceText: string; updatedAt: string; createdAt: string;
   history: WBHistory[]; isTrashed: boolean; accentColor?: string;
+  /**
+   * Presentation-only replacement selected from the visual editor. Unlike
+   * infoboxImage, this never rewrites the [IMAGE_INFOBOX] source block.
+   */
+  infoboxImageOverride?: WBImage;
   /** Conditional — only present when [MAILLOTS] is declared in the source. */
   infoboxJerseys?: WBJersey[];
   /** Conditional — only present when [INFOBOX_SECTION] blocks are declared. */
   infoboxSections?: WBInfoboxSection[];
 };
+
+/** The image shown at the top of an infobox without altering the article source. */
+export function getDisplayInfoboxImage(page: Pick<WikiPage, 'infoboxImage' | 'infoboxImageOverride'>): WBImage | undefined {
+  return page.infoboxImageOverride ?? page.infoboxImage;
+}
 
 const tags = new Set(['TITRE','SOUS-TITRE','ALIASES','ALIAS','INTRODUCTION','INFOBOX','IMAGE_INFOBOX','SECTION','SOUS-SECTION','SOUS-SOUS-SECTION','TEXTE','LISTE','LISTE_NUMEROTEE','IMAGE','TABLEAU','LIENS','REFERENCES','BIBLIOGRAPHIE','CATEGORIES','COULEUR','MAILLOTS','INFOBOX_SECTION']);
 const lines = (text: string) => text.replace(/\r/g, '').split('\n');
@@ -290,6 +300,7 @@ function stripSrc(page: WikiPage): WikiPage {
   return {
     ...page,
     infoboxImage: noSrc(page.infoboxImage),
+    infoboxImageOverride: noSrc(page.infoboxImageOverride),
     sections: page.sections.map((s) => ({
       ...s,
       blocks: s.blocks.map((b) =>
