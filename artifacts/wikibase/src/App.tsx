@@ -1948,13 +1948,21 @@ function ReaderPage() {
         <Link href="/" className="ml-auto wiki-link flex items-center gap-1"><ArrowLeft size={11} /> Retour</Link>
       </div>
 
+      {/* Mobile-only: infobox appears right after the header, before TOC and intro */}
+      <div className="lg:hidden">
+        <Infobox page={page} pages={pages} />
+      </div>
+
       {/* Two-column layout: TOC sidebar + article body */}
       <div className="reader-layout">
         <TableOfContents sections={page.sections} />
 
         <div className="reader-main" data-testid="article-page-content">
         <div className="article-body clearfix" style={{ '--page-accent': page.accentColor ?? categoryColor(page.category) } as React.CSSProperties}>
-        <Infobox page={page} pages={pages} />
+        {/* Desktop-only: infobox floats right inside the article body */}
+        <div className="hidden lg:block">
+          <Infobox page={page} pages={pages} />
+        </div>
 
         {page.aliases.length > 0 && (
           <p className="text-sm italic text-muted-foreground mb-3">
