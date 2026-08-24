@@ -1938,7 +1938,7 @@ function ReaderPage() {
     <div className="animate-rise">
       {/* Breadcrumb */}
       <div className="text-xs text-muted-foreground mb-2">
-        <Link href="/" className="wiki-link">Accueil</Link>
+        <Link href="/wiki" className="wiki-link">Accueil</Link>
         <span className="mx-1">›</span>
         <span>{page.category}</span>
         <span className="mx-1">›</span>
