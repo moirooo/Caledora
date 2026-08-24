@@ -91,11 +91,12 @@ Règles strictes :
 - Chaque commentaire fait 1 à 12 mots maximum.
 - Langage naturel, parlé, spontané ; ponctuation légère et émojis bien dosés.
 - Zéro hashtag, aucun préfixe comme « Commentaire : » ou « User : ».
-- Les comptes mentionnés dans la légende commentent impérativement en premier, dans l'ordre reçu, avec une réaction cohérente avec leur lien avec l'auteur.
-- Les relations du compte (coéquipier, rival, club, proche, coach, famille, sponsor) réagissent selon leur dynamique.
+- Tu dois retourner chaque compte de requiredAccounts : toutes les mentions de légende et toutes les relations déclarées sont obligatoires, sans exception.
+- En plus de requiredAccounts, sélectionne au moins 4 comptes distincts dans referenceAccounts. Ils doivent être journalistes, médias ou insiders cohérents avec le contenu, le contexte et l'ambiance du post.
+- Le volume est cumulatif : ne remplace jamais les obligations par les comptes de référence et ne limite jamais le résultat à 4 quand requiredAccounts contient plus de comptes.
+- Sauf pertinence manifeste pour en ajouter davantage, choisis 4 comptes de référence pour garder un échange naturel.
 - Le contexte libre peut demander une atmosphère ou un compte précis : respecte-le.
-- Complète avec les comptes disponibles les plus pertinents : stans @[Joueur]Era, agrégateurs @[Club]Zone, insiders, médias ou supporters. N'invente jamais de compte.
-- Retourne au moins 4 commentaires lorsque suffisamment de comptes sont disponibles.
+- N'invente jamais de compte et utilise uniquement les pseudos transmis.
 
 Réponds uniquement avec ce JSON strict, sans markdown :
 {"comments":[{"user":"pseudo_sans_arobase","text":"commentaire"}]}`;
@@ -112,6 +113,9 @@ router.post("/ai/comments", async (req, res) => {
     .map(asAccount)
     .filter((account): account is Account => Boolean(account))
     .slice(0, 220);
+  const referenceAccounts = (Array.isArray(body.referenceAccounts) ? body.referenceAccounts : [])
+    .map(asAccount)
+    .filter((account): account is Account => Boolean(account));
   const mentions = Array.isArray(body.mentions) ? body.mentions.map(textValue => text(textValue, 90)).filter(Boolean) : [];
   const contextRequests = Array.isArray(body.contextRequests) ? body.contextRequests.map(textValue => text(textValue, 90)).filter(Boolean) : [];
   const relationships = Array.isArray(body.relationships) ? body.relationships.map(value => {
@@ -121,8 +125,8 @@ router.post("/ai/comments", async (req, res) => {
   }).filter((relation): relation is { profileId: string; type: string } => Boolean(relation?.profileId && relation.type)).slice(0, 60) : [];
   const atmosphere = text(body.atmosphere, 200);
 
-  if (!author || !caption || candidates.length === 0) {
-    res.status(400).json({ error: "author, post.caption and availableAccounts are required" });
+  if (!author || !caption || referenceAccounts.length < 4) {
+    res.status(400).json({ error: "author, post.caption and at least four referenceAccounts are required" });
     return;
   }
   if (!requestOriginIsAllowed(req)) {
@@ -138,15 +142,18 @@ router.post("/ai/comments", async (req, res) => {
     return;
   }
 
-  const available = candidates.filter(account => account.id !== author.id);
+  const available = [...new Map([...candidates, ...referenceAccounts].map(account => [account.id, account])).values()]
+    .filter(account => account.id !== author.id);
   const byId = new Map(available.map(account => [account.id, account]));
   const byUsername = new Map(available.map(account => [account.username.toLowerCase(), account]));
+  const referenceIds = new Set(referenceAccounts.filter(account => account.id !== author.id).map(account => account.id));
   const required = [...new Map([
     ...mentions.map(id => byId.get(id) ?? byUsername.get(id.replace(/^@/, "").toLowerCase())).filter((account): account is Account => Boolean(account)),
     ...relationships.map(relation => byId.get(relation.profileId)).filter((account): account is Account => Boolean(account)),
     ...contextRequests.map(id => byId.get(id) ?? byUsername.get(id.replace(/^@/, "").toLowerCase())).filter((account): account is Account => Boolean(account)),
   ].map(account => [account.id, account])).values()];
-  const contextual = available.filter(account => !required.some(item => item.id === account.id)).slice(0, 50);
+  const requiredIds = new Set(required.map(account => account.id));
+  const referencePool = referenceAccounts.filter(account => account.id !== author.id);
 
   try {
     const completion = await gemini.models.generateContent({
@@ -161,7 +168,7 @@ router.post("/ai/comments", async (req, res) => {
           relationships,
           atmosphere,
           requiredAccounts: required,
-          availableAccounts: contextual,
+          referenceAccounts: referencePool,
         }) }],
       }],
       config: {
@@ -185,14 +192,13 @@ router.post("/ai/comments", async (req, res) => {
       if (account && commentText) byAuthor.set(account.id, { authorId: account.id, text: commentText });
     }
     const requiredComments = required.map(account => byAuthor.get(account.id) ?? { authorId: account.id, text: localComment(account, author) });
-    const extras = [...byAuthor.values()]
-      .filter(comment => !required.some(account => account.id === comment.authorId))
-      .slice(0, Math.max(0, 4 - requiredComments.length));
-    const fallback = contextual
-      .filter(account => !required.some(item => item.id === account.id) && !extras.some(item => item.authorId === account.id))
-      .slice(0, Math.max(0, 4 - requiredComments.length - extras.length))
+    const referenceComments = [...byAuthor.values()]
+      .filter(comment => referenceIds.has(comment.authorId) && !requiredIds.has(comment.authorId));
+    const fallback = referencePool
+      .filter(account => !requiredIds.has(account.id) && !referenceComments.some(item => item.authorId === account.id))
+      .slice(0, Math.max(0, 4 - referenceComments.length))
       .map(account => ({ authorId: account.id, text: localComment(account, author) }));
-    res.json({ comments: [...requiredComments, ...extras, ...fallback].slice(0, Math.max(4, requiredComments.length)) });
+    res.json({ comments: [...requiredComments, ...referenceComments, ...fallback] });
   } catch (error) {
     req.log.warn({ err: error }, "Gemini Instagram comment generation failed");
     res.status(503).json({ error: "Instagram comment generation is temporarily unavailable" });

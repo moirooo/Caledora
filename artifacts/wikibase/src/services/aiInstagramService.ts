@@ -1,5 +1,5 @@
 import type { InstagramProfile, InstagramTone } from './instagramStorage';
-import { socialAccountMatchesContext } from '@/data/socialAccounts';
+import { isSocialAccountProfile, socialAccountProfiles } from '@/data/socialAccounts';
 
 export type AiComment = { authorId: string; text: string };
 
@@ -37,16 +37,15 @@ const localComment = (profile: InstagramProfile, relation?: string) => {
   return profile.personality === 'provocateur' ? 'Ça parle beaucoup, mais on regarde. 🔥' : 'Magnifique énergie, continue comme ça. ✨';
 };
 
-const communityProfilesForCaption = (caption: string, candidates: InstagramProfile[]) => {
-  const normalized = caption.toLowerCase();
-  const intimateOrCasual = /(amour|cœur|coeur|famille|vacance|week-?end|souvenir|anniversaire|romance|intime|photo)/u.test(normalized);
-  const allowedIds = intimateOrCasual
-    ? new Set(['community-era', 'community-culture', 'community-vibes', 'community-circle'])
-    : new Set(['community-tribune', 'community-era', 'community-zone', 'community-stadium']);
-  return candidates.filter(profile => allowedIds.has(profile.id));
-};
-
 const uniqueProfiles = (profiles: InstagramProfile[]) => [...new Map(profiles.map(profile => [profile.id, profile])).values()];
+const normalizedValue = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+function isExplicitlyRequested(profile: InstagramProfile, context: string) {
+  const normalizedContext = normalizedValue(context);
+  return normalizedContext.includes(`@${profile.username.toLowerCase()}`)
+    || normalizedContext.includes(profile.username.toLowerCase())
+    || normalizedContext.includes(normalizedValue(profile.displayName));
+}
 
 export async function generateInstagramComments(
   caption: string,
@@ -56,21 +55,18 @@ export async function generateInstagramComments(
   postMeta: { location?: string; category?: string } = {},
 ): Promise<AiComment[]> {
   const mentions = [...caption.matchAll(/@([a-z0-9._]+)/gi)].map(match => match[1].toLowerCase());
-  const eligible = candidates.filter(profile => profile.id !== author.id);
+  const visibleProfiles = candidates.filter(profile => !isSocialAccountProfile(profile));
+  const allCandidates = uniqueProfiles([...visibleProfiles, ...socialAccountProfiles]);
+  const eligible = allCandidates.filter(profile => profile.id !== author.id);
   const profilesByUsername = new Map(eligible.map(profile => [profile.username.toLowerCase(), profile]));
   const mentioned = [...new Set(mentions)].map(username => profilesByUsername.get(username)).filter((profile): profile is InstagramProfile => Boolean(profile));
   const related = eligible.filter(profile => author.relations.some(relation => relation.profileId === profile.id) && !mentioned.some(item => item.id === profile.id));
-  const normalizedContext = context.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const contextual = socialAccountMatchesContext(context, eligible).filter(profile => !mentioned.some(item => item.id === profile.id) && !related.some(item => item.id === profile.id));
-  const explicitlyRequested = contextual.filter(profile => normalizedContext.includes(`@${profile.username.toLowerCase()}`)
-    || normalizedContext.includes(profile.username.toLowerCase())
-    || normalizedContext.includes(profile.displayName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()));
+  const explicitlyRequested = socialAccountProfiles.filter(profile => profile.id !== author.id && isExplicitlyRequested(profile, context)
+    && !mentioned.some(item => item.id === profile.id) && !related.some(item => item.id === profile.id));
   const required = uniqueProfiles([...explicitlyRequested, ...mentioned, ...related]);
-  const community = uniqueProfiles([
-    ...contextual,
-    ...communityProfilesForCaption(caption, eligible),
-  ]).filter(profile => !required.some(item => item.id === profile.id));
-  const candidatePool = uniqueProfiles([...required, ...community, ...eligible]).slice(0, 80);
+  const requiredIds = new Set(required.map(profile => profile.id));
+  const referenceProfiles = socialAccountProfiles.filter(profile => profile.id !== author.id);
+  const referenceIds = new Set(referenceProfiles.map(profile => profile.id));
   try {
     const response = await fetch('/api/ai/comments', {
       method: 'POST',
@@ -84,7 +80,8 @@ export async function generateInstagramComments(
         contextRequests: explicitlyRequested.map(profile => profile.id),
         relationships: author.relations,
         atmosphere: context || 'spontané et naturel',
-        availableAccounts: candidatePool,
+        availableAccounts: visibleProfiles,
+        referenceAccounts: socialAccountProfiles,
       }),
     });
     const data = await response.json() as { comments?: AiComment[] };
@@ -97,14 +94,18 @@ export async function generateInstagramComments(
       }
     });
     const requiredComments = required.map(profile => byAuthor.get(profile.id) ?? { authorId: profile.id, text: localComment(profile, author.relations.find(item => item.profileId === profile.id)?.type) });
-    const extras = [...byAuthor.values()].filter(comment => community.some(profile => profile.id === comment.authorId) && !required.some(profile => profile.id === comment.authorId)).slice(0, Math.max(0, 4 - requiredComments.length));
-    if (requiredComments.length + extras.length >= Math.min(4, Math.max(1, required.length))) return [...requiredComments, ...extras];
+    const generatedReferenceComments = [...byAuthor.values()]
+      .filter(comment => referenceIds.has(comment.authorId) && !requiredIds.has(comment.authorId));
+    const fallbackReferenceComments = referenceProfiles
+      .filter(profile => !requiredIds.has(profile.id) && !generatedReferenceComments.some(comment => comment.authorId === profile.id))
+      .slice(0, Math.max(0, 4 - generatedReferenceComments.length))
+      .map(profile => ({ authorId: profile.id, text: localComment(profile) }));
+    return [...requiredComments, ...generatedReferenceComments, ...fallbackReferenceComments];
   } catch {
     // Local fallback keeps publishing and mention rules usable offline.
   }
-  const used = new Set(required.map(profile => profile.id));
-  const extras = community.filter(profile => !used.has(profile.id)).slice(0, Math.max(0, 4 - required.length))
-    .map(profile => ({ authorId: profile.id, text: localComment(profile, author.relations.find(item => item.profileId === profile.id)?.type) }));
+  const extras = referenceProfiles.filter(profile => !requiredIds.has(profile.id)).slice(0, 4)
+    .map(profile => ({ authorId: profile.id, text: localComment(profile) }));
   return [
     ...required.map(profile => ({ authorId: profile.id, text: localComment(profile, author.relations.find(item => item.profileId === profile.id)?.type) })),
     ...extras,

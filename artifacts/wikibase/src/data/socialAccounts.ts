@@ -83,6 +83,13 @@ export const socialAccountProfiles: InstagramProfile[] = socialAccountGroups.fla
   relations: [],
 })));
 
+const socialAccountProfileIds = new Set(socialAccountProfiles.map(profile => profile.id));
+
+/** Reference accounts are generated data for AI comments, never selectable user profiles. */
+export function isSocialAccountProfile(profile: Pick<InstagramProfile, 'id'>) {
+  return socialAccountProfileIds.has(profile.id);
+}
+
 export function socialAccountMatchesContext(context: string, profiles: InstagramProfile[]) {
   const normalized = context.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const requestedHandles = [...context.matchAll(/@([a-z0-9._]+)/gi)].map(match => match[1].toLowerCase());
