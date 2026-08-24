@@ -725,6 +725,19 @@ function Dashboard() {
               </div>
             </div>
 
+            <Link
+              href="/sauvegarde"
+              onClick={() => setShowSettings(false)}
+              className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-left transition hover:bg-white/[0.12]"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#22a0a9]/20 text-lg text-[#8ee8ea]">⇅</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-semibold text-white/85">Import / Export</span>
+                <span className="mt-0.5 block text-[11px] leading-4 text-white/40">Sauvegarder ou restaurer vos données</span>
+              </span>
+              <ChevronRight size={16} className="shrink-0 text-white/35" />
+            </Link>
+
             <div className="border-t border-white/10 pt-5 space-y-1 text-[12px] text-white/25">
               <div>CaledoraOS · Version 1.0</div>
               <div>WikiBase · {active.length} article{active.length !== 1 ? 's' : ''} en base</div>

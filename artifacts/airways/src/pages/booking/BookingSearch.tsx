@@ -77,7 +77,7 @@ export default function BookingSearch() {
           </button>
         </div>
 
-        <div className="booking-form__row" style={{ gridTemplateColumns: '1fr auto 1fr', alignItems: 'end' }}>
+        <div className="booking-form__row booking-form__route-row">
           <div className="booking-form__field">
             <label htmlFor="origin">Origine</label>
             <select id="origin" value={origin} onChange={(e) => setOrigin(e.target.value)}>

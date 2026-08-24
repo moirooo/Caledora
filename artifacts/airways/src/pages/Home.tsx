@@ -44,7 +44,6 @@ export default function Home() {
         <div className="hero__video-overlay" aria-hidden="true" />
         <HorizonScene />
         <div className="container hero__content">
-          <span className="hero__eyebrow">CW · Caledora Airways</span>
           <h1>
             Le monde a rendez-vous <em>au lever du jour</em>
           </h1>
