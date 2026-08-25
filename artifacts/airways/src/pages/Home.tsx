@@ -85,13 +85,12 @@ export default function Home() {
                 onChange={(e) => setSearch({ ...search, date: e.target.value })}
               />
             </div>
-            <div className="search-bar__submit">
+            <div className="search-bar__submit pl-[25px] pr-[25px]">
               <button type="submit" className="btn btn--gold">Rechercher</button>
             </div>
           </form>
         </div>
       </section>
-
       {/* ---------------- BRAND FILM ---------------- */}
       <section className="brand-film section">
         <div className="container brand-film__layout">
@@ -118,7 +117,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
       {/* ---------------- PILLARS ---------------- */}
       <section className="section">
         <div className="container">
@@ -146,7 +144,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
       {/* ---------------- NETWORK SPLIT ---------------- */}
       <section className="section section--mist">
         <div className="container split">
@@ -168,7 +165,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
       {/* ---------------- STATS ---------------- */}
       <section className="section--navy section--tight">
         <div className="container">
@@ -176,7 +172,6 @@ export default function Home() {
           <StatGrid stats={KEY_FIGURES.slice(0, 4)} />
         </div>
       </section>
-
       {/* ---------------- FLEET SPLIT ---------------- */}
       <section className="section">
         <div className="container split split--reverse">
@@ -201,7 +196,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
       {/* ---------------- CABINS TEASER ---------------- */}
       <section className="section section--mist">
         <div className="container">
@@ -222,7 +216,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
       {/* ---------------- CTA BAND ---------------- */}
       <section className="section--navy section--tight">
         <div className="container cta-band">
@@ -234,7 +227,7 @@ export default function Home() {
         </div>
       </section>
     </div>
-  )
+  );
 }
 
 function NetworkGlyph() {
