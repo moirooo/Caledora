@@ -232,7 +232,7 @@ export default function Home() {
 function NetworkAircraftGlyph() {
   return (
     <img
-      src="/images/avion.jpg"
+      src="attached_assets/avion.jpg"
       alt="Avion Caledora Airways en vol"
       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
     />
