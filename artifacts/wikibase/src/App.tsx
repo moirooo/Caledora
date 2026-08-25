@@ -9,6 +9,7 @@ import { allText, demoSource, formatDate, getDisplayInfoboxImage, loadPages, par
 import { getUploadedMedia, uploadMedia } from '@workspace/media-upload';
 import OriaBank from '@/pages/OriaBank.jsx';
 import { TWITTER_ACCOUNTS, TWITTER_ACCOUNT_TEMPLATES, type TwitterAccountCategory } from '@/data/twitterAccounts';
+import { socialAccountProfiles } from '@/data/socialAccounts';
 import { InstagramApp } from '@/components/instagram/InstagramApp';
 import { GlobalBackupPage } from '@/components/GlobalBackupPage';
 
@@ -2404,10 +2405,13 @@ type XAccount = {
   avatarColor: string;
   badge: 'gold' | 'blue' | null;
   category: TwitterAccountCategory;
+  followers: number;
   country?: string;
   isSystem?: boolean;
+  relatedHandles?: string[];
 };
-type XReply   = { id: string; acct: XAccount; text: string; likes: number; ts: number; editedAt?: number };
+type XFeedTopic = 'MERCATO' | 'MATCHES' | 'TACTICS' | 'CLUB_LIFE' | 'MISC';
+type XReply   = { id: string; acct: XAccount; text: string; likes: number; retweets?: number; views?: number; ts: number; editedAt?: number; engagementVersion?: 1 };
 type XTweet   = {
   id: string;
   acct: XAccount;
@@ -2421,6 +2425,9 @@ type XTweet   = {
   retweeted: boolean;
   replies: XReply[];
   editedAt?: number;
+  topic?: XFeedTopic;
+  aiContext?: string;
+  engagementVersion?: 1;
 };
 
 const xColor  = (s: string) => { let h = 0; for (const c of s) h = (Math.imul(h, 31) + c.charCodeAt(0)) | 0; return `hsl(${((h >>> 0) % 360)},60%,42%)`; };
@@ -2429,33 +2436,98 @@ const xInits  = (n: string) => { const p = n.trim().split(/\s+/); return (p.leng
 const xBadge  = (cat: string): 'gold' | 'blue' | null => ['Sports & Football','Économie','Transports','Géographie','Monuments & Lieux'].includes(cat) ? 'gold' : ['Personnes & Organisations','Politique'].includes(cat) ? 'blue' : 'gold';
 const fmtN    = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n);
 const xAgo    = (ts: number) => { const s = Math.floor((Date.now() - ts) / 1000); if (s < 60) return `${s}s`; const m = Math.floor(s / 60); if (m < 60) return `${m}min`; const h = Math.floor(m / 60); if (h < 24) return `${h}h`; return new Date(ts).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }); };
+const xHash = (value: string) => [...value].reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0, 2166136261);
+const xSeeded = (seed: string, min: number, max: number) => min + (xHash(seed) % (max - min + 1));
+
+function followersForAccount(account: Pick<XAccount, 'handle' | 'category' | 'isSystem'> & { followers?: number }) {
+  if (typeof account.followers === 'number' && account.followers > 0) return Math.round(account.followers);
+  if (account.isSystem) return xSeeded(`${account.handle}:followers`, 900, 18_000);
+  const ranges: Record<TwitterAccountCategory, [number, number]> = {
+    WIKI_OFFICIAL: [35_000, 640_000],
+    MERCATO_GLOBAL: [650_000, 5_200_000],
+    FRANCE_INSIDERS_MEDIAS: [90_000, 2_100_000],
+    UK_INSIDERS_MEDIAS: [120_000, 2_800_000],
+    SPAIN_INSIDERS_MEDIAS: [80_000, 2_300_000],
+    ITALY_INSIDERS_MEDIAS: [70_000, 1_900_000],
+    GERMANY_INSIDERS_MEDIAS: [75_000, 1_800_000],
+    DATA_TACTICS_INVESTIGATION: [40_000, 950_000],
+  };
+  const [min, max] = ranges[account.category];
+  return xSeeded(`${account.handle}:followers`, min, max);
+}
+
+function engagementFor(account: Pick<XAccount, 'handle' | 'category' | 'isSystem'> & { followers?: number }, seed: string) {
+  const followers = followersForAccount(account);
+  const variation = xSeeded(`${seed}:variation`, 0, 10_000) / 10_000;
+  const views = Math.max(18, Math.round(followers * (0.16 + variation * 0.34)));
+  const likes = Math.max(1, Math.round(followers * (0.006 + variation * 0.02)));
+  const retweets = Math.max(0, Math.round(likes * (0.025 + variation * 0.12)));
+  return { likes, retweets, views };
+}
+
+const XACCOUNT_RELATIONS: Record<string, string[]> = {
+  '@caledorafc': ['@CaledoraSport'],
+  '@oriabank': ['@MediaCaledora'],
+  '@caledoraairways': ['@MediaCaledora'],
+};
 
 function wikiToXAcct(p: WikiPage): XAccount {
   let avatarUrl: string | undefined;
   if (p.infoboxImage) { const f = (p.infoboxImage.src || p.infoboxImage.filename).trim(); if (f) avatarUrl = /^(https?:\/\/|data:)/.test(f) ? f : import.meta.env.BASE_URL + f.replace(/^\/+/, ''); }
+  const handle = xHandle(p.title);
   return {
-    handle: xHandle(p.title),
+    handle,
     name: p.title,
     avatarUrl,
     initials: xInits(p.title),
     avatarColor: xColor(p.title),
     badge: xBadge(p.category),
     category: 'WIKI_OFFICIAL',
+    followers: followersForAccount({ handle, category: 'WIKI_OFFICIAL' }),
+    relatedHandles: XACCOUNT_RELATIONS[handle.toLowerCase()],
   };
 }
 
 const XMEDIA: XAccount[] = [
-  { handle: '@CaledoraSport', name: 'Caledora Sport',   initials: 'CS', avatarColor: '#1d9bf0', badge: 'blue', category: 'WIKI_OFFICIAL', isSystem: true },
-  { handle: '@MediaCaledora', name: 'Médias Caledora',  initials: 'MC', avatarColor: '#7856ff', badge: 'blue', category: 'WIKI_OFFICIAL', isSystem: true },
-  { handle: '@InsiderCaled',  name: 'Caledora Insider', initials: 'CI', avatarColor: '#00ba7c', badge: null,   category: 'WIKI_OFFICIAL', isSystem: true },
-  { handle: '@CFCFan07',      name: 'Fan CFC 🏟️',       initials: 'FC', avatarColor: '#ff7a00', badge: null,   category: 'WIKI_OFFICIAL', isSystem: true },
+  { handle: '@CaledoraSport', name: 'Caledora Sport',   initials: 'CS', avatarColor: '#1d9bf0', badge: 'blue', category: 'WIKI_OFFICIAL', followers: 510_000, isSystem: true, relatedHandles: ['@CaledoraFC'] },
+  { handle: '@MediaCaledora', name: 'Médias Caledora',  initials: 'MC', avatarColor: '#7856ff', badge: 'blue', category: 'WIKI_OFFICIAL', followers: 280_000, isSystem: true, relatedHandles: ['@CaledoraAirways', '@OriaBank'] },
+  { handle: '@InsiderCaled',  name: 'Caledora Insider', initials: 'CI', avatarColor: '#00ba7c', badge: null,   category: 'WIKI_OFFICIAL', followers: 46_000, isSystem: true },
+  { handle: '@CFCFan07',      name: 'Fan CFC 🏟️',       initials: 'FC', avatarColor: '#ff7a00', badge: null,   category: 'WIKI_OFFICIAL', followers: 8_700, isSystem: true },
 ];
+
+function categoryFromSocialReference(category: string): TwitterAccountCategory {
+  const value = category.toLowerCase();
+  if (/(tactique|data|investigation|économie|geopolitique|finance)/.test(value)) return 'DATA_TACTICS_INVESTIGATION';
+  if (/(mercato|transfert|global)/.test(value)) return 'MERCATO_GLOBAL';
+  if (/angleterre/.test(value)) return 'UK_INSIDERS_MEDIAS';
+  if (/espagne/.test(value)) return 'SPAIN_INSIDERS_MEDIAS';
+  if (/italie/.test(value)) return 'ITALY_INSIDERS_MEDIAS';
+  if (/allemagne/.test(value)) return 'GERMANY_INSIDERS_MEDIAS';
+  if (/france|caledora/.test(value)) return 'FRANCE_INSIDERS_MEDIAS';
+  return 'WIKI_OFFICIAL';
+}
 
 const XREGISTRY: XAccount[] = TWITTER_ACCOUNTS.map(acct => ({
   ...acct,
   initials: xInits(acct.name),
   avatarColor: xColor(acct.name),
+  followers: followersForAccount(acct),
+  isSystem: true,
 }));
+const XSOCIAL_REFERENCE: XAccount[] = socialAccountProfiles.map(profile => {
+  const category = categoryFromSocialReference(profile.category);
+  const handle = `@${profile.username}`;
+  return {
+    handle,
+    name: profile.displayName,
+    initials: xInits(profile.displayName),
+    avatarColor: xColor(profile.displayName),
+    badge: profile.verified ? 'blue' : null,
+    category,
+    followers: followersForAccount({ handle, category, followers: profile.followers, isSystem: true }),
+    isSystem: true,
+  };
+});
 
 const XTRENDS = [['#CFCvARS','42,1K tweets'],['#Caledora','18,7K tweets'],['#CaledoraSport','9,4K tweets'],['#OriaBankOpen','6,2K tweets'],['#CALNED','4,8K tweets']] as const;
 
@@ -2468,20 +2540,27 @@ const xReplyTpl = (name: string) => [
   `⚡ Le dynamisme de Caledora ne s'arrête jamais ! #CaledoraSport`,
 ];
 
-type XTopic = 'MERCATO' | 'ANALYSIS' | 'FINANCE' | 'CULTURE' | 'BUSINESS';
+const XTOPICS: ReadonlyArray<{ id: 'ALL' | XFeedTopic; label: string }> = [
+  { id: 'ALL', label: 'Tous' },
+  { id: 'MERCATO', label: 'Mercato' },
+  { id: 'MATCHES', label: 'Matchs' },
+  { id: 'TACTICS', label: 'Tactique' },
+  { id: 'CLUB_LIFE', label: 'Vie des clubs' },
+  { id: 'MISC', label: 'Divers' },
+];
 
-function classifyTweetTopic(text: string): XTopic {
+function classifyTweetTopic(text: string): XFeedTopic {
   const value = text.toLowerCase();
   if (/(transfert|mercato|recrue|signature|contrat|here we go|prêt|loan|deadline)/.test(value)) return 'MERCATO';
-  if (/(tactique|analyse|data|stat|xg|pressing|système|formation|scout)/.test(value)) return 'ANALYSIS';
-  if (/(finance|budget|économie|géopolitique|investissement|dette|valorisation|salaire)/.test(value)) return 'FINANCE';
-  if (/(cinéma|film|série|culture|musique|festival|acteur)/.test(value)) return 'CULTURE';
-  return 'BUSINESS';
+  if (/(match|matchday|score|but|victoire|défaite|nul|classement|stade|coup d'envoi|derby)/.test(value)) return 'MATCHES';
+  if (/(tactique|analyse|data|stat|xg|pressing|système|formation|scout)/.test(value)) return 'TACTICS';
+  if (/(supporter|tribune|club|entra[iî]nement|académie|maillot|vestiaire|communauté|anniversaire)/.test(value)) return 'CLUB_LIFE';
+  return 'MISC';
 }
 
-function contextCategories(topic: XTopic): TwitterAccountCategory[] {
+function contextCategories(topic: XFeedTopic): TwitterAccountCategory[] {
   if (topic === 'MERCATO') return ['MERCATO_GLOBAL', 'FRANCE_INSIDERS_MEDIAS', 'UK_INSIDERS_MEDIAS', 'SPAIN_INSIDERS_MEDIAS', 'ITALY_INSIDERS_MEDIAS', 'GERMANY_INSIDERS_MEDIAS'];
-  if (topic === 'ANALYSIS' || topic === 'FINANCE') return ['DATA_TACTICS_INVESTIGATION'];
+  if (topic === 'TACTICS') return ['DATA_TACTICS_INVESTIGATION'];
   return ['WIKI_OFFICIAL'];
 }
 
@@ -2525,10 +2604,41 @@ function XTweetText({ text }: { text: string }) {
 
 const XSTORAGE = 'caledora-x-tweets';
 const XINIT: XTweet[] = [
-  { id:'xi1', ts:Date.now()-1000*60*35,  likes:847, retweets:234, views:12400, liked:false, retweeted:false, replies:[], acct:{ handle:'@CaledoraFC',      name:'Caledora FC',       initials:'CF', avatarColor:xColor('Caledora FC'),       avatarUrl:`${import.meta.env.BASE_URL}images/logo1.png`,    badge:'gold', category:'WIKI_OFFICIAL' }, text:'⚽ Matchday ! Caledora FC reçoit Arsenal ce samedi à 20h45 au Caledora Mare Stadium. Soyez nombreux dans les tribunes ! 💙🏟️ #CFCvARS #Caledora' },
-  { id:'xi2', ts:Date.now()-1000*60*90,  likes:312, retweets:89,  views:5800,  liked:false, retweeted:false, replies:[], acct:{ handle:'@OriaBank',         name:'Oria Bank',         initials:'OB', avatarColor:xColor('Oria Bank'),         avatarUrl:`${import.meta.env.BASE_URL}images/oriabank.png`, badge:'gold', category:'WIKI_OFFICIAL' }, text:'🏦 Oria Bank est fière d\'annoncer l\'ouverture de sa 12e agence à Caledora City ! Rendez-vous lundi pour l\'inauguration. #OriaBankOpen' },
-  { id:'xi3', ts:Date.now()-1000*60*180, likes:521, retweets:173, views:9100,  liked:false, retweeted:false, replies:[], acct:{ handle:'@CaledoraAirways', name:'Caledora Airways',  initials:'CA', avatarColor:xColor('Caledora Airways'), avatarUrl:`${import.meta.env.BASE_URL}images/airways2.jpg`,badge:'gold', category:'WIKI_OFFICIAL' }, text:'✈️ Nouvelle liaison directe Caledora City → Paris CDG dès le 1er septembre ! Réservez vos billets en avant-première. Bon vol à tous 🌍' },
+  { id:'xi1', ts:Date.now()-1000*60*35,  likes:847, retweets:234, views:12400, liked:false, retweeted:false, replies:[], acct:{ handle:'@CaledoraFC',      name:'Caledora FC',       initials:'CF', avatarColor:xColor('Caledora FC'),       avatarUrl:`${import.meta.env.BASE_URL}images/logo1.png`,    badge:'gold', category:'WIKI_OFFICIAL', followers: 1_180_000, relatedHandles: ['@CaledoraSport'] }, text:'⚽ Matchday ! Caledora FC reçoit Arsenal ce samedi à 20h45 au Caledora Mare Stadium. Soyez nombreux dans les tribunes ! 💙🏟️ #CFCvARS #Caledora' },
+  { id:'xi2', ts:Date.now()-1000*60*90,  likes:312, retweets:89,  views:5800,  liked:false, retweeted:false, replies:[], acct:{ handle:'@OriaBank',         name:'Oria Bank',         initials:'OB', avatarColor:xColor('Oria Bank'),         avatarUrl:`${import.meta.env.BASE_URL}images/oriabank.png`, badge:'gold', category:'WIKI_OFFICIAL', followers: 420_000, relatedHandles: ['@MediaCaledora'] }, text:'🏦 Oria Bank est fière d\'annoncer l\'ouverture de sa 12e agence à Caledora City ! Rendez-vous lundi pour l\'inauguration. #OriaBankOpen' },
+  { id:'xi3', ts:Date.now()-1000*60*180, likes:521, retweets:173, views:9100,  liked:false, retweeted:false, replies:[], acct:{ handle:'@CaledoraAirways', name:'Caledora Airways',  initials:'CA', avatarColor:xColor('Caledora Airways'), avatarUrl:`${import.meta.env.BASE_URL}images/airways2.jpg`,badge:'gold', category:'WIKI_OFFICIAL', followers: 510_000, relatedHandles: ['@MediaCaledora'] }, text:'✈️ Nouvelle liaison directe Caledora City → Paris CDG dès le 1er septembre ! Réservez vos billets en avant-première. Bon vol à tous 🌍' },
 ];
+
+function normalizeXAccount(account: XAccount): XAccount {
+  return { ...account, followers: followersForAccount(account) };
+}
+
+function normalizeTweet(tweet: XTweet): XTweet {
+  const acct = normalizeXAccount(tweet.acct);
+  const baseline = engagementFor(acct, tweet.id);
+  return {
+    ...tweet,
+    acct,
+    topic: tweet.topic ?? classifyTweetTopic(tweet.text),
+    aiContext: typeof tweet.aiContext === 'string' && tweet.aiContext.trim() ? tweet.aiContext.trim() : undefined,
+    likes: tweet.engagementVersion === 1 ? tweet.likes : baseline.likes,
+    retweets: tweet.engagementVersion === 1 ? tweet.retweets : baseline.retweets,
+    views: tweet.engagementVersion === 1 ? tweet.views : baseline.views,
+    engagementVersion: 1,
+    replies: (tweet.replies ?? []).map(reply => {
+      const replyAcct = normalizeXAccount(reply.acct);
+      const replyBaseline = engagementFor(replyAcct, reply.id);
+      return {
+        ...reply,
+        acct: replyAcct,
+        likes: reply.engagementVersion === 1 ? reply.likes : replyBaseline.likes,
+        retweets: reply.engagementVersion === 1 ? reply.retweets : replyBaseline.retweets,
+        views: reply.engagementVersion === 1 ? reply.views : replyBaseline.views,
+        engagementVersion: 1,
+      };
+    }),
+  };
+}
 
 function XAvtr({ acct, size = 40 }: { acct: XAccount; size?: number }) {
   const [err, setErr] = useState(false);
@@ -2590,7 +2700,9 @@ function XCard({
   onDeleteReply,
   editing,
   editDraft,
+  editContext,
   onEditDraftChange,
+  onEditContextChange,
   onSaveEdit,
   onCancelEdit,
 }: {
@@ -2609,12 +2721,15 @@ function XCard({
   onDeleteReply: (replyId: string) => void;
   editing: XEditTarget;
   editDraft: string;
+  editContext: string;
   onEditDraftChange: (value: string) => void;
+  onEditContextChange: (value: string) => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
 }) {
   const showThread = expanded && tweet.replies.length > 0;
   const editingTweet = editing?.tweetId === tweet.id && !editing.replyId;
+  const topicLabel = XTOPICS.find(topic => topic.id === (tweet.topic ?? classifyTweetTopic(tweet.text)))?.label ?? 'Divers';
   return (
     <div style={{ borderBottom: '1px solid #2f3336' }}>
       {/* ── Main tweet ── */}
@@ -2630,6 +2745,7 @@ function XCard({
               <span className="font-bold text-[15px] text-white">{tweet.acct.name}</span>
               <XBadgeIcon type={tweet.acct.badge} />
               <span className="text-[#71767b] text-[13px]">{tweet.acct.handle} · {xAgo(tweet.ts)}{tweet.editedAt ? ` · Modifié · ${new Date(tweet.editedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+               <span className="rounded-full bg-[#1d9bf0]/10 px-2 py-0.5 text-[10px] font-semibold text-[#8ecdf5]">{topicLabel}</span>
             </div>
             <XTweetMenu
               label={tweet.acct.name}
@@ -2647,6 +2763,17 @@ function XCard({
                 onChange={event => onEditDraftChange(event.target.value)}
                 className="min-h-[76px] w-full resize-none bg-transparent text-[15px] leading-relaxed text-white outline-none"
               />
+              <label className="mt-2 block rounded-lg border border-[#2f3336] bg-black/20 px-2.5 py-2">
+                <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[#8ecdf5]">Contexte / Consignes pour l’IA</span>
+                <textarea
+                  value={editContext}
+                  onChange={event => onEditContextChange(event.target.value)}
+                  maxLength={700}
+                  rows={2}
+                  placeholder="Ex. : annonce de transfert surprise, ton de journaliste…"
+                  className="w-full resize-none bg-transparent text-[12px] leading-relaxed text-white outline-none placeholder:text-[#71767b]"
+                />
+              </label>
               <div className="mt-2 flex justify-end gap-2">
                 <button onClick={onCancelEdit} className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-[#71767b] hover:bg-white/10">Annuler</button>
                 <button onClick={onSaveEdit} disabled={!editDraft.trim()} className="rounded-full bg-[#1d9bf0] px-3.5 py-1.5 text-[12px] font-bold text-white disabled:opacity-40">Enregistrer</button>
@@ -2734,7 +2861,7 @@ function XCard({
                     <span className="flex items-center gap-1"><MessageCircle size={12} /></span>
                     <span className="flex items-center gap-1"><Heart size={12} /><span>{r.likes}</span></span>
                     <span className="flex items-center gap-1"><Repeat2 size={12} /></span>
-                    <span className="flex items-center gap-1 ml-auto"><BarChart2 size={11} /><span>{fmtN(Math.floor(r.likes * 8 + Math.random() * 200))}</span></span>
+                    <span className="flex items-center gap-1 ml-auto"><BarChart2 size={11} /><span>{fmtN(r.views ?? engagementFor(r.acct, r.id).views)}</span></span>
                   </div>
                 </div>
               </div>
@@ -2752,26 +2879,37 @@ function TwitterPage() {
 
   const wikiAccts = useMemo(() => pages.filter(p => !p.isTrashed).map(wikiToXAcct), [pages]);
   const dynamicFanAccts = useMemo(() => wikiAccts.slice(0, 3).flatMap(acct =>
-    TWITTER_ACCOUNT_TEMPLATES.CLUB_ACTU.slice(0, 2).map(suffix => ({
-      handle: `${acct.handle}${suffix}`.replace(/[^@a-zA-Z0-9_]/g, ''),
-      name: `${acct.name} ${suffix}`,
-      initials: xInits(acct.name),
-      avatarColor: xColor(`${acct.name}${suffix}`),
-      badge: null,
-      category: 'WIKI_OFFICIAL' as const,
-      isSystem: true,
-    })),
+    TWITTER_ACCOUNT_TEMPLATES.CLUB_ACTU.slice(0, 2).map(suffix => {
+      const handle = `${acct.handle}${suffix}`.replace(/[^@a-zA-Z0-9_]/g, '');
+      return {
+        handle,
+        name: `${acct.name} ${suffix}`,
+        initials: xInits(acct.name),
+        avatarColor: xColor(`${acct.name}${suffix}`),
+        badge: null,
+        category: 'WIKI_OFFICIAL' as const,
+        followers: followersForAccount({ handle, category: 'WIKI_OFFICIAL', isSystem: true }),
+        isSystem: true,
+      };
+    }),
   ), [wikiAccts]);
-  const allAccts  = useMemo(() => uniqueXAccounts([...wikiAccts, ...XMEDIA, ...XREGISTRY, ...dynamicFanAccts]), [wikiAccts, dynamicFanAccts]);
+  const allAccts  = useMemo(() => uniqueXAccounts([...wikiAccts, ...XMEDIA, ...XREGISTRY, ...XSOCIAL_REFERENCE, ...dynamicFanAccts]), [wikiAccts, dynamicFanAccts]);
+  const publicAccounts = useMemo(() => wikiAccts.filter(account => !account.isSystem), [wikiAccts]);
 
   const [tweets, setTweetsState] = useState<XTweet[]>(() => {
-    try { const s = localStorage.getItem(XSTORAGE); if (s) return JSON.parse(s); } catch {}
-    return XINIT;
+    try {
+      const stored = localStorage.getItem(XSTORAGE);
+      const parsed = stored ? JSON.parse(stored) : null;
+      if (Array.isArray(parsed)) return parsed.map(tweet => normalizeTweet(tweet as XTweet));
+    } catch {}
+    return XINIT.map(normalizeTweet);
   });
   const setTweets = (t: XTweet[]) => { setTweetsState(t); localStorage.setItem(XSTORAGE, JSON.stringify(t)); };
 
-  const [tab, setTab]           = useState<'foryou' | 'following'>('foryou');
+  const [tab, setTab]           = useState<'foryou' | 'following' | 'discovery'>('foryou');
+  const [topicFilter, setTopicFilter] = useState<'ALL' | XFeedTopic>('ALL');
   const [draft, setDraft]       = useState('');
+  const [composeContext, setComposeContext] = useState('');
   const [authorIdx, setAuthorIdx] = useState(0);
   const [imgUrl, setImgUrl]     = useState('');
   const [imgOpen, setImgOpen]   = useState(false);
@@ -2783,39 +2921,62 @@ function TwitterPage() {
   const [menuId, setMenuId] = useState<string | null>(null);
   const [editing, setEditing] = useState<XEditTarget>(null);
   const [editDraft, setEditDraft] = useState('');
+  const [editContext, setEditContext] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [discoverySeed] = useState(() => Math.floor(Date.now() / 60_000));
 
   const author    = allAccts[authorIdx] ?? XINIT[0].acct;
-  const displayed = tab === 'foryou' ? tweets : tweets.filter(t => !t.acct.isSystem);
+  const displayed = useMemo(() => {
+    const filtered = tweets
+      .filter(tweet => tab !== 'following' || !tweet.acct.isSystem)
+      .filter(tweet => topicFilter === 'ALL' || (tweet.topic ?? classifyTweetTopic(tweet.text)) === topicFilter);
+    return tab === 'discovery'
+      ? [...filtered].sort((a, b) => xHash(`${discoverySeed}:${a.id}`) - xHash(`${discoverySeed}:${b.id}`))
+      : filtered;
+  }, [tweets, tab, topicFilter, discoverySeed]);
+  const publicSearchResults = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return [];
+    return publicAccounts.filter(account => `${account.name} ${account.handle}`.toLowerCase().includes(query)).slice(0, 5);
+  }, [publicAccounts, searchTerm]);
 
   // Fetches AI-generated replies from the backend and maps them to XReply[]
   const fetchAIReplies = async (
     tweetText: string,
     tweetAuthor: XAccount,
     existingReplies: XReply[],
+    editorContext = '',
   ): Promise<XReply[]> => {
     const mentions = extractMentions(tweetText);
     const alreadyReplied = new Set(existingReplies.map(r => r.acct.handle.toLowerCase()));
-    const topic = classifyTweetTopic(tweetText);
+    const topic = classifyTweetTopic(`${tweetText} ${editorContext}`);
     const knownMentions = mentions
       .map(handle => allAccts.find(acct => acct.handle.toLowerCase() === handle.toLowerCase()))
       .filter((acct): acct is XAccount => Boolean(acct))
       .filter(acct => acct.handle.toLowerCase() !== tweetAuthor.handle.toLowerCase())
       .filter(acct => !alreadyReplied.has(acct.handle.toLowerCase()));
-    const targetReplyCount = Math.max(2, Math.min(4, knownMentions.length + 2));
+    const relatedAccounts = (tweetAuthor.relatedHandles ?? [])
+      .map(handle => allAccts.find(acct => acct.handle.toLowerCase() === handle.toLowerCase()))
+      .filter((acct): acct is XAccount => Boolean(acct))
+      .filter(acct => acct.handle.toLowerCase() !== tweetAuthor.handle.toLowerCase())
+      .filter(acct => !alreadyReplied.has(acct.handle.toLowerCase()));
+    const requiredAccounts = uniqueXAccounts([...knownMentions, ...relatedAccounts]);
+    const targetReplyCount = Math.max(2, Math.min(4, requiredAccounts.length + 2));
     const contextualAccounts = allAccts
       .filter(acct => contextCategories(topic).includes(acct.category))
       .filter(acct => acct.handle.toLowerCase() !== tweetAuthor.handle.toLowerCase())
       .filter(acct => !alreadyReplied.has(acct.handle.toLowerCase()));
-    const candidates = uniqueXAccounts([...knownMentions, ...contextualAccounts]).slice(0, 70);
+    const candidates = uniqueXAccounts([...requiredAccounts, ...contextualAccounts]).slice(0, 70);
     const makeReply = (acct: XAccount, content: string, id: string): XReply => ({
       id,
       acct,
       text: content,
-      likes: Math.floor(Math.random() * 120) + 2,
+      ...engagementFor(acct, id),
       ts: Date.now() - Math.floor(Math.random() * 180000),
+      engagementVersion: 1,
     });
     const buildFallback = (limit = targetReplyCount) => {
-      const required = knownMentions.map((acct, index) =>
+      const required = requiredAccounts.map((acct, index) =>
         makeReply(acct, genMentionReply(acct, tweetText, tweetAuthor), `xr_fb_mention_${Date.now()}_${index}`),
       );
       const used = new Set([tweetAuthor.handle.toLowerCase(), ...required.map(reply => reply.acct.handle.toLowerCase()), ...alreadyReplied]);
@@ -2833,7 +2994,9 @@ function TwitterPage() {
           tweetText,
           author: { handle: tweetAuthor.handle, name: tweetAuthor.name, badge: tweetAuthor.badge },
           mentions,
+          relations: relatedAccounts.map(account => account.handle),
           topic,
+          context: editorContext,
           availableAccounts: candidates.map(a => ({ handle: a.handle, name: a.name, badge: a.badge, category: a.category, country: a.country, isSystem: a.isSystem })),
         }),
       });
@@ -2848,19 +3011,19 @@ function TwitterPage() {
           returned.set(normalHandle.toLowerCase(), { ...r, handle: normalHandle });
         }
       }
-      const mentionReplies = knownMentions.map((acct, index) => {
+      const requiredReplies = requiredAccounts.map((acct, index) => {
         const generated = returned.get(acct.handle.toLowerCase());
         return makeReply(acct, generated?.content?.trim() || genMentionReply(acct, tweetText, tweetAuthor), `xr_ai_mention_${Date.now()}_${index}`);
       });
-      const used = new Set([tweetAuthor.handle.toLowerCase(), ...alreadyReplied, ...mentionReplies.map(reply => reply.acct.handle.toLowerCase())]);
+      const used = new Set([tweetAuthor.handle.toLowerCase(), ...alreadyReplied, ...requiredReplies.map(reply => reply.acct.handle.toLowerCase())]);
       const regularReplies = [...returned.values()]
         .map(reply => ({ reply, acct: candidates.find(acct => acct.handle.toLowerCase() === reply.handle.toLowerCase()) }))
         .filter((value): value is { reply: { handle: string; name: string; content: string }; acct: XAccount } => Boolean(value.acct))
         .filter(value => !used.has(value.acct.handle.toLowerCase()))
-        .slice(0, Math.max(0, targetReplyCount - mentionReplies.length))
+        .slice(0, Math.max(0, targetReplyCount - requiredReplies.length))
         .map((value, index) => makeReply(value.acct, value.reply.content.trim(), `xr_ai_context_${Date.now()}_${index}`));
-      const resolved = [...mentionReplies, ...regularReplies];
-      return resolved.length >= Math.min(2, Math.max(1, knownMentions.length)) ? resolved : buildFallback();
+      const resolved = [...requiredReplies, ...regularReplies];
+      return resolved.length >= Math.min(2, Math.max(1, requiredAccounts.length)) ? resolved : buildFallback();
     } catch {
       return buildFallback();
     }
@@ -2870,12 +3033,26 @@ function TwitterPage() {
     if (!draft.trim() || aiPosting) return;
     const text = draft.trim();
     const imageUrl = imgUrl.trim() || undefined;
+    const aiContext = composeContext.trim() || undefined;
     const tweetId = `xt_${Date.now()}`;
-    const t: XTweet = { id: tweetId, acct: author, text, imageUrl, ts: Date.now(), likes: 0, retweets: 0, views: Math.floor(Math.random() * 50) + 1, liked: false, retweeted: false, replies: [] };
+    const t: XTweet = {
+      id: tweetId,
+      acct: author,
+      text,
+      imageUrl,
+      ts: Date.now(),
+      ...engagementFor(author, tweetId),
+      liked: false,
+      retweeted: false,
+      replies: [],
+      topic: classifyTweetTopic(`${text} ${aiContext ?? ''}`),
+      aiContext,
+      engagementVersion: 1,
+    };
     setTweets([t, ...tweets]);
-    setDraft(''); setImgUrl('');
+    setDraft(''); setComposeContext(''); setImgUrl('');
     setAiPosting(true);
-    const aiReplies = await fetchAIReplies(text, author, []);
+    const aiReplies = await fetchAIReplies(text, author, [], aiContext);
     setAiPosting(false);
     if (aiReplies.length > 0) {
       setTweetsState(prev => {
@@ -2896,13 +3073,23 @@ function TwitterPage() {
     setMenuId(null);
     setEditing({ tweetId, ...(reply ? { replyId: reply.id } : {}) });
     setEditDraft(reply?.text ?? tweet.text);
+    setEditContext(reply ? '' : tweet.aiContext ?? '');
   };
-  const cancelEdit = () => { setEditing(null); setEditDraft(''); };
+  const cancelEdit = () => { setEditing(null); setEditDraft(''); setEditContext(''); };
   const saveEdit = () => {
     if (!editing || !editDraft.trim()) return;
     const updated = tweets.map(tweet => {
       if (tweet.id !== editing.tweetId) return tweet;
-      if (!editing.replyId) return { ...tweet, text: editDraft.trim(), editedAt: Date.now() };
+      if (!editing.replyId) {
+        const aiContext = editContext.trim() || undefined;
+        return {
+          ...tweet,
+          text: editDraft.trim(),
+          aiContext,
+          topic: classifyTweetTopic(`${editDraft.trim()} ${aiContext ?? ''}`),
+          editedAt: Date.now(),
+        };
+      }
       return {
         ...tweet,
         replies: tweet.replies.map(reply => reply.id === editing.replyId ? { ...reply, text: editDraft.trim(), editedAt: Date.now() } : reply),
@@ -2926,7 +3113,7 @@ function TwitterPage() {
     if (aiLoading.has(id)) return;
     setAiLoading(prev => new Set([...prev, id]));
     setExpanded(prev => new Set([...prev, id]));
-    const aiReplies = await fetchAIReplies(tw.text, tw.acct, tw.replies);
+    const aiReplies = await fetchAIReplies(tw.text, tw.acct, tw.replies, tw.aiContext);
     setAiLoading(prev => { const s = new Set(prev); s.delete(id); return s; });
     if (aiReplies.length > 0) {
       setTweetsState(prev => {
@@ -2975,13 +3162,25 @@ function TwitterPage() {
             <button onClick={() => navigate('/')} className="md:hidden text-[#1d9bf0] text-sm font-semibold flex items-center gap-1"><ArrowLeft size={14}/>Hub</button>
           </div>
           <div className="flex">
-            {(['foryou','following'] as const).map(t => (
+            {(['foryou','following','discovery'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} className="flex-1 py-3 text-[14px] font-medium hover:bg-white/5 transition-colors relative" style={{ color: tab === t ? '#fff' : '#71767b' }}>
-                {t === 'foryou' ? 'Pour vous' : 'Abonnements'}
+                {t === 'foryou' ? 'Pour vous' : t === 'following' ? 'Abonnements' : 'Découverte'}
                 {tab === t && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-1 w-16 rounded-full bg-[#1d9bf0]" />}
               </button>
             ))}
           </div>
+           <div className="flex gap-2 overflow-x-auto px-4 pb-2.5 pt-1.5">
+             {XTOPICS.map(topic => (
+               <button
+                 key={topic.id}
+                 onClick={() => setTopicFilter(topic.id)}
+                 className="shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold transition-colors"
+                 style={{ background: topicFilter === topic.id ? '#1d9bf0' : '#202327', color: topicFilter === topic.id ? '#fff' : '#aab1b8' }}
+               >
+                 {topic.label}
+               </button>
+             ))}
+           </div>
         </div>
 
         {/* Composer */}
@@ -2990,14 +3189,28 @@ function TwitterPage() {
             <XAvtr acct={author} size={44} />
             <div className="flex-1 min-w-0">
               {allAccts.length > 0 && (
-                <select value={authorIdx} onChange={e => setAuthorIdx(Number(e.target.value))} style={{ background: '#000' }}
-                  className="mb-2 text-[12px] border border-[#2f3336] rounded-full px-3 py-1 text-[#1d9bf0] cursor-pointer outline-none hover:bg-white/5 max-w-full">
-                  {allAccts.map((a, i) => <option key={a.handle} value={i} style={{ background: '#111' }}>{a.name} {a.handle}</option>)}
-                </select>
+                <label className="mb-2 block">
+                  <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[#71767b]">Auteur de publication · back-office</span>
+                  <select value={authorIdx} onChange={e => setAuthorIdx(Number(e.target.value))} style={{ background: '#000' }}
+                    className="text-[12px] border border-[#2f3336] rounded-full px-3 py-1 text-[#1d9bf0] cursor-pointer outline-none hover:bg-white/5 max-w-full">
+                    {allAccts.map((a, i) => <option key={a.handle} value={i} style={{ background: '#111' }}>{a.name} {a.handle} · {fmtN(a.followers)} abonnés</option>)}
+                  </select>
+                </label>
               )}
               <textarea id="x-compose-area" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postTweet(); }}
                 placeholder="Quoi de neuf ?" rows={draft.length > 80 ? 3 : 2}
                 className="w-full bg-transparent text-[18px] placeholder-[#71767b] outline-none resize-none leading-relaxed" />
+               <label className="mt-2 block rounded-xl border border-[#2f3336] bg-[#16181c] px-3 py-2">
+                 <span className="mb-1 block text-[11px] font-semibold text-[#8ecdf5]">Contexte / Consignes pour l’IA <span className="font-normal text-[#71767b]">· optionnel</span></span>
+                 <textarea
+                   value={composeContext}
+                   onChange={event => setComposeContext(event.target.value)}
+                   maxLength={700}
+                   rows={composeContext.length > 140 ? 3 : 2}
+                   placeholder="Ex. : Je veux un clash entre un journaliste et un supporter énervé, ou une annonce de transfert surprise."
+                   className="w-full resize-none bg-transparent text-[13px] leading-relaxed text-white outline-none placeholder:text-[#71767b]"
+                 />
+               </label>
               {imgUrl && (
                 <div className="relative mt-2 rounded-2xl overflow-hidden border border-[#2f3336]" style={{ maxHeight: 200 }}>
                   <img src={imgUrl} alt="" className="w-full object-cover" style={{ maxHeight: 200 }} />
@@ -3061,7 +3274,9 @@ function TwitterPage() {
               onDeleteReply={replyId => deleteReply(t.id, replyId)}
               editing={editing}
               editDraft={editDraft}
+              editContext={editContext}
               onEditDraftChange={setEditDraft}
+              onEditContextChange={setEditContext}
               onSaveEdit={saveEdit}
               onCancelEdit={cancelEdit}
             />
@@ -3071,9 +3286,30 @@ function TwitterPage() {
 
       {/* ── RIGHT SIDEBAR ────────────────────────────────────── */}
       <div className="hidden lg:flex flex-col w-[340px] h-full px-4 py-4 overflow-y-auto shrink-0 gap-4">
-        <div className="flex items-center gap-3 bg-[#202327] rounded-full px-4 py-2.5">
-          <Search size={15} className="text-[#71767b] shrink-0"/>
-          <input type="text" placeholder="Rechercher sur X" className="bg-transparent text-sm outline-none flex-1 placeholder-[#71767b] text-white"/>
+        <div className="relative">
+          <div className="flex items-center gap-3 bg-[#202327] rounded-full px-4 py-2.5">
+            <Search size={15} className="text-[#71767b] shrink-0"/>
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={event => setSearchTerm(event.target.value)}
+              placeholder="Rechercher un compte public"
+              className="bg-transparent text-sm outline-none flex-1 placeholder-[#71767b] text-white"
+            />
+          </div>
+          {searchTerm.trim() && (
+            <div className="absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-xl border border-[#2f3336] bg-[#16181c] shadow-2xl">
+              {publicSearchResults.length > 0 ? publicSearchResults.map(account => (
+                <div key={account.handle} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/[0.04]">
+                  <XAvtr acct={account} size={32} />
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-bold text-white">{account.name}</p>
+                    <p className="truncate text-[11px] text-[#71767b]">{account.handle} · {fmtN(account.followers)} abonnés</p>
+                  </div>
+                </div>
+              )) : <p className="px-3 py-3 text-[12px] text-[#71767b]">Aucun compte public trouvé.</p>}
+            </div>
+          )}
         </div>
         <div className="bg-[#16181c] rounded-2xl overflow-hidden">
           <p className="px-4 pt-4 pb-2 font-bold text-[18px]">Tendances pour vous</p>
