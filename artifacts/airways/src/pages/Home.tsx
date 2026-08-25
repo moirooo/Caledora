@@ -101,7 +101,6 @@ export default function Home() {
               Un service attentif, une cuisine inspirée par la Méditerranée et le calme d'un voyage pensé jusque dans
               les détails.
             </p>
-            <p className="brand-film__caption">Regarder le film de marque</p>
           </div>
           <div className="brand-film__player">
             <video
