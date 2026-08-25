@@ -160,7 +160,7 @@ export default function Home() {
             <a href="/airways/destinations" className="btn btn--outline-dark">Voir toutes les destinations</a>
           </div>
           <div className="split__media map-scene">
-            <FleetGlyph />
+            <NetworkAircraftGlyph />
           </div>
         </div>
       </section>
@@ -226,6 +226,16 @@ export default function Home() {
         </div>
       </section>
     </div>
+  );
+}
+
+function NetworkAircraftGlyph() {
+  return (
+    <img
+      src="/images/avion.jpg"
+      alt="Avion Caledora Airways en vol"
+      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+    />
   );
 }
 
