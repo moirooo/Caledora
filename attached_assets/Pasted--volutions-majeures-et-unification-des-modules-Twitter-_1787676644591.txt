@@ -1,0 +1,26 @@
+Évolutions majeures et unification des modules Twitter (X) et Instagram :
+
+1. PROFIL COMPLET ET DÉTAILLÉ SUR TWITTER (Type Instagram) :
+   - Ajoute une vue "Profil" dédiée pour chaque utilisateur dans le module Twitter :
+     * Affichage de la photo de profil, de la bannière, du nom affiché, du pseudo (@), de la biographie, du badge de certification, et des compteurs exacts (Abonnés, Abonnements, nombre de Tweets et de Réponses).
+     * Permet d'éditer facilement ces informations directement depuis une modale de profil.
+
+2. SYNCHRONISATION DES RELATIONS INSTAGRAM / TWITTER :
+   - Les relations entre les comptes (coéquipiers, rivaux, couple, amis, etc.) déclarées dans le module Instagram doivent être **partagées et synchronisées** avec le module Twitter (et inversement). 
+   - Si une relation est ajoutée/modifiée sur un compte dans l'un des modules, elle se met à jour automatiquement dans l'autre, afin que le moteur de l'IA (Gemini) et les règles de réponses obligatoires fonctionnent de manière identique sur les deux réseaux.
+
+3. SÉLECTION STRICTE PAR SAISIE DU NOM (Plus de liste déroulante) :
+   - Lors de la création d'un tweet ou d'une réponse manuelle :
+     * Remplace le menu déroulant par un champ de recherche par saisie textuelle (autocomplétion) basé sur le "Nom affiché" (displayName) ou le pseudo (@). Seuls les comptes publics issus de WikiBase doivent apparaître.
+
+4. INTERACTIONS MANUELLES & RÉGÉNÉRATION DES COMMENTAIRES :
+   - Ajoute la possibilité de **régénérer** les commentaires/réponses d'un tweet via l'IA à tout moment.
+   - Ajoute un bouton de **commentaire manuel** permettant à l'utilisateur de choisir n'importe quel profil de sa base WikiBase pour poster lui-même une réponse au tweet.
+   - Ajoute un paramètre dans l'éditeur de tweet permettant de **choisir le nombre exact de commentaires générés par l'IA** (en plus des mentions obligatoires et des relations).
+
+5. SIMULATION DES COMMENTAIRES BASÉE SUR LES ABONNÉS :
+   - Le nombre total de commentaires affichés sous un tweet doit être simulé et proportionnel à la taille de la communauté (nombre d'abonnés) du compte auteur.
+   - Lorsque l'utilisateur clique pour afficher les commentaires, il ne verra que les interactions réelles générées par l'IA et les ajouts manuels, tandis que le compteur global reflétera l'audience du compte.
+
+6. RAPPEL DES RÈGLES DE L'IA (Back-office) :
+   - Les faux comptes de types haineux/trolls ("haters"), les insiders de la liste de référence (socialAccounts.ts) et les faux comptes random fonctionnent exclusivement en back-office pour alimenter les réactions selon le contexte, et restent invisibles dans la recherche publique.
