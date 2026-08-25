@@ -232,7 +232,7 @@ export default function Home() {
 function NetworkAircraftGlyph() {
   return (
     <img
-      src="attached_assets/avion.jpg"
+      src={`${import.meta.env.BASE_URL}images/avion.jpg`}
       alt="Avion Caledora Airways en vol"
       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
     />
@@ -242,7 +242,7 @@ function NetworkAircraftGlyph() {
 function FleetGlyph() {
   return (
     <img
-      src="/images/airbus.png"
+      src={`${import.meta.env.BASE_URL}images/airbus.png`}
       alt="Avion Airbus de la flotte Caledora Airways"
       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
     />
