@@ -11,6 +11,7 @@ import OriaBank from '@/pages/OriaBank.jsx';
 import { TWITTER_ACCOUNTS, TWITTER_ACCOUNT_TEMPLATES, type TwitterAccountCategory } from '@/data/twitterAccounts';
 import { socialAccountProfiles } from '@/data/socialAccounts';
 import { InstagramApp } from '@/components/instagram/InstagramApp';
+import { loadInstagramDatabase, mediaUrl as instagramMediaUrl, saveInstagramDatabase, updateInstagramProfile, type InstagramProfile, type InstagramRelationType } from '@/services/instagramStorage';
 import { GlobalBackupPage } from '@/components/GlobalBackupPage';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
@@ -2408,10 +2409,16 @@ type XAccount = {
   followers: number;
   country?: string;
   isSystem?: boolean;
+  profileId?: string;
+  bio?: string;
+  bannerUrl?: string;
+  avatarMedia?: string;
+  bannerMedia?: string;
+  following?: number;
   relatedHandles?: string[];
 };
 type XFeedTopic = 'MERCATO' | 'MATCHES' | 'TACTICS' | 'CLUB_LIFE' | 'MISC';
-type XReply   = { id: string; acct: XAccount; text: string; likes: number; retweets?: number; views?: number; ts: number; editedAt?: number; engagementVersion?: 1 };
+type XReply   = { id: string; acct: XAccount; text: string; likes: number; retweets?: number; views?: number; ts: number; editedAt?: number; engagementVersion?: 1; source?: 'ai' | 'manual' };
 type XTweet   = {
   id: string;
   acct: XAccount;
@@ -2427,10 +2434,18 @@ type XTweet   = {
   editedAt?: number;
   topic?: XFeedTopic;
   aiContext?: string;
+  aiReplyCount?: number;
+  commentCount?: number;
   engagementVersion?: 1;
 };
 
 const xColor  = (s: string) => { let h = 0; for (const c of s) h = (Math.imul(h, 31) + c.charCodeAt(0)) | 0; return `hsl(${((h >>> 0) % 360)},60%,42%)`; };
+const xCanonicalMedia = (value: string) => {
+  const media = value.trim();
+  return (/^\/api\/images\/(?:shared|instagram|wikibase|twitter|airways)\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,110}\.(?:svg|png|jpe?g|webp)$/i.test(media)
+    || /^upload:[a-zA-Z0-9-]{1,80}$/.test(media)
+    || /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}\.(?:svg|png|jpe?g|webp)$/i.test(media)) ? media : undefined;
+};
 const xHandle = (t: string) => '@' + t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9 ]/g, ' ').trim().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
 const xInits  = (n: string) => { const p = n.trim().split(/\s+/); return (p.length >= 2 ? p[0][0] + p[p.length - 1][0] : n.slice(0, 2)).toUpperCase(); };
 const xBadge  = (cat: string): 'gold' | 'blue' | null => ['Sports & Football','Économie','Transports','Géographie','Monuments & Lieux'].includes(cat) ? 'gold' : ['Personnes & Organisations','Politique'].includes(cat) ? 'blue' : 'gold';
@@ -2465,25 +2480,40 @@ function engagementFor(account: Pick<XAccount, 'handle' | 'category' | 'isSystem
   return { likes, retweets, views };
 }
 
+function simulatedCommentCount(account: Pick<XAccount, 'handle' | 'category' | 'isSystem'> & { followers?: number }, seed: string) {
+  const followers = followersForAccount(account);
+  const variation = xSeeded(`${seed}:comments`, 0, 10_000) / 10_000;
+  return Math.max(2, Math.round(followers * (0.0007 + variation * 0.003)));
+}
+
 const XACCOUNT_RELATIONS: Record<string, string[]> = {
   '@caledorafc': ['@CaledoraSport'],
   '@oriabank': ['@MediaCaledora'],
   '@caledoraairways': ['@MediaCaledora'],
 };
 
-function wikiToXAcct(p: WikiPage): XAccount {
+function wikiToXAcct(p: WikiPage, profile?: InstagramProfile): XAccount {
+  const twitter = profile?.twitter;
+  const avatarMedia = twitter?.avatar ?? profile?.avatar;
   let avatarUrl: string | undefined;
-  if (p.infoboxImage) { const f = (p.infoboxImage.src || p.infoboxImage.filename).trim(); if (f) avatarUrl = /^(https?:\/\/|data:)/.test(f) ? f : import.meta.env.BASE_URL + f.replace(/^\/+/, ''); }
-  const handle = xHandle(p.title);
+  if (avatarMedia) avatarUrl = instagramMediaUrl(avatarMedia);
+  else if (p.infoboxImage) { const f = (p.infoboxImage.src || p.infoboxImage.filename).trim(); if (f) avatarUrl = /^(https?:\/\/|data:)/.test(f) ? f : import.meta.env.BASE_URL + f.replace(/^\/+/, ''); }
+  const handle = twitter?.handle || xHandle(p.title);
   return {
     handle,
-    name: p.title,
+    name: profile?.displayName || p.title,
     avatarUrl,
-    initials: xInits(p.title),
-    avatarColor: xColor(p.title),
-    badge: xBadge(p.category),
+    initials: xInits(profile?.displayName || p.title),
+    avatarColor: xColor(profile?.displayName || p.title),
+    badge: profile?.verified ? 'blue' : xBadge(p.category),
     category: 'WIKI_OFFICIAL',
-    followers: followersForAccount({ handle, category: 'WIKI_OFFICIAL' }),
+    followers: twitter?.followers ?? profile?.followers ?? followersForAccount({ handle, category: 'WIKI_OFFICIAL' }),
+    following: twitter?.following ?? profile?.following,
+    bio: twitter?.bio ?? profile?.bio,
+    bannerUrl: twitter?.banner ? instagramMediaUrl(twitter.banner) : undefined,
+    avatarMedia,
+    bannerMedia: twitter?.banner,
+    profileId: profile?.id,
     relatedHandles: XACCOUNT_RELATIONS[handle.toLowerCase()],
   };
 }
@@ -2621,6 +2651,7 @@ function normalizeTweet(tweet: XTweet): XTweet {
     acct,
     topic: tweet.topic ?? classifyTweetTopic(tweet.text),
     aiContext: typeof tweet.aiContext === 'string' && tweet.aiContext.trim() ? tweet.aiContext.trim() : undefined,
+    aiReplyCount: typeof tweet.aiReplyCount === 'number' ? Math.max(0, Math.min(8, Math.round(tweet.aiReplyCount))) : 2,
     likes: tweet.engagementVersion === 1 ? tweet.likes : baseline.likes,
     retweets: tweet.engagementVersion === 1 ? tweet.retweets : baseline.retweets,
     views: tweet.engagementVersion === 1 ? tweet.views : baseline.views,
@@ -2635,8 +2666,10 @@ function normalizeTweet(tweet: XTweet): XTweet {
         retweets: reply.engagementVersion === 1 ? reply.retweets : replyBaseline.retweets,
         views: reply.engagementVersion === 1 ? reply.views : replyBaseline.views,
         engagementVersion: 1,
+        source: reply.source === 'manual' ? 'manual' : 'ai',
       };
     }),
+    commentCount: Math.max((tweet.replies ?? []).length, typeof tweet.commentCount === 'number' ? Math.round(tweet.commentCount) : simulatedCommentCount(acct, tweet.id)),
   };
 }
 
@@ -2682,7 +2715,164 @@ function XTweetMenu({ open, onToggle, onEdit, onDelete, label }: {
   );
 }
 
+function XAccountSearchField({ accounts, value, onChange, placeholder, ariaLabel, excludeHandle }: {
+  accounts: XAccount[];
+  value: string;
+  onChange: (handle: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+  excludeHandle?: string;
+}) {
+  const selected = accounts.find(account => account.handle === value);
+  const selectedLabel = selected ? `${selected.name} ${selected.handle}` : '';
+  const [query, setQuery] = useState(selectedLabel);
+  const matches = !query.trim() || query === selectedLabel ? [] : accounts
+    .filter(account => account.handle !== excludeHandle)
+    .filter(account => `${account.name} ${account.handle}`.toLocaleLowerCase('fr-FR').includes(query.toLocaleLowerCase('fr-FR')))
+    .slice(0, 6);
+
+  useEffect(() => {
+    const current = accounts.find(account => account.handle === value);
+    setQuery(current ? `${current.name} ${current.handle}` : '');
+  }, [accounts, value]);
+
+  return (
+    <div className="relative">
+      <input
+        value={query}
+        onChange={event => { setQuery(event.target.value); if (value) onChange(''); }}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={matches.length > 0}
+        className="w-full rounded-xl border border-[#2f3336] bg-[#16181c] px-3 py-2 text-[13px] text-white outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
+      />
+      {matches.length > 0 && (
+        <div className="absolute inset-x-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-xl border border-[#2f3336] bg-[#16181c] shadow-2xl">
+          {matches.map(account => (
+            <button
+              type="button"
+              key={account.handle}
+              onMouseDown={event => { event.preventDefault(); onChange(account.handle); setQuery(`${account.name} ${account.handle}`); }}
+              className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left hover:bg-white/[0.06]"
+            >
+              <XAvtr acct={account} size={30} />
+              <span className="min-w-0"><b className="block truncate text-[12px] text-white">{account.name}</b><small className="block truncate text-[11px] text-[#71767b]">{account.handle}</small></span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type XProfileEditDraft = {
+  name: string;
+  handle: string;
+  bio: string;
+  avatarUrl: string;
+  bannerUrl: string;
+  followers: number;
+  following: number;
+  relations: Array<{ profileId: string; type: InstagramRelationType }>;
+};
+
+function XProfileModal({ account, publicAccounts, relationItems, tweetCount, replyCount, onClose, onSave }: {
+  account: XAccount | null;
+  publicAccounts: XAccount[];
+  relationItems: Array<{ account: XAccount; type: InstagramRelationType }>;
+  tweetCount: number;
+  replyCount: number;
+  onClose: () => void;
+  onSave: (draft: XProfileEditDraft) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [relationHandle, setRelationHandle] = useState('');
+  const [relationType, setRelationType] = useState<InstagramRelationType>('coéquipier');
+  const [draft, setDraft] = useState<XProfileEditDraft>(() => ({
+    name: account?.name ?? '', handle: account?.handle ?? '', bio: account?.bio ?? '',
+    avatarUrl: account?.avatarMedia ?? '', bannerUrl: account?.bannerMedia ?? '',
+    followers: account?.followers ?? 0, following: account?.following ?? 0,
+    relations: relationItems.map(item => ({ profileId: item.account.profileId ?? '', type: item.type })).filter(item => item.profileId),
+  }));
+
+  useEffect(() => {
+    setEditing(false); setRelationHandle('');
+    setDraft({
+      name: account?.name ?? '', handle: account?.handle ?? '', bio: account?.bio ?? '',
+      avatarUrl: account?.avatarMedia ?? '', bannerUrl: account?.bannerMedia ?? '',
+      followers: account?.followers ?? 0, following: account?.following ?? 0,
+      relations: relationItems.map(item => ({ profileId: item.account.profileId ?? '', type: item.type })).filter(item => item.profileId),
+    });
+  }, [account, relationItems]);
+
+  if (!account) return null;
+  const canEdit = Boolean(account.profileId && !account.isSystem);
+  const update = <K extends keyof XProfileEditDraft>(key: K, value: XProfileEditDraft[K]) => setDraft(current => ({ ...current, [key]: value }));
+  const relatedProfileIds = new Set(draft.relations.map(relation => relation.profileId));
+  const selectedRelation = publicAccounts.find(candidate => candidate.handle === relationHandle);
+  const addRelation = () => {
+    if (!selectedRelation?.profileId) return;
+    update('relations', [...draft.relations.filter(item => item.profileId !== selectedRelation.profileId), { profileId: selectedRelation.profileId, type: relationType }]);
+    setRelationHandle('');
+  };
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/75 px-3 py-6 backdrop-blur-sm" onMouseDown={onClose}>
+      <section className="w-full max-w-[620px] overflow-hidden rounded-2xl border border-[#2f3336] bg-black shadow-2xl" onMouseDown={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Profil de ${account.name}`}>
+        <div className="relative h-40 bg-gradient-to-br from-[#123a5a] via-[#1d9bf0] to-[#7856ff]">
+          {xCanonicalMedia(draft.bannerUrl) && <img src={instagramMediaUrl(xCanonicalMedia(draft.bannerUrl)!)} alt="" className="h-full w-full object-cover" />}
+          <button onClick={onClose} className="absolute right-3 top-3 rounded-full bg-black/65 p-2 text-white hover:bg-black" aria-label="Fermer"><X size={18} /></button>
+        </div>
+        <div className="px-5 pb-6">
+          <div className="-mt-11 flex items-end justify-between gap-3">
+            <div className="rounded-full border-4 border-black"><XAvtr acct={{ ...account, avatarUrl: xCanonicalMedia(draft.avatarUrl) ? instagramMediaUrl(xCanonicalMedia(draft.avatarUrl)!) : account.avatarUrl, name: draft.name || account.name, initials: xInits(draft.name || account.name) }} size={88} /></div>
+            {canEdit && <button onClick={() => setEditing(value => !value)} className="mb-2 rounded-full border border-[#536471] px-4 py-2 text-[13px] font-bold text-white hover:bg-white/10"><Pencil size={14} className="mr-1.5 inline" />{editing ? 'Voir le profil' : 'Éditer le profil'}</button>}
+          </div>
+          {!editing ? (
+            <>
+              <div className="mt-3 flex flex-wrap items-center gap-1.5"><h2 className="text-[21px] font-extrabold text-white">{account.name}</h2><XBadgeIcon type={account.badge} /></div>
+              <p className="text-[14px] text-[#71767b]">{account.handle}</p>
+              <p className="mt-3 whitespace-pre-wrap text-[14px] leading-relaxed text-white">{account.bio || 'Ce compte n’a pas encore de biographie.'}</p>
+              <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[14px] text-[#71767b]"><span><b className="text-white">{fmtN(account.following ?? 0)}</b> Abonnements</span><span><b className="text-white">{fmtN(account.followers)}</b> Abonnés</span><span><b className="text-white">{tweetCount}</b> Tweets</span><span><b className="text-white">{replyCount}</b> Réponses</span></div>
+              {relationItems.length > 0 && <div className="mt-5 border-t border-[#2f3336] pt-4"><p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[#71767b]">Relations</p><div className="flex flex-wrap gap-2">{relationItems.map(item => <span key={item.account.handle} className="rounded-full bg-[#1d9bf0]/10 px-3 py-1.5 text-[12px] text-[#8ecdf5]">{item.account.name} · {item.type}</span>)}</div></div>}
+            </>
+          ) : (
+            <form className="mt-5 grid gap-3" onSubmit={event => { event.preventDefault(); onSave(draft); }}>
+              <label className="text-[12px] text-[#aab1b8]">Nom affiché<input value={draft.name} onChange={event => update('name', event.target.value)} className="mt-1 w-full rounded-lg border border-[#2f3336] bg-[#16181c] px-3 py-2 text-sm text-white outline-none" /></label>
+              <label className="text-[12px] text-[#aab1b8]">Pseudo X<input value={draft.handle} onChange={event => update('handle', event.target.value.replace(/\s/g, ''))} className="mt-1 w-full rounded-lg border border-[#2f3336] bg-[#16181c] px-3 py-2 text-sm text-white outline-none" /></label>
+              <label className="text-[12px] text-[#aab1b8]">Biographie<textarea value={draft.bio} onChange={event => update('bio', event.target.value)} rows={3} className="mt-1 w-full resize-none rounded-lg border border-[#2f3336] bg-[#16181c] px-3 py-2 text-sm text-white outline-none" /></label>
+              <div className="grid gap-3 sm:grid-cols-2"><label className="text-[12px] text-[#aab1b8]">Photo (fichier ou chemin importé)<input value={draft.avatarUrl} onChange={event => update('avatarUrl', event.target.value)} placeholder="profile.svg ou /api/images/…" className="mt-1 w-full rounded-lg border border-[#2f3336] bg-[#16181c] px-3 py-2 text-sm text-white outline-none placeholder:text-[#71767b]" /></label><label className="text-[12px] text-[#aab1b8]">Bannière (fichier ou chemin importé)<input value={draft.bannerUrl} onChange={event => update('bannerUrl', event.target.value)} placeholder="banniere.webp ou /api/images/…" className="mt-1 w-full rounded-lg border border-[#2f3336] bg-[#16181c] px-3 py-2 text-sm text-white outline-none placeholder:text-[#71767b]" /></label></div>
+              <div className="grid gap-3 sm:grid-cols-2"><label className="text-[12px] text-[#aab1b8]">Abonnés<input type="number" min="0" value={draft.followers} onChange={event => update('followers', Math.max(0, Number(event.target.value) || 0))} className="mt-1 w-full rounded-lg border border-[#2f3336] bg-[#16181c] px-3 py-2 text-sm text-white outline-none" /></label><label className="text-[12px] text-[#aab1b8]">Abonnements<input type="number" min="0" value={draft.following} onChange={event => update('following', Math.max(0, Number(event.target.value) || 0))} className="mt-1 w-full rounded-lg border border-[#2f3336] bg-[#16181c] px-3 py-2 text-sm text-white outline-none" /></label></div>
+              <div className="rounded-xl border border-[#2f3336] p-3"><p className="mb-2 text-[12px] font-bold text-white">Relations synchronisées avec Instagram</p><div className="grid gap-2 sm:grid-cols-[1fr_150px_auto]"><XAccountSearchField accounts={publicAccounts.filter(candidate => candidate.profileId !== account.profileId && !relatedProfileIds.has(candidate.profileId ?? ''))} value={relationHandle} onChange={setRelationHandle} placeholder="Nom ou pseudo…" ariaLabel="Rechercher un compte à relier" /><select value={relationType} onChange={event => setRelationType(event.target.value as InstagramRelationType)} className="rounded-lg border border-[#2f3336] bg-[#16181c] px-2 text-[12px] text-white"><option>coéquipier</option><option>club lié</option><option>rival</option><option>conjoint(e)</option><option>ami proche</option><option>coach</option><option>famille</option><option>sponsor</option><option>partenaire</option></select><button type="button" onClick={addRelation} disabled={!selectedRelation} className="rounded-lg bg-[#1d9bf0] px-3 py-2 text-[12px] font-bold text-white disabled:opacity-40">Ajouter</button></div>{publicAccounts.filter(candidate => candidate.profileId !== account.profileId && !relatedProfileIds.has(candidate.profileId ?? '')).length === 0 && <p className="mt-2 text-[11px] text-[#71767b]">Ajoutez un autre profil public WikiBase pour pouvoir créer une relation.</p>}<div className="mt-2 flex flex-wrap gap-2">{draft.relations.map(relation => { const target = publicAccounts.find(candidate => candidate.profileId === relation.profileId); return target ? <span key={relation.profileId} className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] text-white">{target.name} · {relation.type}<button type="button" onClick={() => update('relations', draft.relations.filter(item => item.profileId !== relation.profileId))} className="ml-1.5 text-[#f91880]">×</button></span> : null; })}</div></div>
+              <div className="mt-1 flex justify-end gap-2"><button type="button" onClick={() => setEditing(false)} className="rounded-full px-4 py-2 text-[13px] text-[#aab1b8] hover:bg-white/10">Annuler</button><button className="rounded-full bg-[#1d9bf0] px-4 py-2 text-[13px] font-bold text-white">Enregistrer</button></div>
+            </form>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 type XEditTarget = { tweetId: string; replyId?: string } | null;
+
+function XManualReplyComposer({ accounts, tweetId, onSubmit }: { accounts: XAccount[]; tweetId: string; onSubmit: (tweetId: string, author: XAccount, text: string) => void }) {
+  const [authorHandle, setAuthorHandle] = useState('');
+  const [text, setText] = useState('');
+  const author = accounts.find(account => account.handle === authorHandle);
+  return (
+    <form className="mx-4 mb-3 rounded-xl border border-[#2f3336] bg-[#16181c] p-3" onSubmit={event => {
+      event.preventDefault();
+      if (author && text.trim()) { onSubmit(tweetId, author, text.trim()); setText(''); }
+    }}>
+      <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[#8ecdf5]">Ajouter une réponse manuelle</p>
+      <XAccountSearchField accounts={accounts} value={authorHandle} onChange={setAuthorHandle} placeholder="Rechercher un profil WikiBase…" ariaLabel="Auteur de la réponse manuelle" />
+      <textarea value={text} onChange={event => setText(event.target.value)} rows={2} placeholder="Écrire une réponse…" className="mt-2 w-full resize-none bg-transparent text-[13px] text-white outline-none placeholder:text-[#71767b]" />
+      <div className="mt-2 flex justify-end"><button disabled={!author || !text.trim()} className="rounded-full bg-[#1d9bf0] px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-40">Publier la réponse</button></div>
+    </form>
+  );
+}
 
 function XCard({
   tweet,
@@ -2701,10 +2891,15 @@ function XCard({
   editing,
   editDraft,
   editContext,
+  editAiReplyCount,
   onEditDraftChange,
   onEditContextChange,
+  onEditAiReplyCountChange,
   onSaveEdit,
   onCancelEdit,
+  publicAccounts,
+  onManualReply,
+  onOpenProfile,
 }: {
   tweet: XTweet;
   expanded: boolean;
@@ -2722,12 +2917,17 @@ function XCard({
   editing: XEditTarget;
   editDraft: string;
   editContext: string;
+  editAiReplyCount: number;
   onEditDraftChange: (value: string) => void;
   onEditContextChange: (value: string) => void;
+  onEditAiReplyCountChange: (value: number) => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
+  publicAccounts: XAccount[];
+  onManualReply: (author: XAccount, text: string) => void;
+  onOpenProfile: (account: XAccount) => void;
 }) {
-  const showThread = expanded && tweet.replies.length > 0;
+  const showThread = expanded;
   const editingTweet = editing?.tweetId === tweet.id && !editing.replyId;
   const topicLabel = XTOPICS.find(topic => topic.id === (tweet.topic ?? classifyTweetTopic(tweet.text)))?.label ?? 'Divers';
   return (
@@ -2736,15 +2936,15 @@ function XCard({
       <div className="flex gap-3 px-4 pt-3 pb-2 hover:bg-white/[0.025] transition-colors">
         {/* Avatar + vertical thread line below */}
         <div className="flex flex-col items-center shrink-0" style={{ width: 44 }}>
-          <XAvtr acct={tweet.acct} size={44} />
+          <button onClick={() => onOpenProfile(tweet.acct)} aria-label={`Ouvrir le profil ${tweet.acct.name}`}><XAvtr acct={tweet.acct} size={44} /></button>
           {showThread && <div className="w-0.5 flex-1 bg-[#2f3336] mt-1.5 min-h-[14px]" />}
         </div>
         <div className="flex-1 min-w-0 pb-1">
           <div className="flex items-start gap-1.5 mb-1.5">
             <div className="flex min-w-0 flex-1 items-center gap-1.5 flex-wrap leading-none">
-              <span className="font-bold text-[15px] text-white">{tweet.acct.name}</span>
+               <button onClick={() => onOpenProfile(tweet.acct)} className="font-bold text-[15px] text-white hover:underline">{tweet.acct.name}</button>
               <XBadgeIcon type={tweet.acct.badge} />
-              <span className="text-[#71767b] text-[13px]">{tweet.acct.handle} · {xAgo(tweet.ts)}{tweet.editedAt ? ` · Modifié · ${new Date(tweet.editedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+               <button onClick={() => onOpenProfile(tweet.acct)} className="text-[#71767b] text-[13px] hover:underline">{tweet.acct.handle}</button><span className="text-[#71767b] text-[13px]">· {xAgo(tweet.ts)}{tweet.editedAt ? ` · Modifié · ${new Date(tweet.editedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
                <span className="rounded-full bg-[#1d9bf0]/10 px-2 py-0.5 text-[10px] font-semibold text-[#8ecdf5]">{topicLabel}</span>
             </div>
             <XTweetMenu
@@ -2774,6 +2974,10 @@ function XCard({
                   className="w-full resize-none bg-transparent text-[12px] leading-relaxed text-white outline-none placeholder:text-[#71767b]"
                 />
               </label>
+              <label className="mt-2 flex items-center justify-between rounded-lg border border-[#2f3336] bg-black/20 px-2.5 py-2 text-[12px] text-[#aab1b8]">
+                Réponses IA supplémentaires
+                <input type="number" min="0" max="8" value={editAiReplyCount} onChange={event => onEditAiReplyCountChange(Math.max(0, Math.min(8, Number(event.target.value) || 0)))} className="w-16 rounded border border-[#536471] bg-black px-2 py-1 text-right text-white outline-none" />
+              </label>
               <div className="mt-2 flex justify-end gap-2">
                 <button onClick={onCancelEdit} className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-[#71767b] hover:bg-white/10">Annuler</button>
                 <button onClick={onSaveEdit} disabled={!editDraft.trim()} className="rounded-full bg-[#1d9bf0] px-3.5 py-1.5 text-[12px] font-bold text-white disabled:opacity-40">Enregistrer</button>
@@ -2792,7 +2996,7 @@ function XCard({
           {/* Action bar — all counters always visible */}
           <div className="flex items-center gap-5 mt-3 text-[#71767b] text-[13px]">
             <button onClick={onToggleExpand} className="flex items-center gap-1.5 hover:text-[#1d9bf0] transition-colors min-w-[36px]">
-              <MessageCircle size={16} /><span>{tweet.replies.length || ''}</span>
+               <MessageCircle size={16} /><span>{fmtN(tweet.commentCount ?? tweet.replies.length)}</span>
             </button>
             <button onClick={onRT} className="flex items-center gap-1.5 hover:text-[#00ba7c] transition-colors min-w-[36px]" style={{ color: tweet.retweeted ? '#00ba7c' : '#71767b' }}>
               <Repeat2 size={16} /><span>{fmtN(tweet.retweets)}</span>
@@ -2804,7 +3008,7 @@ function XCard({
             <button onClick={onSimulate} disabled={simulateLoading} className="flex items-center gap-1 ml-auto hover:text-[#7856ff] transition-colors text-[12px] disabled:opacity-50">
               {simulateLoading
                 ? <><svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10"/></svg><span className="hidden sm:inline ml-0.5">Génération…</span></>
-                : <><Sparkles size={13} /><span className="hidden sm:inline ml-0.5">Simuler</span></>
+                : <><Sparkles size={13} /><span className="hidden sm:inline ml-0.5">Régénérer</span></>
               }
             </button>
           </div>
@@ -2814,6 +3018,7 @@ function XCard({
       {/* ── Replies thread ── */}
       {showThread && (
         <div>
+          {(tweet.commentCount ?? tweet.replies.length) > tweet.replies.length && <p className="px-4 pt-2 text-[11px] text-[#71767b]">{tweet.replies.length} interaction{tweet.replies.length > 1 ? 's' : ''} affichée{tweet.replies.length > 1 ? 's' : ''} · environ {fmtN(tweet.commentCount ?? tweet.replies.length)} commentaires au total</p>}
           {tweet.replies.map((r, i) => {
             const isLast = i === tweet.replies.length - 1;
             return (
@@ -2821,15 +3026,15 @@ function XCard({
                 {/* Avatar column with thread lines */}
                 <div className="flex flex-col items-center shrink-0" style={{ width: 44 }}>
                   <div className="w-0.5 h-2 bg-[#2f3336]" />
-                  <XAvtr acct={r.acct} size={32} />
+                   <button onClick={() => onOpenProfile(r.acct)} aria-label={`Ouvrir le profil ${r.acct.name}`}><XAvtr acct={r.acct} size={32} /></button>
                   {!isLast && <div className="w-0.5 flex-1 bg-[#2f3336] mt-1.5 min-h-[8px]" />}
                 </div>
                 <div className="flex-1 min-w-0 pb-1">
                   <div className="flex items-start gap-1.5 mb-1">
                     <div className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] flex-wrap leading-none">
-                      <span className="font-bold text-white">{r.acct.name}</span>
+                       <button onClick={() => onOpenProfile(r.acct)} className="font-bold text-white hover:underline">{r.acct.name}</button>
                       <XBadgeIcon type={r.acct.badge} />
-                      <span className="text-[#71767b]">{r.acct.handle} · {xAgo(r.ts)}{r.editedAt ? ` · Modifié · ${new Date(r.editedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+                       <button onClick={() => onOpenProfile(r.acct)} className="text-[#71767b] hover:underline">{r.acct.handle}</button><span className="text-[#71767b]">· {xAgo(r.ts)}{r.editedAt ? ` · Modifié · ${new Date(r.editedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
                     </div>
                     <XTweetMenu
                       label={r.acct.name}
@@ -2867,6 +3072,7 @@ function XCard({
               </div>
             );
           })}
+          <XManualReplyComposer accounts={publicAccounts} tweetId={tweet.id} onSubmit={(_, author, text) => onManualReply(author, text)} />
         </div>
       )}
     </div>
@@ -2877,7 +3083,22 @@ function TwitterPage() {
   const [, navigate] = useLocation();
   const { pages } = usePages();
 
-  const wikiAccts = useMemo(() => pages.filter(p => !p.isTrashed).map(wikiToXAcct), [pages]);
+  const [socialDatabase, setSocialDatabase] = useState(() => loadInstagramDatabase(pages));
+  useEffect(() => {
+    setSocialDatabase(loadInstagramDatabase(pages));
+  }, [pages]);
+
+  const profileByWikiId = useMemo(() => new Map(socialDatabase.profiles.filter(profile => profile.wikiPageId).map(profile => [profile.wikiPageId!, profile])), [socialDatabase.profiles]);
+  const wikiAccountDrafts = useMemo(() => pages.filter(page => !page.isTrashed).map(page => wikiToXAcct(page, profileByWikiId.get(page.id))), [pages, profileByWikiId]);
+  const handleByProfileId = useMemo(() => new Map(wikiAccountDrafts.filter(account => account.profileId).map(account => [account.profileId!, account.handle])), [wikiAccountDrafts]);
+  const wikiAccts = useMemo(() => wikiAccountDrafts.map(account => {
+    const profile = account.profileId ? socialDatabase.profiles.find(item => item.id === account.profileId) : undefined;
+    const sharedRelations = profile?.relations
+      .map(relation => handleByProfileId.get(relation.profileId))
+      .filter((handle): handle is string => Boolean(handle)) ?? [];
+    return { ...account, relatedHandles: sharedRelations.length > 0 ? sharedRelations : account.relatedHandles };
+  }), [handleByProfileId, socialDatabase.profiles, wikiAccountDrafts]);
+  const publicAccounts = useMemo(() => wikiAccts.filter(account => !account.isSystem), [wikiAccts]);
   const dynamicFanAccts = useMemo(() => wikiAccts.slice(0, 3).flatMap(acct =>
     TWITTER_ACCOUNT_TEMPLATES.CLUB_ACTU.slice(0, 2).map(suffix => {
       const handle = `${acct.handle}${suffix}`.replace(/[^@a-zA-Z0-9_]/g, '');
@@ -2893,8 +3114,7 @@ function TwitterPage() {
       };
     }),
   ), [wikiAccts]);
-  const allAccts  = useMemo(() => uniqueXAccounts([...wikiAccts, ...XMEDIA, ...XREGISTRY, ...XSOCIAL_REFERENCE, ...dynamicFanAccts]), [wikiAccts, dynamicFanAccts]);
-  const publicAccounts = useMemo(() => wikiAccts.filter(account => !account.isSystem), [wikiAccts]);
+  const allAccts  = useMemo(() => uniqueXAccounts([...publicAccounts, ...XMEDIA, ...XREGISTRY, ...XSOCIAL_REFERENCE, ...dynamicFanAccts]), [publicAccounts, dynamicFanAccts]);
 
   const [tweets, setTweetsState] = useState<XTweet[]>(() => {
     try {
@@ -2910,7 +3130,8 @@ function TwitterPage() {
   const [topicFilter, setTopicFilter] = useState<'ALL' | XFeedTopic>('ALL');
   const [draft, setDraft]       = useState('');
   const [composeContext, setComposeContext] = useState('');
-  const [authorIdx, setAuthorIdx] = useState(0);
+  const [authorHandle, setAuthorHandle] = useState('');
+  const [aiReplyCount, setAiReplyCount] = useState(2);
   const [imgUrl, setImgUrl]     = useState('');
   const [imgOpen, setImgOpen]   = useState(false);
   const [imgUploading, setImgUploading] = useState(false);
@@ -2922,10 +3143,30 @@ function TwitterPage() {
   const [editing, setEditing] = useState<XEditTarget>(null);
   const [editDraft, setEditDraft] = useState('');
   const [editContext, setEditContext] = useState('');
+  const [editAiReplyCount, setEditAiReplyCount] = useState(2);
   const [searchTerm, setSearchTerm] = useState('');
+  const [profileHandle, setProfileHandle] = useState<string | null>(null);
   const [discoverySeed] = useState(() => Math.floor(Date.now() / 60_000));
 
-  const author    = allAccts[authorIdx] ?? XINIT[0].acct;
+  useEffect(() => {
+    if (!authorHandle && publicAccounts[0]) setAuthorHandle(publicAccounts[0].handle);
+    else if (authorHandle && !publicAccounts.some(account => account.handle === authorHandle)) setAuthorHandle(publicAccounts[0]?.handle ?? '');
+  }, [authorHandle, publicAccounts]);
+
+  useEffect(() => {
+    const byIdentity = new Map(allAccts.flatMap(account => [[account.handle.toLowerCase(), account], ...(account.profileId ? [[`profile:${account.profileId}`, account] as const] : [])]));
+    setTweetsState(previous => {
+      const next = previous.map(tweet => ({
+        ...tweet,
+        acct: byIdentity.get(tweet.acct.profileId ? `profile:${tweet.acct.profileId}` : tweet.acct.handle.toLowerCase()) ?? tweet.acct,
+        replies: tweet.replies.map(reply => ({ ...reply, acct: byIdentity.get(reply.acct.profileId ? `profile:${reply.acct.profileId}` : reply.acct.handle.toLowerCase()) ?? reply.acct })),
+      }));
+      localStorage.setItem(XSTORAGE, JSON.stringify(next));
+      return next;
+    });
+  }, [allAccts]);
+
+  const author = publicAccounts.find(account => account.handle === authorHandle) ?? publicAccounts[0] ?? XINIT[0].acct;
   const displayed = useMemo(() => {
     const filtered = tweets
       .filter(tweet => tab !== 'following' || !tweet.acct.isSystem)
@@ -2946,6 +3187,7 @@ function TwitterPage() {
     tweetAuthor: XAccount,
     existingReplies: XReply[],
     editorContext = '',
+    additionalReplyCount = 2,
   ): Promise<XReply[]> => {
     const mentions = extractMentions(tweetText);
     const alreadyReplied = new Set(existingReplies.map(r => r.acct.handle.toLowerCase()));
@@ -2961,7 +3203,8 @@ function TwitterPage() {
       .filter(acct => acct.handle.toLowerCase() !== tweetAuthor.handle.toLowerCase())
       .filter(acct => !alreadyReplied.has(acct.handle.toLowerCase()));
     const requiredAccounts = uniqueXAccounts([...knownMentions, ...relatedAccounts]);
-    const targetReplyCount = Math.max(2, Math.min(4, requiredAccounts.length + 2));
+    const requestedExtras = Math.max(0, Math.min(8, Math.round(additionalReplyCount)));
+    const targetReplyCount = requiredAccounts.length + requestedExtras;
     const contextualAccounts = allAccts
       .filter(acct => contextCategories(topic).includes(acct.category))
       .filter(acct => acct.handle.toLowerCase() !== tweetAuthor.handle.toLowerCase())
@@ -2974,6 +3217,7 @@ function TwitterPage() {
       ...engagementFor(acct, id),
       ts: Date.now() - Math.floor(Math.random() * 180000),
       engagementVersion: 1,
+      source: 'ai',
     });
     const buildFallback = (limit = targetReplyCount) => {
       const required = requiredAccounts.map((acct, index) =>
@@ -2997,6 +3241,7 @@ function TwitterPage() {
           relations: relatedAccounts.map(account => account.handle),
           topic,
           context: editorContext,
+          additionalReplyCount: requestedExtras,
           availableAccounts: candidates.map(a => ({ handle: a.handle, name: a.name, badge: a.badge, category: a.category, country: a.country, isSystem: a.isSystem })),
         }),
       });
@@ -3023,7 +3268,7 @@ function TwitterPage() {
         .slice(0, Math.max(0, targetReplyCount - requiredReplies.length))
         .map((value, index) => makeReply(value.acct, value.reply.content.trim(), `xr_ai_context_${Date.now()}_${index}`));
       const resolved = [...requiredReplies, ...regularReplies];
-      return resolved.length >= Math.min(2, Math.max(1, requiredAccounts.length)) ? resolved : buildFallback();
+      return resolved.length >= requiredAccounts.length ? resolved : buildFallback();
     } catch {
       return buildFallback();
     }
@@ -3047,12 +3292,14 @@ function TwitterPage() {
       replies: [],
       topic: classifyTweetTopic(`${text} ${aiContext ?? ''}`),
       aiContext,
+      aiReplyCount: Math.max(0, Math.min(8, Math.round(aiReplyCount))),
+      commentCount: simulatedCommentCount(author, tweetId),
       engagementVersion: 1,
     };
     setTweets([t, ...tweets]);
     setDraft(''); setComposeContext(''); setImgUrl('');
     setAiPosting(true);
-    const aiReplies = await fetchAIReplies(text, author, [], aiContext);
+    const aiReplies = await fetchAIReplies(text, author, [], aiContext, aiReplyCount);
     setAiPosting(false);
     if (aiReplies.length > 0) {
       setTweetsState(prev => {
@@ -3074,8 +3321,9 @@ function TwitterPage() {
     setEditing({ tweetId, ...(reply ? { replyId: reply.id } : {}) });
     setEditDraft(reply?.text ?? tweet.text);
     setEditContext(reply ? '' : tweet.aiContext ?? '');
+    setEditAiReplyCount(tweet.aiReplyCount ?? 2);
   };
-  const cancelEdit = () => { setEditing(null); setEditDraft(''); setEditContext(''); };
+  const cancelEdit = () => { setEditing(null); setEditDraft(''); setEditContext(''); setEditAiReplyCount(2); };
   const saveEdit = () => {
     if (!editing || !editDraft.trim()) return;
     const updated = tweets.map(tweet => {
@@ -3086,6 +3334,7 @@ function TwitterPage() {
           ...tweet,
           text: editDraft.trim(),
           aiContext,
+          aiReplyCount: Math.max(0, Math.min(8, Math.round(editAiReplyCount))),
           topic: classifyTweetTopic(`${editDraft.trim()} ${aiContext ?? ''}`),
           editedAt: Date.now(),
         };
@@ -3113,15 +3362,76 @@ function TwitterPage() {
     if (aiLoading.has(id)) return;
     setAiLoading(prev => new Set([...prev, id]));
     setExpanded(prev => new Set([...prev, id]));
-    const aiReplies = await fetchAIReplies(tw.text, tw.acct, tw.replies, tw.aiContext);
+    const manualReplies = tw.replies.filter(reply => reply.source === 'manual');
+    const aiReplies = await fetchAIReplies(tw.text, tw.acct, manualReplies, tw.aiContext, tw.aiReplyCount ?? 2);
     setAiLoading(prev => { const s = new Set(prev); s.delete(id); return s; });
     if (aiReplies.length > 0) {
       setTweetsState(prev => {
-        const updated = prev.map(t => t.id === id ? { ...t, replies: [...t.replies, ...aiReplies] } : t);
+        const updated = prev.map(t => t.id === id ? { ...t, replies: [...manualReplies, ...aiReplies], commentCount: Math.max(t.commentCount ?? 0, manualReplies.length + aiReplies.length) } : t);
         localStorage.setItem(XSTORAGE, JSON.stringify(updated));
         return updated;
       });
     }
+  };
+
+  const addManualReply = (tweetId: string, replyAuthor: XAccount, text: string) => {
+    const replyId = `xr_manual_${Date.now()}`;
+    const reply: XReply = { id: replyId, acct: replyAuthor, text, ...engagementFor(replyAuthor, replyId), ts: Date.now(), engagementVersion: 1, source: 'manual' };
+    setTweets(tweets.map(tweet => tweet.id === tweetId ? {
+      ...tweet,
+      replies: [...tweet.replies, reply],
+      commentCount: Math.max(tweet.commentCount ?? 0, tweet.replies.length + 1),
+    } : tweet));
+    setExpanded(previous => new Set([...previous, tweetId]));
+  };
+
+  const selectedProfileAccount = profileHandle ? allAccts.find(account => account.handle === profileHandle) ?? null : null;
+  const selectedProfileRelations = useMemo(() => {
+    if (!selectedProfileAccount?.profileId) return [];
+    const profile = socialDatabase.profiles.find(item => item.id === selectedProfileAccount.profileId);
+    return (profile?.relations ?? []).flatMap(relation => {
+      const account = publicAccounts.find(candidate => candidate.profileId === relation.profileId);
+      return account ? [{ account, type: relation.type }] : [];
+    });
+  }, [publicAccounts, selectedProfileAccount, socialDatabase.profiles]);
+  const selectedProfileTweetCount = selectedProfileAccount ? tweets.filter(tweet => tweet.acct.profileId === selectedProfileAccount.profileId || tweet.acct.handle === selectedProfileAccount.handle).length : 0;
+  const selectedProfileReplyCount = selectedProfileAccount ? tweets.reduce((total, tweet) => total + tweet.replies.filter(reply => reply.acct.profileId === selectedProfileAccount.profileId || reply.acct.handle === selectedProfileAccount.handle).length, 0) : 0;
+
+  const saveTwitterProfile = (draftProfile: XProfileEditDraft) => {
+    if (!selectedProfileAccount?.profileId) return;
+    const currentProfile = socialDatabase.profiles.find(profile => profile.id === selectedProfileAccount.profileId);
+    if (!currentProfile) return;
+    const nextHandle = `@${draftProfile.handle.replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '') || currentProfile.username}`;
+    const avatarMedia = xCanonicalMedia(draftProfile.avatarUrl);
+    const bannerMedia = xCanonicalMedia(draftProfile.bannerUrl);
+    const updatedInstagramProfile: InstagramProfile = {
+      ...currentProfile,
+      displayName: draftProfile.name.trim() || currentProfile.displayName,
+      bio: draftProfile.bio.trim(),
+      avatar: avatarMedia ?? currentProfile.avatar,
+      followers: Math.max(0, Math.round(draftProfile.followers)),
+      following: Math.max(0, Math.round(draftProfile.following)),
+      relations: draftProfile.relations,
+    };
+    const withRelations = updateInstagramProfile(socialDatabase, updatedInstagramProfile);
+    const next = {
+      ...withRelations,
+      profiles: withRelations.profiles.map(profile => profile.id === currentProfile.id ? {
+        ...profile,
+        twitter: {
+          ...profile.twitter,
+          handle: nextHandle,
+          bio: draftProfile.bio.trim() || undefined,
+          avatar: avatarMedia ?? profile.twitter?.avatar,
+          banner: bannerMedia ?? profile.twitter?.banner,
+          followers: Math.max(0, Math.round(draftProfile.followers)),
+          following: Math.max(0, Math.round(draftProfile.following)),
+        },
+      } : profile),
+    };
+    saveInstagramDatabase(next, 'twitter');
+    setSocialDatabase(next);
+    setProfileHandle(nextHandle);
   };
 
   const BASE      = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -3139,7 +3449,7 @@ function TwitterPage() {
           <svg viewBox="0 0 24 24" width="26" height="26" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
         </div>
         {[{e:'🏠',l:'Accueil',a:true},{e:'🔍',l:'Explorer'},{e:'🔔',l:'Notifications'},{e:'👤',l:'Profil'}].map(item => (
-          <button key={item.l} className="flex items-center gap-4 px-3 py-3.5 rounded-full hover:bg-white/10 transition-colors text-left w-full" style={{ color: item.a ? '#fff' : '#e7e9ea' }}>
+           <button key={item.l} onClick={() => item.l === 'Profil' ? setProfileHandle(author.handle) : undefined} className="flex items-center gap-4 px-3 py-3.5 rounded-full hover:bg-white/10 transition-colors text-left w-full" style={{ color: item.a ? '#fff' : '#e7e9ea' }}>
             <span className="text-xl leading-none w-6 text-center">{item.e}</span>
             <span className="hidden xl:block text-[18px] font-medium">{item.l}</span>
           </button>
@@ -3188,13 +3498,10 @@ function TwitterPage() {
           <div className="flex gap-3">
             <XAvtr acct={author} size={44} />
             <div className="flex-1 min-w-0">
-              {allAccts.length > 0 && (
+               {publicAccounts.length > 0 && (
                 <label className="mb-2 block">
-                  <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[#71767b]">Auteur de publication · back-office</span>
-                  <select value={authorIdx} onChange={e => setAuthorIdx(Number(e.target.value))} style={{ background: '#000' }}
-                    className="text-[12px] border border-[#2f3336] rounded-full px-3 py-1 text-[#1d9bf0] cursor-pointer outline-none hover:bg-white/5 max-w-full">
-                    {allAccts.map((a, i) => <option key={a.handle} value={i} style={{ background: '#111' }}>{a.name} {a.handle} · {fmtN(a.followers)} abonnés</option>)}
-                  </select>
+                  <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[#71767b]">Auteur public WikiBase</span>
+                  <XAccountSearchField accounts={publicAccounts} value={authorHandle} onChange={setAuthorHandle} placeholder="Rechercher par nom ou pseudo…" ariaLabel="Rechercher l’auteur du tweet" />
                 </label>
               )}
               <textarea id="x-compose-area" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postTweet(); }}
@@ -3210,6 +3517,10 @@ function TwitterPage() {
                    placeholder="Ex. : Je veux un clash entre un journaliste et un supporter énervé, ou une annonce de transfert surprise."
                    className="w-full resize-none bg-transparent text-[13px] leading-relaxed text-white outline-none placeholder:text-[#71767b]"
                  />
+               </label>
+               <label className="mt-2 flex items-center justify-between rounded-xl border border-[#2f3336] bg-[#16181c] px-3 py-2 text-[12px] text-[#aab1b8]">
+                 Réponses IA supplémentaires à générer
+                 <input type="number" min="0" max="8" value={aiReplyCount} onChange={event => setAiReplyCount(Math.max(0, Math.min(8, Number(event.target.value) || 0)))} className="w-16 rounded-lg border border-[#536471] bg-black px-2 py-1.5 text-right text-sm text-white outline-none" />
                </label>
               {imgUrl && (
                 <div className="relative mt-2 rounded-2xl overflow-hidden border border-[#2f3336]" style={{ maxHeight: 200 }}>
@@ -3275,10 +3586,15 @@ function TwitterPage() {
               editing={editing}
               editDraft={editDraft}
               editContext={editContext}
+              editAiReplyCount={editAiReplyCount}
               onEditDraftChange={setEditDraft}
               onEditContextChange={setEditContext}
+              onEditAiReplyCountChange={setEditAiReplyCount}
               onSaveEdit={saveEdit}
               onCancelEdit={cancelEdit}
+              publicAccounts={publicAccounts}
+              onManualReply={(replyAuthor, text) => addManualReply(t.id, replyAuthor, text)}
+              onOpenProfile={account => setProfileHandle(account.handle)}
             />
           ))}
         </div>
@@ -3300,13 +3616,13 @@ function TwitterPage() {
           {searchTerm.trim() && (
             <div className="absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-xl border border-[#2f3336] bg-[#16181c] shadow-2xl">
               {publicSearchResults.length > 0 ? publicSearchResults.map(account => (
-                <div key={account.handle} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/[0.04]">
+                <button key={account.handle} onClick={() => { setProfileHandle(account.handle); setSearchTerm(''); }} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left hover:bg-white/[0.04]">
                   <XAvtr acct={account} size={32} />
                   <div className="min-w-0">
                     <p className="truncate text-[13px] font-bold text-white">{account.name}</p>
                     <p className="truncate text-[11px] text-[#71767b]">{account.handle} · {fmtN(account.followers)} abonnés</p>
                   </div>
-                </div>
+                </button>
               )) : <p className="px-3 py-3 text-[12px] text-[#71767b]">Aucun compte public trouvé.</p>}
             </div>
           )}
@@ -3324,16 +3640,15 @@ function TwitterPage() {
         {wikiAccts.length > 0 && (
           <div className="bg-[#16181c] rounded-2xl overflow-hidden">
             <p className="px-4 pt-4 pb-2 font-bold text-[18px]">Suggestions</p>
-            {wikiAccts.slice(0, 4).map(acct => (
-              <div key={acct.handle} className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] border-t border-[#2f3336] transition-colors">
-                <XAvtr acct={acct} size={42}/>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1"><span className="font-bold text-[14px] truncate">{acct.name}</span><XBadgeIcon type={acct.badge}/></div>
-                  <p className="text-[11px] text-[#71767b] truncate">{acct.handle}</p>
+              {wikiAccts.slice(0, 4).map(acct => (
+                <div key={acct.handle} className="flex items-center gap-3 border-t border-[#2f3336] px-4 py-3">
+                  <button onClick={() => setProfileHandle(acct.handle)} className="flex min-w-0 flex-1 items-center gap-3 text-left hover:opacity-80">
+                    <XAvtr acct={acct} size={42}/>
+                    <span className="min-w-0"><span className="flex items-center gap-1"><span className="truncate text-[14px] font-bold">{acct.name}</span><XBadgeIcon type={acct.badge}/></span><span className="block truncate text-[11px] text-[#71767b]">{acct.handle}</span></span>
+                  </button>
+                  <button className="shrink-0 rounded-full bg-white px-4 py-1.5 text-[13px] font-bold text-black transition-colors hover:bg-white/90">Suivre</button>
                 </div>
-                <button className="bg-white text-black font-bold text-[13px] px-4 py-1.5 rounded-full hover:bg-white/90 shrink-0 transition-colors">Suivre</button>
-              </div>
-            ))}
+              ))}
           </div>
         )}
         <div className="text-[11px] text-[#71767b] flex flex-wrap gap-x-2 gap-y-1 px-1 pb-4">
@@ -3343,6 +3658,15 @@ function TwitterPage() {
       </div>
 
       {imgOpen && <div className="fixed inset-0 z-20" onClick={() => setImgOpen(false)}/>}
+       <XProfileModal
+         account={selectedProfileAccount}
+         publicAccounts={publicAccounts}
+         relationItems={selectedProfileRelations}
+         tweetCount={selectedProfileTweetCount}
+         replyCount={selectedProfileReplyCount}
+         onClose={() => setProfileHandle(null)}
+         onSave={saveTwitterProfile}
+       />
     </div>
   );
 }

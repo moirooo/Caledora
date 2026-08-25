@@ -13,6 +13,14 @@ export type InstagramCommunicationTone = 'institutionnel' | 'proche des fans' | 
 export type InstagramStatus = 'historique' | 'incontournable' | 'populaire' | 'disruptif';
 export type InstagramTone = 'célébration' | 'défaite' | 'clash' | 'romance' | 'officiel';
 export type InstagramRatio = 'square' | 'portrait' | 'landscape';
+export type TwitterProfileData = {
+  handle?: string;
+  bio?: string;
+  avatar?: string;
+  banner?: string;
+  followers?: number;
+  following?: number;
+};
 
 export type InstagramProfile = {
   id: string;
@@ -33,6 +41,7 @@ export type InstagramProfile = {
   following: number;
   followingByViewer?: boolean;
   relations: Array<{ profileId: string; type: InstagramRelationType }>;
+  twitter?: TwitterProfileData;
 };
 
 export type InstagramComment = {
@@ -107,6 +116,23 @@ const safeNumber = (value: unknown, fallback = 0, max = 9_999_999) => Number.isF
 const safeLink = (value: unknown) => {
   const url = text(value, 220);
   return /^https?:\/\/[^\s]+$/i.test(url) ? url : undefined;
+};
+const safeTwitterHandle = (value: unknown) => {
+  const handle = text(value, 60).replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '');
+  return handle ? `@${handle}` : undefined;
+};
+const safeTwitterProfile = (value: unknown): TwitterProfileData | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const item = value as Record<string, unknown>;
+  const twitter: TwitterProfileData = {
+    handle: safeTwitterHandle(item.handle),
+    bio: text(item.bio, 500) || undefined,
+    avatar: safeMedia(item.avatar, '') || undefined,
+    banner: safeMedia(item.banner, '') || undefined,
+    followers: Number.isFinite(item.followers) ? safeNumber(item.followers) : undefined,
+    following: Number.isFinite(item.following) ? safeNumber(item.following) : undefined,
+  };
+  return Object.values(twitter).some(value => value !== undefined) ? twitter : undefined;
 };
 
 const legacyAccountTypes: Record<string, InstagramAccountType> = {
@@ -280,6 +306,7 @@ function normaliseInstagramDatabase(value: unknown, pages: WikiPage[]): Instagra
       following: safeNumber(item.following, 0),
       followingByViewer: item.followingByViewer === true,
       relations: [],
+      twitter: safeTwitterProfile(item.twitter),
     });
   }
   const requiredProfiles = seedDatabase([]).profiles;
@@ -440,8 +467,9 @@ export function loadInstagramDatabase(pages: WikiPage[]): InstagramDatabase {
   return seedDatabase(pages);
 }
 
-export function saveInstagramDatabase(database: InstagramDatabase) {
+export function saveInstagramDatabase(database: InstagramDatabase, source: 'instagram' | 'twitter' = 'instagram') {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(database));
+  window.dispatchEvent(new CustomEvent('caledora-social-sync', { detail: { source } }));
 }
 
 export function validateImportedInstagram(value: unknown, pages: WikiPage[]): InstagramDatabase | null {

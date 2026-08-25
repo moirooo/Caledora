@@ -388,6 +388,19 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
   };
 
   useEffect(() => {
+    const refreshFromTwitter = (event: Event) => {
+      const source = (event as CustomEvent<{ source?: string }>).detail?.source;
+      if (source !== 'twitter') return;
+      const next = loadInstagramDatabase(pages);
+      databaseRef.current = next;
+      setDatabase(next);
+      setNotice('Profil ou relations synchronisés depuis Twitter/X.');
+    };
+    window.addEventListener('caledora-social-sync', refreshFromTwitter);
+    return () => window.removeEventListener('caledora-social-sync', refreshFromTwitter);
+  }, [pages]);
+
+  useEffect(() => {
     commitDatabase(reconcileInstagramDatabase(databaseRef.current, pages));
   }, [pages]);
 
