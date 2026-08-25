@@ -160,7 +160,7 @@ export default function Home() {
             <a href="/airways/destinations" className="btn btn--outline-dark">Voir toutes les destinations</a>
           </div>
           <div className="split__media map-scene">
-            <NetworkGlyph />
+            <FleetGlyph />
           </div>
         </div>
       </section>
@@ -227,28 +227,6 @@ export default function Home() {
       </section>
     </div>
   );
-}
-
-function NetworkGlyph() {
-  return (
-    <svg viewBox="0 0 400 340" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-hidden="true">
-      <defs>
-        <radialGradient id="glowHome" cx="50%" cy="35%" r="60%">
-          <stop offset="0%" stopColor="#2C4C74" />
-          <stop offset="100%" stopColor="#17365D" />
-        </radialGradient>
-      </defs>
-      <rect width="400" height="340" fill="url(#glowHome)" />
-      <circle cx="80" cy="200" r="3" fill="var(--gold-light)" />
-      {([[80, 200, 200, 90], [80, 200, 320, 150], [80, 200, 260, 260], [80, 200, 120, 60]] as [number,number,number,number][]).map(([x1, y1, x2, y2], i) => (
-        <path key={i} d={`M${x1} ${y1} Q ${(x1 + x2) / 2} ${Math.min(y1, y2) - 40} ${x2} ${y2}`} stroke="var(--gold)" strokeWidth="1" fill="none" opacity="0.55" strokeDasharray="1 5" />
-      ))}
-      {([[200, 90], [320, 150], [260, 260], [120, 60]] as [number,number][]).map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r="2.5" fill="var(--gold-light)" opacity="0.85" />
-      ))}
-      <circle cx="80" cy="200" r="7" fill="none" stroke="var(--gold)" strokeWidth="1.5" />
-    </svg>
-  )
 }
 
 function FleetGlyph() {
