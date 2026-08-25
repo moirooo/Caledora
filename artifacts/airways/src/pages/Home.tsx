@@ -232,7 +232,7 @@ export default function Home() {
 function FleetGlyph() {
   return (
     <img
-      src="/images/avion.jpg"
+      src="/images/airbus.png"
       alt="Avion Airbus de la flotte Caledora Airways"
       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
     />
