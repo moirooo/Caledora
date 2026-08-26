@@ -90,6 +90,10 @@ export function isSocialAccountProfile(profile: Pick<InstagramProfile, 'id'>) {
   return socialAccountProfileIds.has(profile.id);
 }
 
+export function visibleInstagramProfiles<T extends Pick<InstagramProfile, 'id'>>(profiles: readonly T[]) {
+  return profiles.filter(profile => !isSocialAccountProfile(profile));
+}
+
 export function socialAccountMatchesContext(context: string, profiles: InstagramProfile[]) {
   const normalized = context.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const requestedHandles = [...context.matchAll(/@([a-z0-9._]+)/gi)].map(match => match[1].toLowerCase());

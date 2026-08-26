@@ -15,7 +15,7 @@ import {
 } from '@/services/instagramStorage';
 import { generateInstagramCaption, generateInstagramComments } from '@/services/aiInstagramService';
 import { hydrateInstagramImages } from '@/services/instagramMediaStorage';
-import { isSocialAccountProfile } from '@/data/socialAccounts';
+import { visibleInstagramProfiles } from '@/data/socialAccounts';
 import { getUploadedMedia, uploadMedia } from '@workspace/media-upload';
 import '@/components/instagram/instagram.css';
 
@@ -60,8 +60,9 @@ function AutocompleteField({ value, onChange, profiles, hashtags = [], multiline
   const [cursor, setCursor] = useState(value.length);
   const [activeIndex, setActiveIndex] = useState(0);
   const token = activeAutocompleteToken(value, cursor);
+  const selectableProfiles = useMemo(() => visibleInstagramProfiles(profiles), [profiles]);
   const suggestions: AutocompleteSuggestion[] = !focused || !token?.query ? [] : token.kind === 'mention'
-    ? profiles.filter(profile => `${profile.username} ${profile.displayName}`.toLocaleLowerCase('fr-FR').includes(token.query)).slice(0, 5).map(profile => ({ id: profile.id, label: `@${profile.username}`, detail: profile.displayName, avatar: profile.avatar }))
+    ? selectableProfiles.filter(profile => `${profile.username} ${profile.displayName}`.toLocaleLowerCase('fr-FR').includes(token.query)).slice(0, 5).map(profile => ({ id: profile.id, label: `@${profile.username}`, detail: profile.displayName, avatar: profile.avatar }))
     : hashtags.filter(tag => tag.toLocaleLowerCase('fr-FR').includes(token.query)).slice(0, 5).map(tag => ({ id: tag, label: `#${tag}`, detail: 'Hashtag populaire' }));
 
   useEffect(() => setActiveIndex(0), [token?.kind, token?.query]);
@@ -138,12 +139,13 @@ function ProfileSearchField({ profiles, value, onChange, excludeId, placeholder 
   ariaLabel?: string;
   autoFocus?: boolean;
 }) {
-  const selectedProfile = profiles.find(profile => profile.id === value);
+  const selectableProfiles = useMemo(() => visibleInstagramProfiles(profiles), [profiles]);
+  const selectedProfile = selectableProfiles.find(profile => profile.id === value);
   const [query, setQuery] = useState(() => selectedProfile?.displayName ?? '');
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const menuId = useId();
-  const suggestions = !focused || !query.trim() ? [] : profiles
+  const suggestions = !focused || !query.trim() ? [] : selectableProfiles
     .filter(profile => profile.id !== excludeId)
     .filter(profile => `${searchValue(profile.displayName)} ${searchValue(profile.username)}`.includes(searchValue(query)))
     .slice(0, 7);
@@ -418,7 +420,7 @@ export function InstagramApp({ pages }: { pages: WikiPage[] }) {
 
   const updateDatabase = (updater: (current: InstagramDatabase) => InstagramDatabase) => commitDatabase(updater(databaseRef.current));
   const profiles = database.profiles;
-  const visibleProfiles = useMemo(() => profiles.filter(profile => !isSocialAccountProfile(profile)), [profiles]);
+  const visibleProfiles = useMemo(() => visibleInstagramProfiles(profiles), [profiles]);
   const visibleProfileIds = useMemo(() => new Set(visibleProfiles.map(profile => profile.id)), [visibleProfiles]);
   const feed = useMemo(() => database.posts
     .filter(post => visibleProfileIds.has(post.authorId))

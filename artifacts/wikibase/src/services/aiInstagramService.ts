@@ -2,6 +2,14 @@ import type { InstagramProfile, InstagramTone } from './instagramStorage';
 import { isSocialAccountProfile, socialAccountProfiles } from '@/data/socialAccounts';
 
 export type AiComment = { authorId: string; text: string };
+export type InstagramCommentRequirements = {
+  visibleProfiles: InstagramProfile[];
+  eligibleProfiles: InstagramProfile[];
+  mentioned: InstagramProfile[];
+  explicitlyRequested: InstagramProfile[];
+  required: InstagramProfile[];
+  referenceProfiles: InstagramProfile[];
+};
 
 const fallbackCaption = (author: InstagramProfile, context: string, tone: InstagramTone) => {
   const starters: Record<InstagramTone, string> = {
@@ -47,6 +55,50 @@ function isExplicitlyRequested(profile: InstagramProfile, context: string) {
     || normalizedContext.includes(normalizedValue(profile.displayName));
 }
 
+export function getInstagramCommentRequirements(
+  caption: string,
+  context: string,
+  author: InstagramProfile,
+  candidates: InstagramProfile[],
+): InstagramCommentRequirements {
+  const mentions = [...caption.matchAll(/@([a-z0-9._]+)/gi)].map(match => match[1].toLowerCase());
+  const visibleProfiles = candidates.filter(profile => !isSocialAccountProfile(profile));
+  const allCandidates = uniqueProfiles([...visibleProfiles, ...socialAccountProfiles]);
+  const eligibleProfiles = allCandidates.filter(profile => profile.id !== author.id);
+  const profilesByUsername = new Map(eligibleProfiles.map(profile => [profile.username.toLowerCase(), profile]));
+  const mentioned = [...new Set(mentions)].map(username => profilesByUsername.get(username)).filter((profile): profile is InstagramProfile => Boolean(profile));
+  const related = eligibleProfiles.filter(profile => author.relations.some(relation => relation.profileId === profile.id) && !mentioned.some(item => item.id === profile.id));
+  const explicitlyRequested = socialAccountProfiles.filter(profile => profile.id !== author.id && isExplicitlyRequested(profile, context)
+    && !mentioned.some(item => item.id === profile.id) && !related.some(item => item.id === profile.id));
+  const required = uniqueProfiles([...explicitlyRequested, ...mentioned, ...related]);
+  const referenceProfiles = socialAccountProfiles.filter(profile => profile.id !== author.id);
+  return { visibleProfiles, eligibleProfiles, mentioned, explicitlyRequested, required, referenceProfiles };
+}
+
+export function assembleInstagramComments(
+  requirements: InstagramCommentRequirements,
+  author: InstagramProfile,
+  generated: AiComment[],
+): AiComment[] {
+  const requiredIds = new Set(requirements.required.map(profile => profile.id));
+  const referenceIds = new Set(requirements.referenceProfiles.map(profile => profile.id));
+  const allowed = new Set(requirements.eligibleProfiles.map(profile => profile.id));
+  const byAuthor = new Map<string, AiComment>();
+  generated.forEach(comment => {
+    if (comment && allowed.has(comment.authorId) && typeof comment.text === 'string' && comment.text.trim()) {
+      byAuthor.set(comment.authorId, { authorId: comment.authorId, text: comment.text.trim().slice(0, 400) });
+    }
+  });
+  const requiredComments = requirements.required.map(profile => byAuthor.get(profile.id) ?? { authorId: profile.id, text: localComment(profile, author.relations.find(item => item.profileId === profile.id)?.type) });
+  const generatedReferenceComments = [...byAuthor.values()]
+    .filter(comment => referenceIds.has(comment.authorId) && !requiredIds.has(comment.authorId));
+  const fallbackReferenceComments = requirements.referenceProfiles
+    .filter(profile => !requiredIds.has(profile.id) && !generatedReferenceComments.some(comment => comment.authorId === profile.id))
+    .slice(0, Math.max(0, 4 - generatedReferenceComments.length))
+    .map(profile => ({ authorId: profile.id, text: localComment(profile) }));
+  return [...requiredComments, ...generatedReferenceComments, ...fallbackReferenceComments];
+}
+
 export async function generateInstagramComments(
   caption: string,
   context: string,
@@ -54,19 +106,8 @@ export async function generateInstagramComments(
   candidates: InstagramProfile[],
   postMeta: { location?: string; category?: string } = {},
 ): Promise<AiComment[]> {
-  const mentions = [...caption.matchAll(/@([a-z0-9._]+)/gi)].map(match => match[1].toLowerCase());
-  const visibleProfiles = candidates.filter(profile => !isSocialAccountProfile(profile));
-  const allCandidates = uniqueProfiles([...visibleProfiles, ...socialAccountProfiles]);
-  const eligible = allCandidates.filter(profile => profile.id !== author.id);
-  const profilesByUsername = new Map(eligible.map(profile => [profile.username.toLowerCase(), profile]));
-  const mentioned = [...new Set(mentions)].map(username => profilesByUsername.get(username)).filter((profile): profile is InstagramProfile => Boolean(profile));
-  const related = eligible.filter(profile => author.relations.some(relation => relation.profileId === profile.id) && !mentioned.some(item => item.id === profile.id));
-  const explicitlyRequested = socialAccountProfiles.filter(profile => profile.id !== author.id && isExplicitlyRequested(profile, context)
-    && !mentioned.some(item => item.id === profile.id) && !related.some(item => item.id === profile.id));
-  const required = uniqueProfiles([...explicitlyRequested, ...mentioned, ...related]);
-  const requiredIds = new Set(required.map(profile => profile.id));
-  const referenceProfiles = socialAccountProfiles.filter(profile => profile.id !== author.id);
-  const referenceIds = new Set(referenceProfiles.map(profile => profile.id));
+  const requirements = getInstagramCommentRequirements(caption, context, author, candidates);
+  const { visibleProfiles, mentioned, explicitlyRequested } = requirements;
   try {
     const response = await fetch('/api/ai/comments', {
       method: 'POST',
@@ -86,28 +127,9 @@ export async function generateInstagramComments(
     });
     const data = await response.json() as { comments?: AiComment[] };
     if (!response.ok || !Array.isArray(data.comments)) throw new Error('comments unavailable');
-    const allowed = new Set(eligible.map(profile => profile.id));
-    const byAuthor = new Map<string, AiComment>();
-    data.comments.forEach(comment => {
-      if (comment && allowed.has(comment.authorId) && typeof comment.text === 'string' && comment.text.trim()) {
-        byAuthor.set(comment.authorId, { authorId: comment.authorId, text: comment.text.trim().slice(0, 400) });
-      }
-    });
-    const requiredComments = required.map(profile => byAuthor.get(profile.id) ?? { authorId: profile.id, text: localComment(profile, author.relations.find(item => item.profileId === profile.id)?.type) });
-    const generatedReferenceComments = [...byAuthor.values()]
-      .filter(comment => referenceIds.has(comment.authorId) && !requiredIds.has(comment.authorId));
-    const fallbackReferenceComments = referenceProfiles
-      .filter(profile => !requiredIds.has(profile.id) && !generatedReferenceComments.some(comment => comment.authorId === profile.id))
-      .slice(0, Math.max(0, 4 - generatedReferenceComments.length))
-      .map(profile => ({ authorId: profile.id, text: localComment(profile) }));
-    return [...requiredComments, ...generatedReferenceComments, ...fallbackReferenceComments];
+    return assembleInstagramComments(requirements, author, data.comments);
   } catch {
     // Local fallback keeps publishing and mention rules usable offline.
   }
-  const extras = referenceProfiles.filter(profile => !requiredIds.has(profile.id)).slice(0, 4)
-    .map(profile => ({ authorId: profile.id, text: localComment(profile) }));
-  return [
-    ...required.map(profile => ({ authorId: profile.id, text: localComment(profile, author.relations.find(item => item.profileId === profile.id)?.type) })),
-    ...extras,
-  ];
+  return assembleInstagramComments(requirements, author, []);
 }
