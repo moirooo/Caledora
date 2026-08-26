@@ -15,7 +15,7 @@ import { decodeTwitterRouteHandle, formatTwitterCount, isTwitterHandleTaken, nor
 import { GlobalBackupPage } from '@/components/GlobalBackupPage';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
-import { AlertTriangle, Archive, ArrowDown, ArrowLeft, ArrowUp, BarChart2, Bell, BookOpen, Check, CheckCircle2, ChevronRight, Clock3, Download, FileText, GitCompare, Hash, Heart, Home, Image as ImageIcon, Menu, MessageCircle, MoreHorizontal, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, User, X } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowDown, ArrowLeft, ArrowUp, BarChart2, Bell, BookOpen, Check, CheckCircle2, ChevronDown, ChevronRight, Clock3, Download, FileText, GitCompare, Hash, Heart, Home, Image as ImageIcon, Menu, MessageCircle, MoreHorizontal, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, User, X } from 'lucide-react';
 
 type Theme = 'auto' | 'light' | 'dark';
 type Width = 'standard' | 'large';
@@ -3407,13 +3407,15 @@ function XProfileModal({ account, publicAccounts, takenHandles, relationItems, t
   );
 }
 
-function XProfilePage({ account, tweets, relations, onBack, onEdit, onOpenProfile }: {
+function XProfilePage({ account, availableAccounts, tweets, relations, onBack, onEdit, onOpenProfile, onSelectProfile }: {
   account: XAccount | null;
+  availableAccounts: XAccount[];
   tweets: XTweet[];
   relations: Array<{ account: XAccount; type: InstagramRelationType }>;
   onBack: () => void;
   onEdit: () => void;
   onOpenProfile: (account: XAccount) => void;
+  onSelectProfile: (account: XAccount) => void;
 }) {
   const [tab, setTab] = useState<'tweets' | 'replies' | 'likes' | 'retweets'>('tweets');
   const { open: openLightbox } = useContext(LightboxContext);
@@ -3422,8 +3424,8 @@ function XProfilePage({ account, tweets, relations, onBack, onEdit, onOpenProfil
       <div className="min-h-screen bg-black px-4 py-8 text-white">
         <button onClick={onBack} className="mb-8 flex items-center gap-2 text-[14px] text-[#8ecdf5] hover:underline"><ArrowLeft size={17} /> Retour</button>
         <div className="mx-auto max-w-[650px] rounded-2xl border border-[#2f3336] bg-[#16181c] px-6 py-16 text-center">
-          <h1 className="text-xl font-bold">Profil introuvable</h1>
-          <p className="mt-2 text-sm text-[#71767b]">Ce profil n’est pas un compte public WikiBase.</p>
+          <h1 className="text-xl font-bold">{availableAccounts.length > 0 ? 'Profil introuvable' : 'Aucun profil public disponible'}</h1>
+          <p className="mt-2 text-sm text-[#71767b]">{availableAccounts.length > 0 ? 'Ce profil n’est pas un compte public WikiBase.' : 'Créez ou restaurez une page WikiBase pour pouvoir sélectionner un profil X.'}</p>
         </div>
       </div>
     );
@@ -3443,7 +3445,29 @@ function XProfilePage({ account, tweets, relations, onBack, onEdit, onOpenProfil
       <div className="mx-auto min-h-screen w-full max-w-[990px] border-x border-[#2f3336]">
         <header className="sticky top-0 z-20 flex items-center gap-6 border-b border-[#2f3336] bg-black/85 px-4 py-3 backdrop-blur-md">
           <button onClick={onBack} aria-label="Retour au fil Twitter/X" className="rounded-full p-2 hover:bg-white/10"><ArrowLeft size={19} /></button>
-          <div><h1 className="font-bold text-[18px]">{account.name}</h1><p className="text-[12px] text-[#71767b]">{originals.length} publication{originals.length !== 1 ? 's' : ''}</p></div>
+          <div className="min-w-0 flex-1">
+            <div className="relative min-w-0 max-w-full">
+              <label htmlFor="active-x-profile" className="sr-only">Profil Twitter/X actif</label>
+              <select
+                id="active-x-profile"
+                value={account.profileId}
+                onChange={event => {
+                  const next = availableAccounts.find(candidate => candidate.profileId === event.target.value);
+                  if (next) onSelectProfile(next);
+                }}
+                disabled={availableAccounts.length === 0}
+                className="block w-full max-w-[360px] appearance-none truncate rounded-lg bg-transparent pr-8 text-left text-[18px] font-bold text-white outline-none transition hover:bg-white/[0.06] focus:bg-white/[0.06] focus:ring-2 focus:ring-[#1d9bf0]/60 disabled:opacity-60 sm:max-w-[480px]"
+                aria-label="Changer de profil Twitter/X"
+                data-testid="select-active-x-profile"
+              >
+                {availableAccounts.length > 0
+                  ? availableAccounts.map(candidate => <option key={candidate.profileId} value={candidate.profileId}>{candidate.name} · {candidate.handle}</option>)
+                  : <option value="">Aucun profil public</option>}
+              </select>
+              <ChevronDown size={16} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#71767b]" aria-hidden="true" />
+            </div>
+            <p className="text-[12px] text-[#71767b]">{originals.length} publication{originals.length !== 1 ? 's' : ''}</p>
+          </div>
         </header>
         <section>
           <div className={`relative h-44 bg-gradient-to-r from-[#123a5a] via-[#1d9bf0] to-[#7856ff] sm:h-56 ${bannerSource ? 'cursor-zoom-in' : ''}`}>
@@ -3781,6 +3805,7 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
   const [editAiReplyCount, setEditAiReplyCount] = useState(2);
   const [searchTerm, setSearchTerm] = useState('');
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
+  const [activeProfileHandle, setActiveProfileHandle] = useState<string | null>(null);
   const [composeModalOpen, setComposeModalOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [discoverySeed] = useState(() => Math.floor(Date.now() / 60_000));
@@ -3829,6 +3854,19 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
     if (!query) return [];
     return publicAccounts.filter(account => `${account.name} ${account.handle}`.toLowerCase().includes(query)).slice(0, 5);
   }, [publicAccounts, searchTerm]);
+
+  useEffect(() => {
+    if (!routeProfileHandle) return;
+    const routeAccount = publicAccounts.find(account => account.handle.toLowerCase() === routeProfileHandle.toLowerCase());
+    if (routeAccount) setActiveProfileHandle(routeAccount.handle);
+  }, [publicAccounts, routeProfileHandle]);
+
+  const openActiveProfile = () => {
+    const account = publicAccounts.find(candidate => candidate.handle === activeProfileHandle) ?? publicAccounts[0];
+    if (!account) return;
+    setActiveProfileHandle(account.handle);
+    navigate(`/twitter/profile/${encodeURIComponent(account.handle)}`);
+  };
 
   // Fetches AI-generated replies from the backend and maps them to XReply[]
   const fetchAIReplies = async (
@@ -4129,11 +4167,16 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
       <>
         <XProfilePage
           account={selectedProfileAccount}
+          availableAccounts={publicAccounts}
           tweets={tweets}
           relations={selectedProfileRelations}
           onBack={() => navigate('/twitter')}
           onEdit={() => setProfileEditorOpen(true)}
           onOpenProfile={account => account.profileId && !account.isSystem ? navigate(`/twitter/profile/${encodeURIComponent(account.handle)}`) : undefined}
+          onSelectProfile={account => {
+            setActiveProfileHandle(account.handle);
+            navigate(`/twitter/profile/${encodeURIComponent(account.handle)}`);
+          }}
         />
         {profileEditorOpen && <XProfileModal
           account={selectedProfileAccount}
@@ -4175,7 +4218,7 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
           <span className="text-xl leading-none w-6 text-center flex justify-center"><Bell size={26} strokeWidth={2} /></span>
           <span className="hidden xl:block text-[18px] font-medium">Notifications</span>
         </button>
-        <button onClick={() => publicAccounts.some(account => account.handle === author.handle) ? navigate(`/twitter/profile/${encodeURIComponent(author.handle)}`) : undefined} className="flex w-full items-center gap-4 rounded-full px-3 py-3.5 text-left text-[#e7e9ea] transition-colors hover:bg-white/10" data-testid="button-nav-profile">
+        <button onClick={openActiveProfile} className="flex w-full items-center gap-4 rounded-full px-3 py-3.5 text-left text-[#e7e9ea] transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50" disabled={publicAccounts.length === 0} data-testid="button-nav-profile">
           <span className="text-xl leading-none w-6 text-center flex justify-center"><User size={26} strokeWidth={2} /></span>
           <span className="hidden xl:block text-[18px] font-medium">Profil</span>
         </button>
@@ -4313,7 +4356,7 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
         <button onClick={() => navigate('/twitter')} className="rounded-full p-3 text-white hover:bg-white/10" aria-label="Accueil" data-testid="button-mobile-home"><Home size={24} strokeWidth={2} /></button>
         <button onClick={() => setMobileSearchOpen(current => !current)} className={`rounded-full p-3 hover:bg-white/10 ${mobileSearchOpen ? 'text-white' : 'text-[#71767b]'}`} aria-label="Rechercher" aria-expanded={mobileSearchOpen} data-testid="button-mobile-search"><Search size={24} strokeWidth={2} /></button>
         <button type="button" className="rounded-full p-3 text-[#71767b] hover:bg-white/10" aria-label="Notifications" data-testid="button-mobile-notifications"><Bell size={24} strokeWidth={2} /></button>
-        <button onClick={() => { if (publicAccounts.some(account => account.handle === author.handle)) navigate(`/twitter/profile/${encodeURIComponent(author.handle)}`) }} className="rounded-full p-3 text-[#71767b] hover:bg-white/10" aria-label="Profil" data-testid="button-mobile-profile"><User size={24} strokeWidth={2} /></button>
+        <button onClick={openActiveProfile} disabled={publicAccounts.length === 0} className="rounded-full p-3 text-[#71767b] hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50" aria-label="Profil" data-testid="button-mobile-profile"><User size={24} strokeWidth={2} /></button>
       </div>
 
       <button onClick={() => { setImgOpen(false); setComposeModalOpen(true); }} className="fixed bottom-[72px] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-[#1d9bf0] text-white shadow-[0_4px_12px_rgba(29,155,240,0.4)] md:hidden" aria-label="Poster un Tweet" data-testid="button-compose-fab">
