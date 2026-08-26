@@ -32,6 +32,11 @@ export type WikiPage = {
   infoboxSections?: WBInfoboxSection[];
 };
 
+/** Lowercase + strip diacritics for accent-insensitive comparison. */
+export function normalizeStr(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
 /** The image shown at the top of an infobox without altering the article source. */
 export function getDisplayInfoboxImage(page: Pick<WikiPage, 'infoboxImage' | 'infoboxImageOverride'>): WBImage | undefined {
   return page.infoboxImageOverride ?? page.infoboxImage;

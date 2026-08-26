@@ -4,7 +4,7 @@ import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } f
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
-import { allText, demoSource, formatDate, getDisplayInfoboxImage, loadPages, parseWikiText, savePages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
+import { allText, createPagesBackup, demoSource, downloadPagesBackup, formatDate, getDisplayInfoboxImage, getLastPagesBackupAt, loadPages, normalizeStr, parseWikiText, restorePagesBackup, savePages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
 import { getUploadedMedia, uploadMedia } from '@workspace/media-upload';
 import OriaBank from '@/pages/OriaBank.jsx';
 import { TWITTER_ACCOUNTS, TWITTER_ACCOUNT_TEMPLATES, type TwitterAccountCategory } from '@/data/twitterAccounts';
@@ -12,7 +12,6 @@ import { socialAccountProfiles } from '@/data/socialAccounts';
 import { InstagramApp } from '@/components/instagram/InstagramApp';
 import { loadInstagramDatabase, mediaUrl as instagramMediaUrl, saveInstagramDatabase, updateInstagramProfile, type InstagramProfile, type InstagramRelationType } from '@/services/instagramStorage';
 import { GlobalBackupPage } from '@/components/GlobalBackupPage';
-import { allText, createPagesBackup, demoSource, downloadPagesBackup, formatDate, getLastPagesBackupAt, loadPages, parseWikiText, restorePagesBackup, savePages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
 import { AlertTriangle, Archive, ArrowLeft, BarChart2, BookOpen, Check, CheckCircle2, ChevronRight, Clock3, Download, FileText, GitCompare, Heart, Image as ImageIcon, Menu, MessageCircle, MoreHorizontal, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, X } from 'lucide-react';
@@ -830,8 +829,12 @@ function WikiList() {
 
   const active = pages.filter((p) => !p.isTrashed);
   const categories = ['Toutes', ...Array.from(new Set(active.map((p) => p.category)))];
+  const normalizedQuery = normalizeStr(query);
   const visible = active.filter(
-    (p) => allText(p).includes(query.toLowerCase()) && (filter === 'Toutes' || p.category === filter)
+    (p) => (
+      normalizeStr(allText(p)).includes(normalizedQuery) ||
+      p.aliases.some((alias) => normalizeStr(alias).includes(normalizedQuery))
+    ) && (filter === 'Toutes' || p.category === filter)
   );
 
   return (
@@ -1478,11 +1481,6 @@ function flagEmoji(code: string): string {
   return code.toUpperCase().split('').map((c) =>
     String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)
   ).join('');
-}
-
-/** Lowercase + strip diacritics for accent-insensitive comparison. */
-function normalizeStr(s: string): string {
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
 
 /** Find a page by title (exact, case-insensitive) then by aliases (accent+case insensitive). */
