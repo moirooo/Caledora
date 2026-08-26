@@ -1868,6 +1868,39 @@ function BlockView({ block, pages }: { block: WBBlock; pages: WikiPage[] }) {
       </figure>
     );
   }
+  if (block.type === 'gallery') {
+    return (
+      <div
+        data-testid="gallery-block"
+        className="my-4 clear-both grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4"
+      >
+        {block.images.map((img, index) => {
+          const src = resolveImageSrc(img);
+          const label = img.caption || img.filename;
+          return (
+            <figure
+              data-testid={`gallery-item-${index}`}
+              key={`${img.filename}-${index}`}
+              className="min-w-0 border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-1"
+            >
+              <div
+                className={`flex aspect-[4/3] items-center justify-center overflow-hidden bg-[#eaecf0] dark:bg-muted text-xs text-muted-foreground${src ? ' cursor-zoom-in' : ''}`}
+                onClick={src ? () => openLightbox({ src, alt: img.alt, caption: label }) : undefined}
+              >
+                {src
+                  ? <img src={src} alt={img.alt} className="h-full w-full object-contain block" />
+                  : <div className="flex flex-col items-center gap-1 px-2 py-6 text-center"><ImageIcon size={14} />Image manquante</div>
+                }
+              </div>
+              <figcaption className="pt-1 px-1 text-[11px] text-center text-muted-foreground leading-relaxed break-words">
+                {label}
+              </figcaption>
+            </figure>
+          );
+        })}
+      </div>
+    );
+  }
   if (block.type === 'table') {
     return (
       <div data-testid={`table-block-${block.table.title}`} className="my-3 overflow-x-auto">

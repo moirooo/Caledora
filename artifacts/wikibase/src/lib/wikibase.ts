@@ -5,6 +5,7 @@ export type WBBlock =
   | { type: 'text'; content: string }
   | { type: 'list' | 'numbered'; items: string[] }
   | { type: 'image'; image: WBImage }
+  | { type: 'gallery'; images: WBImage[] }
   | { type: 'table'; table: WBTable };
 export type WBSection = { title: string; level: number; blocks: WBBlock[] };
 export type WBHistory = { timestamp: string; label: string; sourceText: string };
@@ -42,7 +43,7 @@ export function getDisplayInfoboxImage(page: Pick<WikiPage, 'infoboxImage' | 'in
   return page.infoboxImageOverride ?? page.infoboxImage;
 }
 
-const tags = new Set(['TITRE','SOUS-TITRE','ALIASES','ALIAS','INTRODUCTION','INFOBOX','IMAGE_INFOBOX','SECTION','SOUS-SECTION','SOUS-SOUS-SECTION','TEXTE','LISTE','LISTE_NUMEROTEE','IMAGE','TABLEAU','LIENS','REFERENCES','BIBLIOGRAPHIE','CATEGORIES','COULEUR','MAILLOTS','INFOBOX_SECTION']);
+const tags = new Set(['TITRE','SOUS-TITRE','ALIASES','ALIAS','INTRODUCTION','INFOBOX','IMAGE_INFOBOX','SECTION','SOUS-SECTION','SOUS-SOUS-SECTION','TEXTE','LISTE','LISTE_NUMEROTEE','IMAGE','GALERIE','TABLEAU','LIENS','REFERENCES','BIBLIOGRAPHIE','CATEGORIES','COULEUR','MAILLOTS','INFOBOX_SECTION']);
 const lines = (text: string) => text.replace(/\r/g, '').split('\n');
 const clean = (s: string) => s.trim();
 const field = (arr: string[], key: string) => {
@@ -117,6 +118,25 @@ export function parseWikiText(sourceText: string, category = 'Non classé', type
     if (bucket.tag === 'TEXTE') { for (const blk of processTexteBlock(bucket.content)) active.blocks.push(blk); }
     if (bucket.tag === 'LISTE' || bucket.tag === 'LISTE_NUMEROTEE') active.blocks.push({ type: bucket.tag === 'LISTE' ? 'list' : 'numbered', items: bucket.content.map(clean).filter(Boolean) });
     if (bucket.tag === 'IMAGE') active.blocks.push({ type: 'image', image: imageFrom(bucket.content) });
+    if (bucket.tag === 'GALERIE') {
+      const images = bucket.content
+        .map((line): WBImage | null => {
+          const [filename, ...captionParts] = line.split('|');
+          const trimmedFilename = clean(filename);
+          if (!trimmedFilename) return null;
+          const caption = clean(captionParts.join('|'));
+          return {
+            filename: trimmedFilename,
+            caption,
+            alt: caption || trimmedFilename,
+            alignment: 'centre',
+            size: '300',
+            missing: true,
+          };
+        })
+        .filter((image): image is WBImage => image !== null);
+      if (images.length > 0) active.blocks.push({ type: 'gallery', images });
+    }
     if (bucket.tag === 'TABLEAU') {
       const columns = (field(bucket.content, 'colonnes') || '').split('|').map(clean).filter(Boolean);
       const rows = bucket.content.filter((l) => l.toLowerCase().startsWith('ligne =')).map((l) => l.split('=').slice(1).join('=').split('|').map(clean));
@@ -310,7 +330,11 @@ function stripSrc(page: WikiPage): WikiPage {
     sections: page.sections.map((s) => ({
       ...s,
       blocks: s.blocks.map((b) =>
-        b.type === 'image' ? { ...b, image: noSrc(b.image)! } : b
+        b.type === 'image'
+          ? { ...b, image: noSrc(b.image)! }
+          : b.type === 'gallery'
+            ? { ...b, images: b.images.map((image) => noSrc(image)!) }
+            : b
       ),
     })),
   };
@@ -480,6 +504,7 @@ function isWikiPage(value: unknown): value is WikiPage {
       if (block.type === 'text') return typeof block.content === 'string';
       if (block.type === 'list' || block.type === 'numbered') return isStringArray(block.items);
       if (block.type === 'image') return isImage(block.image);
+      if (block.type === 'gallery') return Array.isArray(block.images) && block.images.every(isImage);
       if (block.type !== 'table' || !isRecord(block.table)) return false;
       return typeof block.table.title === 'string' && isStringArray(block.table.columns)
         && Array.isArray(block.table.rows) && block.table.rows.every(isStringArray);
