@@ -3026,16 +3026,23 @@ function genMentionReply(mentionedAcct: XAccount, tweetText: string, author: XAc
   return fb[Math.floor(Math.random() * fb.length)];
 }
 
-/** Render tweet text with @mentions highlighted in blue */
-function XTweetText({ text }: { text: string }) {
+/** Render only recognised public WikiBase mentions as navigable profile links. */
+function XTweetText({ text, accounts, onOpenProfile }: {
+  text: string;
+  accounts: XAccount[];
+  onOpenProfile?: (account: XAccount) => void;
+}) {
   const parts = text.split(/(@[a-zA-Z0-9_]+)/g);
   return (
     <span>
-      {parts.map((part, i) =>
-        /^@[a-zA-Z0-9_]+$/.test(part)
-          ? <span key={i} style={{ color: '#1d9bf0' }} className="hover:underline cursor-pointer">{part}</span>
-          : <span key={i}>{part}</span>
-      )}
+      {parts.map((part, i) => {
+        const mentionedAccount = /^@[a-zA-Z0-9_]+$/.test(part)
+          ? accounts.find(account => account.handle.toLowerCase() === part.toLowerCase())
+          : undefined;
+        return mentionedAccount && onOpenProfile
+          ? <button key={i} type="button" onClick={() => onOpenProfile(mentionedAccount)} className="text-[#1d9bf0] hover:underline" data-testid={`button-mention-${mentionedAccount.handle.slice(1)}`}>{part}</button>
+          : <span key={i}>{part}</span>;
+      })}
     </span>
   );
 }
@@ -3249,6 +3256,128 @@ function XAuthorField({ accounts, value, onChange, placeholder, ariaLabel }: {
   );
 }
 
+type XActiveMention = { start: number; end: number; query: string };
+
+function xActiveMention(value: string, cursor: number): XActiveMention | null {
+  const beforeCursor = value.slice(0, cursor);
+  const match = beforeCursor.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/);
+  if (!match) return null;
+  return { start: cursor - match[1].length - 1, end: cursor, query: match[1] };
+}
+
+function XComposeMentionField({ accounts, authorHandle, value, onChange, onSubmit }: {
+  accounts: XAccount[];
+  authorHandle: string;
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+}) {
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [activeMention, setActiveMention] = useState<XActiveMention | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const query = normalizeStr(activeMention?.query ?? '');
+  const matches = activeMention
+    ? accounts
+      .filter(account => account.handle.toLowerCase() !== authorHandle.toLowerCase())
+      .filter(account => !query || normalizeStr(`${account.name} ${account.handle}`).includes(query))
+      .slice(0, 6)
+    : [];
+
+  const updateMention = (nextValue: string, cursor: number) => {
+    onChange(nextValue);
+    setActiveMention(xActiveMention(nextValue, cursor));
+    setActiveIndex(0);
+  };
+
+  const chooseMention = (account: XAccount) => {
+    if (!activeMention) return;
+    const before = value.slice(0, activeMention.start);
+    const after = value.slice(activeMention.end);
+    const inserted = `${account.handle} `;
+    const nextValue = `${before}${inserted}${after}`;
+    onChange(nextValue);
+    setActiveMention(null);
+    setActiveIndex(0);
+    requestAnimationFrame(() => {
+      const cursor = before.length + inserted.length;
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  return (
+    <div className="relative">
+      <textarea
+        ref={inputRef}
+        id="x-compose-modal-area"
+        autoFocus
+        value={value}
+        onChange={event => updateMention(event.target.value, event.target.selectionStart)}
+        onClick={event => setActiveMention(xActiveMention(value, event.currentTarget.selectionStart))}
+        onKeyUp={event => {
+          if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+            setActiveMention(xActiveMention(value, event.currentTarget.selectionStart));
+          }
+        }}
+        onKeyDown={event => {
+          if (activeMention && matches.length > 0) {
+            if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              setActiveIndex(index => Math.min(index + 1, matches.length - 1));
+              return;
+            }
+            if (event.key === 'ArrowUp') {
+              event.preventDefault();
+              setActiveIndex(index => Math.max(index - 1, 0));
+              return;
+            }
+            if (event.key === 'Enter' || event.key === 'Tab') {
+              event.preventDefault();
+              chooseMention(matches[activeIndex] ?? matches[0]);
+              return;
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              setActiveMention(null);
+              return;
+            }
+          }
+          if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) onSubmit();
+        }}
+        placeholder="Quoi de neuf ? Tapez @ pour mentionner un compte."
+        rows={value.length > 80 ? 4 : 3}
+        className="min-h-[100px] w-full resize-none bg-transparent text-[18px] leading-relaxed outline-none placeholder:text-[#71767b]"
+        aria-label="Texte du tweet"
+        aria-autocomplete="list"
+        aria-controls={matches.length > 0 ? 'x-mention-options' : undefined}
+        aria-expanded={matches.length > 0}
+        aria-activedescendant={activeMention && matches[activeIndex] ? `x-mention-option-${activeIndex}` : undefined}
+        data-testid="input-tweet-draft"
+      />
+      {activeMention && (
+        <div id="x-mention-options" role="listbox" aria-label="Suggestions de comptes à mentionner" className="absolute inset-x-0 bottom-full z-50 mb-2 overflow-hidden rounded-xl border border-[#2f3336] bg-[#16181c] shadow-2xl">
+          {matches.length > 0 ? matches.map((account, index) => (
+            <button
+              key={account.profileId ?? account.handle}
+              type="button"
+              id={`x-mention-option-${index}`}
+              role="option"
+              aria-selected={index === activeIndex}
+              onMouseDown={event => event.preventDefault()}
+              onClick={() => chooseMention(account)}
+              className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-white/[0.08] ${index === activeIndex ? 'bg-white/[0.08]' : ''}`}
+              data-testid={`button-mention-suggestion-${account.handle.slice(1)}`}
+            >
+              <XAvtr acct={account} size={30} />
+              <span className="min-w-0"><b className="block truncate text-[12px] text-white">{account.name}</b><small className="block truncate text-[11px] text-[#71767b]">{account.handle}</small></span>
+            </button>
+          )) : <p className="px-3 py-2.5 text-[12px] text-[#71767b]">Aucun autre profil public ne correspond.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type XProfileEditDraft = {
   name: string;
   handle: string;
@@ -3418,7 +3547,49 @@ function XProfilePage({ account, availableAccounts, tweets, relations, onBack, o
   onSelectProfile: (account: XAccount) => void;
 }) {
   const [tab, setTab] = useState<'tweets' | 'replies' | 'likes' | 'retweets'>('tweets');
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const profileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const profileMenuItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const restoreProfileMenuFocusRef = useRef(false);
   const { open: openLightbox } = useContext(LightboxContext);
+  const currentProfileIndex = Math.max(0, availableAccounts.findIndex(candidate => candidate.profileId === account?.profileId));
+  const focusProfileMenuItem = (index: number) => {
+    const nextIndex = Math.max(0, Math.min(index, availableAccounts.length - 1));
+    requestAnimationFrame(() => profileMenuItemRefs.current[nextIndex]?.focus());
+  };
+  const openProfileMenu = (focusIndex = currentProfileIndex) => {
+    setProfileMenuOpen(true);
+    focusProfileMenuItem(focusIndex);
+  };
+  const chooseProfile = (candidate: XAccount) => {
+    restoreProfileMenuFocusRef.current = true;
+    setProfileMenuOpen(false);
+    if (candidate.profileId !== account?.profileId) onSelectProfile(candidate);
+  };
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!profileMenuRef.current?.contains(event.target as Node)) setProfileMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setProfileMenuOpen(false);
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [profileMenuOpen]);
+  useEffect(() => {
+    if (profileMenuOpen || !restoreProfileMenuFocusRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      profileMenuButtonRef.current?.focus();
+      restoreProfileMenuFocusRef.current = false;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [account?.profileId, profileMenuOpen]);
   if (!account || account.isSystem || !account.profileId) {
     return (
       <div className="min-h-screen bg-black px-4 py-8 text-white">
@@ -3443,30 +3614,78 @@ function XProfilePage({ account, availableAccounts, tweets, relations, onBack, o
   return (
     <div className="min-h-screen bg-black text-white" style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" }}>
       <div className="mx-auto min-h-screen w-full max-w-[990px] border-x border-[#2f3336]">
-        <header className="sticky top-0 z-20 flex items-center gap-6 border-b border-[#2f3336] bg-black/85 px-4 py-3 backdrop-blur-md">
+        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-[#2f3336] bg-black/85 px-4 py-3 backdrop-blur-md">
           <button onClick={onBack} aria-label="Retour au fil Twitter/X" className="rounded-full p-2 hover:bg-white/10"><ArrowLeft size={19} /></button>
           <div className="min-w-0 flex-1">
-            <div className="relative min-w-0 max-w-full">
-              <label htmlFor="active-x-profile" className="sr-only">Profil Twitter/X actif</label>
-              <select
-                id="active-x-profile"
-                value={account.profileId}
-                onChange={event => {
-                  const next = availableAccounts.find(candidate => candidate.profileId === event.target.value);
-                  if (next) onSelectProfile(next);
-                }}
-                disabled={availableAccounts.length === 0}
-                className="block w-full max-w-[360px] appearance-none truncate rounded-lg bg-transparent pr-8 text-left text-[18px] font-bold text-white outline-none transition hover:bg-white/[0.06] focus:bg-white/[0.06] focus:ring-2 focus:ring-[#1d9bf0]/60 disabled:opacity-60 sm:max-w-[480px]"
-                aria-label="Changer de profil Twitter/X"
-                data-testid="select-active-x-profile"
-              >
-                {availableAccounts.length > 0
-                  ? availableAccounts.map(candidate => <option key={candidate.profileId} value={candidate.profileId}>{candidate.name} · {candidate.handle}</option>)
-                  : <option value="">Aucun profil public</option>}
-              </select>
-              <ChevronDown size={16} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#71767b]" aria-hidden="true" />
-            </div>
+            <p className="truncate text-[16px] font-bold text-white sm:text-[18px]">{account.name} <span className="font-normal text-[#71767b]">· {account.handle}</span></p>
             <p className="text-[12px] text-[#71767b]">{originals.length} publication{originals.length !== 1 ? 's' : ''}</p>
+          </div>
+          <div ref={profileMenuRef} className="relative shrink-0">
+            <button
+              ref={profileMenuButtonRef}
+              type="button"
+              onClick={() => profileMenuOpen ? setProfileMenuOpen(false) : openProfileMenu()}
+              onKeyDown={event => {
+                if (event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  openProfileMenu(currentProfileIndex);
+                } else if (event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  openProfileMenu(availableAccounts.length - 1);
+                } else if (event.key === 'Escape') {
+                  setProfileMenuOpen(false);
+                }
+              }}
+              aria-label="Changer de profil Twitter/X"
+              aria-haspopup="menu"
+              aria-expanded={profileMenuOpen}
+              aria-controls="x-profile-switch-menu"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-[#71767b] transition hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#1d9bf0]/70"
+              data-testid="button-active-x-profile-menu"
+              title="Changer de compte"
+            >
+              <ChevronDown size={17} className={`transition-transform ${profileMenuOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+            </button>
+            {profileMenuOpen && (
+              <div id="x-profile-switch-menu" role="menu" aria-label="Profils Twitter/X publics" className="absolute right-0 top-[calc(100%+8px)] z-40 w-[min(300px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#2f3336] bg-[#16181c] py-1 shadow-2xl">
+                <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[#71767b]">Changer de compte</p>
+                {availableAccounts.map((candidate, index) => (
+                  <button
+                    key={candidate.profileId}
+                    ref={element => { profileMenuItemRefs.current[index] = element; }}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={candidate.profileId === account.profileId}
+                    onClick={() => chooseProfile(candidate)}
+                    onKeyDown={event => {
+                      if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        focusProfileMenuItem((index + 1) % availableAccounts.length);
+                      } else if (event.key === 'ArrowUp') {
+                        event.preventDefault();
+                        focusProfileMenuItem((index - 1 + availableAccounts.length) % availableAccounts.length);
+                      } else if (event.key === 'Home') {
+                        event.preventDefault();
+                        focusProfileMenuItem(0);
+                      } else if (event.key === 'End') {
+                        event.preventDefault();
+                        focusProfileMenuItem(availableAccounts.length - 1);
+                      } else if (event.key === 'Escape') {
+                        event.preventDefault();
+                        setProfileMenuOpen(false);
+                        requestAnimationFrame(() => profileMenuButtonRef.current?.focus());
+                      }
+                    }}
+                    className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-white/[0.08] ${candidate.profileId === account.profileId ? 'bg-[#1d9bf0]/10' : ''}`}
+                    data-testid={`button-x-profile-option-${candidate.profileId}`}
+                  >
+                    <XAvtr acct={candidate} size={30} />
+                    <span className="min-w-0 flex-1"><b className="block truncate text-[12px] text-white">{candidate.name}</b><small className="block truncate text-[11px] text-[#71767b]">{candidate.handle}</small></span>
+                    {candidate.profileId === account.profileId && <Check size={15} className="shrink-0 text-[#1d9bf0]" aria-hidden="true" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </header>
         <section>
@@ -3499,8 +3718,8 @@ function XProfilePage({ account, availableAccounts, tweets, relations, onBack, o
           ] as const).map(([id, label]) => <button key={id} onClick={() => setTab(id)} className={`relative py-4 text-[13px] font-semibold ${tab === id ? 'text-white' : 'text-[#71767b] hover:bg-white/[.04]'}`}>{label}{tab === id && <span className="absolute bottom-0 left-1/2 h-1 w-12 -translate-x-1/2 rounded-full bg-[#1d9bf0]" />}</button>)}
         </nav>
         {tab === 'replies' ? (
-          replies.length ? <div>{replies.map(({ reply, parent }) => <article key={reply.id} className="border-b border-[#2f3336] px-4 py-4"><div className="flex gap-3"><button onClick={() => onOpenProfile(reply.acct)}><XAvtr acct={reply.acct} size={42} /></button><div className="min-w-0 flex-1"><p className="text-[13px]"><b>{reply.acct.name}</b> <span className="text-[#71767b]">{reply.acct.handle} · {xAgo(reply.ts)}</span></p><p className="mt-1 text-[14px] leading-relaxed"><XTweetText text={reply.text} /></p><p className="mt-2 text-[12px] text-[#71767b]">En réponse à <button onClick={() => onOpenProfile(parent.acct)} className="text-[#8ecdf5] hover:underline">{parent.acct.handle}</button></p></div></div></article>)}</div> : <XProfileEmpty title="Aucune réponse" text="Les réponses de ce profil apparaîtront ici." />
-        ) : tabItems.length ? <div>{tabItems.map(tweet => <article key={`${tab}-${tweet.id}`} className="border-b border-[#2f3336] px-4 py-4"><div className="flex gap-3"><button onClick={() => onOpenProfile(tweet.acct)}><XAvtr acct={tweet.acct} size={42} /></button><div className="min-w-0 flex-1"><p className="text-[13px]"><b>{tweet.acct.name}</b> <XBadgeIcon type={tweet.acct.badge} /> <span className="text-[#71767b]">{tweet.acct.handle} · {xAgo(tweet.ts)}</span></p><p className="mt-1 whitespace-pre-wrap text-[15px] leading-relaxed"><XTweetText text={tweet.text} /></p>{tweet.imageUrl && <img src={tweet.imageUrl} alt="" className="mt-3 max-h-72 rounded-2xl border border-[#2f3336] object-cover" />}<p className="mt-3 text-[12px] text-[#71767b]">{fmtN(tweet.likes)} J’aime · {fmtN(tweet.retweets)} Retweets · {fmtN(tweet.views)} vues</p></div></div></article>)}</div> : <XProfileEmpty title={tab === 'tweets' ? 'Aucun Tweet' : tab === 'likes' ? 'Aucun J’aime' : 'Aucun Retweet'} text={tab === 'tweets' ? 'Ce profil n’a pas encore publié de Tweet.' : 'Les contenus correspondants apparaîtront ici.'} />
+          replies.length ? <div>{replies.map(({ reply, parent }) => <article key={reply.id} className="border-b border-[#2f3336] px-4 py-4"><div className="flex gap-3"><button onClick={() => onOpenProfile(reply.acct)}><XAvtr acct={reply.acct} size={42} /></button><div className="min-w-0 flex-1"><p className="text-[13px]"><b>{reply.acct.name}</b> <span className="text-[#71767b]">{reply.acct.handle} · {xAgo(reply.ts)}</span></p><p className="mt-1 text-[14px] leading-relaxed"><XTweetText text={reply.text} accounts={availableAccounts} onOpenProfile={onOpenProfile} /></p><p className="mt-2 text-[12px] text-[#71767b]">En réponse à <button onClick={() => onOpenProfile(parent.acct)} className="text-[#8ecdf5] hover:underline">{parent.acct.handle}</button></p></div></div></article>)}</div> : <XProfileEmpty title="Aucune réponse" text="Les réponses de ce profil apparaîtront ici." />
+        ) : tabItems.length ? <div>{tabItems.map(tweet => <article key={`${tab}-${tweet.id}`} className="border-b border-[#2f3336] px-4 py-4"><div className="flex gap-3"><button onClick={() => onOpenProfile(tweet.acct)}><XAvtr acct={tweet.acct} size={42} /></button><div className="min-w-0 flex-1"><p className="text-[13px]"><b>{tweet.acct.name}</b> <XBadgeIcon type={tweet.acct.badge} /> <span className="text-[#71767b]">{tweet.acct.handle} · {xAgo(tweet.ts)}</span></p><p className="mt-1 whitespace-pre-wrap text-[15px] leading-relaxed"><XTweetText text={tweet.text} accounts={availableAccounts} onOpenProfile={onOpenProfile} /></p>{tweet.imageUrl && <img src={tweet.imageUrl} alt="" className="mt-3 max-h-72 rounded-2xl border border-[#2f3336] object-cover" />}<p className="mt-3 text-[12px] text-[#71767b]">{fmtN(tweet.likes)} J’aime · {fmtN(tweet.retweets)} Retweets · {fmtN(tweet.views)} vues</p></div></div></article>)}</div> : <XProfileEmpty title={tab === 'tweets' ? 'Aucun Tweet' : tab === 'likes' ? 'Aucun J’aime' : 'Aucun Retweet'} text={tab === 'tweets' ? 'Ce profil n’a pas encore publié de Tweet.' : 'Les contenus correspondants apparaîtront ici.'} />
         }
       </div>
     </div>
@@ -3641,7 +3860,7 @@ function XCard({
             </div>
           ) : (
             <p className="text-[15px] text-white leading-relaxed whitespace-pre-wrap break-words">
-              <XTweetText text={tweet.text} />
+              <XTweetText text={tweet.text} accounts={publicAccounts} onOpenProfile={onOpenProfile} />
             </p>
           )}
           {tweet.imageUrl && (
@@ -3715,7 +3934,7 @@ function XCard({
                     </div>
                   ) : (
                     <p className="text-[14px] text-white leading-relaxed">
-                      <XTweetText text={r.text} />
+                      <XTweetText text={r.text} accounts={publicAccounts} onOpenProfile={onOpenProfile} />
                     </p>
                   )}
                   <div className="flex gap-5 mt-2 text-[#71767b] text-[12px] items-center">
@@ -3876,12 +4095,14 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
     editorContext = '',
     additionalReplyCount = 2,
   ): Promise<XReply[]> => {
-    const mentions = extractMentions(tweetText);
+    const mentionHandles = extractMentions(tweetText);
     const alreadyReplied = new Set(existingReplies.map(r => r.acct.handle.toLowerCase()));
     const topic = classifyTweetTopic(`${tweetText} ${editorContext}`);
-    const knownMentions = mentions
-      .map(handle => allAccts.find(acct => acct.handle.toLowerCase() === handle.toLowerCase()))
-      .filter((acct): acct is XAccount => Boolean(acct))
+    const knownMentions = mentionHandles
+      .flatMap(handle => {
+        const account = publicAccounts.find(acct => acct.handle.toLowerCase() === handle.toLowerCase());
+        return account ? [account] : [];
+      })
       .filter(acct => acct.handle.toLowerCase() !== tweetAuthor.handle.toLowerCase())
       .filter(acct => !alreadyReplied.has(acct.handle.toLowerCase()));
     const relatedAccounts = (tweetAuthor.relatedHandles ?? [])
@@ -3924,7 +4145,7 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
         body: JSON.stringify({
           tweetText,
           author: { handle: tweetAuthor.handle, name: tweetAuthor.name, badge: tweetAuthor.badge },
-          mentions,
+          mentions: knownMentions.map(account => account.handle),
           relations: relatedAccounts.map(account => account.handle),
           topic,
           context: editorContext,
@@ -4428,9 +4649,13 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
                       {authorError && <p role="alert" className="mt-1.5 text-[11px] text-[#f91880]" data-testid="error-author">{authorError}</p>}
                     </label>
                   )}
-                  <textarea id="x-compose-modal-area" autoFocus value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postTweet(); }}
-                    placeholder="Quoi de neuf ?" rows={draft.length > 80 ? 4 : 3}
-                    className="w-full bg-transparent text-[18px] placeholder-[#71767b] outline-none resize-none leading-relaxed min-h-[100px]" data-testid="input-tweet-draft" />
+                  <XComposeMentionField
+                    accounts={publicAccounts}
+                    authorHandle={authorHandle}
+                    value={draft}
+                    onChange={setDraft}
+                    onSubmit={postTweet}
+                  />
                   <label className="mt-2 block rounded-xl border border-[#2f3336] bg-[#16181c] px-3 py-2 focus-within:border-[#1d9bf0] transition-colors">
                     <span className="mb-1 block text-[11px] font-semibold text-[#8ecdf5]">Contexte / Consignes pour l’IA <span className="font-normal text-[#71767b]">· optionnel</span></span>
                     <textarea

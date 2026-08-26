@@ -136,6 +136,7 @@ router.post("/generate-replies", async (req, res) => {
   const mentionedAccounts = (mentions ?? [])
     .map(handle => accounts.find(account => account.handle.toLowerCase() === normaliseHandle(handle).toLowerCase()))
     .filter((account): account is ReplyAccount => Boolean(account))
+    .filter(account => !account.isSystem)
     .filter(account => account.handle.toLowerCase() !== normaliseHandle(author?.handle ?? "").toLowerCase());
   const uniqueMentions = [...new Map(mentionedAccounts.map(account => [account.handle.toLowerCase(), account])).values()];
   const relatedAccounts = relations
