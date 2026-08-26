@@ -15,7 +15,7 @@ import { decodeTwitterRouteHandle, formatTwitterCount, isTwitterHandleTaken, nor
 import { GlobalBackupPage } from '@/components/GlobalBackupPage';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
-import { AlertTriangle, Archive, ArrowDown, ArrowLeft, ArrowUp, BarChart2, BookOpen, Check, CheckCircle2, ChevronRight, Clock3, Download, FileText, GitCompare, Heart, Image as ImageIcon, Menu, MessageCircle, MoreHorizontal, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowDown, ArrowLeft, ArrowUp, BarChart2, Bell, BookOpen, Check, CheckCircle2, ChevronRight, Clock3, Download, FileText, GitCompare, Hash, Heart, Home, Image as ImageIcon, Menu, MessageCircle, MoreHorizontal, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, User, X } from 'lucide-react';
 
 type Theme = 'auto' | 'light' | 'dark';
 type Width = 'standard' | 'large';
@@ -3781,7 +3781,26 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
   const [editAiReplyCount, setEditAiReplyCount] = useState(2);
   const [searchTerm, setSearchTerm] = useState('');
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
+  const [composeModalOpen, setComposeModalOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [discoverySeed] = useState(() => Math.floor(Date.now() / 60_000));
+
+  useEffect(() => {
+    if (!composeModalOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setImgOpen(false);
+        setComposeModalOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [composeModalOpen]);
 
   useEffect(() => {
     const byIdentity = new Map(allAccts.flatMap(account => [[account.handle.toLowerCase(), account], ...(account.profileId ? [[`profile:${account.profileId}`, account] as const] : [])]));
@@ -3933,6 +3952,7 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
     setTweets([t, ...tweets]);
     setDraft(''); setComposeContext(''); setImgUrl('');
     setAuthorError('');
+    setComposeModalOpen(false);
     setAiPosting(true);
     const aiReplies = await fetchAIReplies(text, author, [], aiContext, aiReplyCount);
     setAiPosting(false);
@@ -4136,21 +4156,32 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
   ];
 
   return (
-    <div className="flex h-screen bg-black text-white overflow-hidden" style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" }}>
-
+    <div className="flex h-[100dvh] justify-center overflow-hidden bg-black text-white" style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" }}>
+      <div className="relative flex h-full w-full max-w-[1255px]">
       {/* ── LEFT NAV ─────────────────────────────────────────── */}
-      <nav className="hidden md:flex flex-col w-[68px] xl:w-[258px] h-full py-3 px-2 xl:px-4 border-r border-[#2f3336] shrink-0">
+      <nav className="hidden md:flex flex-col w-[88px] xl:w-[275px] h-full py-3 px-2 xl:px-4 shrink-0">
         <div className="p-3 mb-1">
           <svg viewBox="0 0 24 24" width="26" height="26" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
         </div>
-        {[{e:'🏠',l:'Accueil',a:true},{e:'🔍',l:'Explorer'},{e:'🔔',l:'Notifications'},{e:'👤',l:'Profil'}].map(item => (
-           <button key={item.l} onClick={() => item.l === 'Profil' && publicAccounts.some(account => account.handle === author.handle) ? navigate(`/twitter/profile/${encodeURIComponent(author.handle)}`) : undefined} className="flex items-center gap-4 px-3 py-3.5 rounded-full hover:bg-white/10 transition-colors text-left w-full" style={{ color: item.a ? '#fff' : '#e7e9ea' }}>
-            <span className="text-xl leading-none w-6 text-center">{item.e}</span>
-            <span className="hidden xl:block text-[18px] font-medium">{item.l}</span>
-          </button>
-        ))}
-        <button onClick={() => document.getElementById('x-compose-area')?.focus()} className="mt-4 h-12 w-12 xl:w-full rounded-full bg-[#1d9bf0] text-white font-bold text-[15px] hover:bg-[#1a8cd8] transition-colors flex items-center justify-center gap-2 self-start xl:self-stretch">
-          <span className="xl:hidden text-xl">✎</span><span className="hidden xl:block">Poster</span>
+        <button onClick={() => navigate('/twitter')} className="flex w-full items-center gap-4 rounded-full px-3 py-3.5 text-left text-white transition-colors hover:bg-white/10" data-testid="button-nav-home">
+          <span className="text-xl leading-none w-6 text-center flex justify-center"><Home size={26} strokeWidth={2} /></span>
+          <span className="hidden xl:block text-[18px] font-medium">Accueil</span>
+        </button>
+        <button onClick={() => { setTab('discovery'); setTopicFilter('ALL'); navigate('/twitter'); }} className="flex w-full items-center gap-4 rounded-full px-3 py-3.5 text-left text-[#e7e9ea] transition-colors hover:bg-white/10" data-testid="button-nav-explore">
+          <span className="text-xl leading-none w-6 text-center flex justify-center"><Search size={26} strokeWidth={2} /></span>
+          <span className="hidden xl:block text-[18px] font-medium">Explorer</span>
+        </button>
+        <button type="button" className="flex w-full items-center gap-4 rounded-full px-3 py-3.5 text-left text-[#e7e9ea] transition-colors hover:bg-white/10" data-testid="button-nav-notifications">
+          <span className="text-xl leading-none w-6 text-center flex justify-center"><Bell size={26} strokeWidth={2} /></span>
+          <span className="hidden xl:block text-[18px] font-medium">Notifications</span>
+        </button>
+        <button onClick={() => publicAccounts.some(account => account.handle === author.handle) ? navigate(`/twitter/profile/${encodeURIComponent(author.handle)}`) : undefined} className="flex w-full items-center gap-4 rounded-full px-3 py-3.5 text-left text-[#e7e9ea] transition-colors hover:bg-white/10" data-testid="button-nav-profile">
+          <span className="text-xl leading-none w-6 text-center flex justify-center"><User size={26} strokeWidth={2} /></span>
+          <span className="hidden xl:block text-[18px] font-medium">Profil</span>
+        </button>
+        <button onClick={() => { setImgOpen(false); setComposeModalOpen(true); }} className="mt-4 flex h-12 w-12 items-center justify-center gap-2 self-start rounded-full bg-[#1d9bf0] text-[15px] font-bold text-white transition-colors hover:bg-[#1a8cd8] xl:w-full xl:self-stretch" data-testid="button-open-compose">
+          <span className="xl:hidden"><Plus size={22} strokeWidth={2.5} /></span>
+          <span className="hidden xl:block">Poster</span>
         </button>
         <div className="flex-1" />
         <button onClick={() => navigate('/')} className="flex items-center gap-3 px-3 py-3 rounded-full hover:bg-white/10 transition-colors text-[#71767b] hover:text-white w-full">
@@ -4159,7 +4190,7 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
       </nav>
 
       {/* ── CENTER ───────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 border-r border-[#2f3336]" style={{ maxWidth: 598 }}>
+      <div className="flex min-w-0 flex-1 flex-col border-[#2f3336] md:border-x" style={{ maxWidth: 640 }}>
         {/* Sticky header */}
         <div className="sticky top-0 z-20 backdrop-blur-md bg-black/75 border-b border-[#2f3336]">
           <div className="flex items-center justify-between px-4 py-3">
@@ -4174,7 +4205,7 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
               </button>
             ))}
           </div>
-           <div className="flex gap-2 overflow-x-auto px-4 pb-2.5 pt-1.5">
+           <div className="flex gap-2 overflow-x-auto px-4 pb-2.5 pt-1.5 scrollbar-hide">
              {XTOPICS.map(topic => (
                <button
                  key={topic.id}
@@ -4188,92 +4219,9 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
            </div>
         </div>
 
-        {/* Composer */}
-        <div className="px-4 pt-4 pb-3 border-b border-[#2f3336]">
-          <div className="flex gap-3">
-            <XAvtr acct={author} size={44} />
-            <div className="flex-1 min-w-0">
-               {publicAccounts.length > 0 && (
-                <label className="mb-2 block">
-                  <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[#71767b]">Auteur public WikiBase</span>
-                  <XAuthorField
-                    accounts={publicAccounts}
-                    value={authorHandle}
-                    onChange={handle => { setAuthorHandle(handle); if (handle) setAuthorError(''); }}
-                    placeholder="Tapez un nom ou un pseudo, puis choisissez une suggestion…"
-                    ariaLabel="Rechercher l’auteur du tweet"
-                  />
-                  {authorError && <p role="alert" className="mt-1.5 text-[11px] text-[#f91880]">{authorError}</p>}
-                </label>
-              )}
-              <textarea id="x-compose-area" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postTweet(); }}
-                placeholder="Quoi de neuf ?" rows={draft.length > 80 ? 3 : 2}
-                className="w-full bg-transparent text-[18px] placeholder-[#71767b] outline-none resize-none leading-relaxed" />
-               <label className="mt-2 block rounded-xl border border-[#2f3336] bg-[#16181c] px-3 py-2">
-                 <span className="mb-1 block text-[11px] font-semibold text-[#8ecdf5]">Contexte / Consignes pour l’IA <span className="font-normal text-[#71767b]">· optionnel</span></span>
-                 <textarea
-                   value={composeContext}
-                   onChange={event => setComposeContext(event.target.value)}
-                   maxLength={700}
-                   rows={composeContext.length > 140 ? 3 : 2}
-                   placeholder="Ex. : Je veux un clash entre un journaliste et un supporter énervé, ou une annonce de transfert surprise."
-                   className="w-full resize-none bg-transparent text-[13px] leading-relaxed text-white outline-none placeholder:text-[#71767b]"
-                 />
-               </label>
-               <label className="mt-2 flex items-center justify-between rounded-xl border border-[#2f3336] bg-[#16181c] px-3 py-2 text-[12px] text-[#aab1b8]">
-                 Réponses IA supplémentaires à générer
-                 <input type="number" min="0" max="8" value={aiReplyCount} onChange={event => setAiReplyCount(Math.max(0, Math.min(8, Number(event.target.value) || 0)))} className="w-16 rounded-lg border border-[#536471] bg-black px-2 py-1.5 text-right text-sm text-white outline-none" />
-               </label>
-              {imgUrl && (
-                <div className="relative mt-2 rounded-2xl overflow-hidden border border-[#2f3336]" style={{ maxHeight: 200 }}>
-                  <img src={imgUrl} alt="" className="w-full object-cover" style={{ maxHeight: 200 }} />
-                  <button onClick={() => setImgUrl('')} className="absolute top-2 right-2 bg-black/70 rounded-full p-1.5"><X size={13}/></button>
-                </div>
-              )}
-              <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-[#2f3336]">
-                <div className="relative">
-                  <button onClick={() => setImgOpen(v => !v)} className="text-[#1d9bf0] p-2 rounded-full hover:bg-[#1d9bf0]/10 transition-colors"><ImageIcon size={18}/></button>
-                  {imgOpen && (
-                    <div className="absolute left-0 top-10 z-30 bg-[#1c2938] border border-[#2f3336] rounded-2xl shadow-2xl p-3" style={{ minWidth: 210 }}>
-                      <p className="text-[10px] text-[#71767b] mb-2 uppercase tracking-wider">Images disponibles</p>
-                      {knownImgs.map(im => (
-                        <button key={im.name} onClick={() => { setImgUrl(im.url); setImgOpen(false); }} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-white/10 text-left text-sm text-white">
-                          <img src={im.url} alt="" className="w-7 h-7 rounded object-cover shrink-0"/>{im.name}
-                        </button>
-                      ))}
-                      <div className="mt-2 pt-2 border-t border-[#2f3336]">
-                         <label className={`flex items-center justify-center gap-1.5 mb-2 rounded-lg border border-dashed border-[#1d9bf0]/60 px-2 py-1.5 text-xs text-[#1d9bf0] cursor-pointer ${imgUploading ? 'opacity-60 pointer-events-none' : ''}`}>
-                           <Upload size={14} /> {imgUploading ? 'Import en cours…' : 'Importer depuis mon ordinateur'}
-                           <input type="file" accept=".jpg,.jpeg,.png,.webp,.svg,image/*" className="hidden" disabled={imgUploading} onChange={async event => {
-                             const file = event.target.files?.[0]; event.currentTarget.value = '';
-                             if (!file) return;
-                             setImgUploading(true); setImgUploadError('');
-                             try { const uploaded = await uploadMedia(file, 'twitter'); setImgUrl(uploaded.path); setImgOpen(false); }
-                             catch (error) { setImgUploadError(error instanceof Error ? error.message : 'Import impossible.'); }
-                             finally { setImgUploading(false); }
-                           }} />
-                         </label>
-                         {imgUploadError && <p className="text-[10px] text-[#f4212e] mb-2">{imgUploadError}</p>}
-                        <input type="text" placeholder="URL d'image..." value={imgUrl} onChange={e => setImgUrl(e.target.value)} className="w-full bg-transparent text-[12px] text-white placeholder-[#71767b] outline-none px-2 py-1 border border-[#2f3336] rounded-lg"/>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-[13px]" style={{ color: draft.length > 260 ? '#f4212e' : '#71767b' }}>{280 - draft.length}</span>
-                  <button onClick={postTweet} disabled={!draft.trim() || aiPosting} className="bg-[#1d9bf0] text-white font-bold px-5 py-1.5 rounded-full text-[15px] hover:bg-[#1a8cd8] transition-colors disabled:opacity-40 flex items-center gap-2">
-                    {aiPosting && <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>}
-                    {aiPosting ? 'Publication…' : 'Poster'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Timeline */}
-        <div className="overflow-y-auto flex-1">
-          {displayed.length === 0 && <div className="py-16 text-center text-[#71767b]"><p className="text-4xl mb-3">📭</p><p>Aucun tweet. Soyez le premier à poster !</p></div>}
+        <div className="overflow-y-auto flex-1 pb-[70px] md:pb-0">
+          {displayed.length === 0 && <div className="py-16 text-center text-[#71767b]"><p className="text-4xl mb-3"><Archive size={40} className="mx-auto opacity-50" /></p><p>Aucun tweet. Soyez le premier à poster !</p></div>}
           {displayed.map(t => (
             <XCard key={t.id} tweet={t} expanded={expanded.has(t.id)}
               onToggleExpand={() => setExpanded(prev => { const s = new Set(prev); s.has(t.id) ? s.delete(t.id) : s.add(t.id); return s; })}
@@ -4303,7 +4251,7 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
       </div>
 
       {/* ── RIGHT SIDEBAR ────────────────────────────────────── */}
-      <div className="hidden lg:flex flex-col w-[340px] h-full px-4 py-4 overflow-y-auto shrink-0 gap-4">
+      <div className="hidden h-full w-[340px] shrink-0 flex-col gap-4 overflow-y-auto px-4 py-4 lg:flex">
         <div className="relative">
           <div className="flex items-center gap-3 bg-[#202327] rounded-full px-4 py-2.5">
             <Search size={15} className="text-[#71767b] shrink-0"/>
@@ -4312,7 +4260,8 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
               value={searchTerm}
               onChange={event => setSearchTerm(event.target.value)}
               placeholder="Rechercher un compte public"
-              className="bg-transparent text-sm outline-none flex-1 placeholder-[#71767b] text-white"
+              className="flex-1 bg-transparent text-sm text-white outline-none placeholder-[#71767b]"
+              data-testid="input-public-search"
             />
           </div>
           {searchTerm.trim() && (
@@ -4359,7 +4308,148 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
         </div>
       </div>
 
-      {imgOpen && <div className="fixed inset-0 z-20" onClick={() => setImgOpen(false)}/>}
+      {/* ── MOBILE NAV ───────────────────────────────────────── */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 flex items-center justify-around border-t border-[#2f3336] bg-black py-2 pb-[env(safe-area-inset-bottom)] md:hidden">
+        <button onClick={() => navigate('/twitter')} className="rounded-full p-3 text-white hover:bg-white/10" aria-label="Accueil" data-testid="button-mobile-home"><Home size={24} strokeWidth={2} /></button>
+        <button onClick={() => setMobileSearchOpen(current => !current)} className={`rounded-full p-3 hover:bg-white/10 ${mobileSearchOpen ? 'text-white' : 'text-[#71767b]'}`} aria-label="Rechercher" aria-expanded={mobileSearchOpen} data-testid="button-mobile-search"><Search size={24} strokeWidth={2} /></button>
+        <button type="button" className="rounded-full p-3 text-[#71767b] hover:bg-white/10" aria-label="Notifications" data-testid="button-mobile-notifications"><Bell size={24} strokeWidth={2} /></button>
+        <button onClick={() => { if (publicAccounts.some(account => account.handle === author.handle)) navigate(`/twitter/profile/${encodeURIComponent(author.handle)}`) }} className="rounded-full p-3 text-[#71767b] hover:bg-white/10" aria-label="Profil" data-testid="button-mobile-profile"><User size={24} strokeWidth={2} /></button>
+      </div>
+
+      <button onClick={() => { setImgOpen(false); setComposeModalOpen(true); }} className="fixed bottom-[72px] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-[#1d9bf0] text-white shadow-[0_4px_12px_rgba(29,155,240,0.4)] md:hidden" aria-label="Poster un Tweet" data-testid="button-compose-fab">
+        <Plus size={24} strokeWidth={2.5} />
+      </button>
+
+      {mobileSearchOpen && (
+        <div className="fixed inset-x-3 bottom-[72px] z-40 rounded-2xl border border-[#2f3336] bg-[#16181c] p-3 shadow-2xl md:hidden">
+          <div className="flex items-center gap-2 rounded-full bg-[#202327] px-3 py-2">
+            <Search size={15} className="shrink-0 text-[#71767b]" />
+            <input
+              autoFocus
+              type="search"
+              value={searchTerm}
+              onChange={event => setSearchTerm(event.target.value)}
+              placeholder="Rechercher un compte public"
+              className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#71767b]"
+              data-testid="input-mobile-public-search"
+            />
+          </div>
+          {searchTerm.trim() && (
+            <div className="mt-2 overflow-hidden rounded-xl border border-[#2f3336]">
+              {publicSearchResults.length > 0 ? publicSearchResults.map(account => (
+                <button key={account.handle} onClick={() => { navigate(`/twitter/profile/${encodeURIComponent(account.handle)}`); setSearchTerm(''); setMobileSearchOpen(false); }} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left hover:bg-white/[0.04]" data-testid={`button-mobile-search-result-${account.handle.slice(1)}`}>
+                  <XAvtr acct={account} size={32} />
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-bold text-white">{account.name}</p>
+                    <p className="truncate text-[11px] text-[#71767b]">{account.handle} · {fmtN(account.followers)} abonnés</p>
+                  </div>
+                </button>
+              )) : <p className="px-3 py-3 text-[12px] text-[#71767b]">Aucun compte public trouvé.</p>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── COMPOSE MODAL ────────────────────────────────────── */}
+      {composeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-[#242d34]/70 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={event => { if (event.target === event.currentTarget) { setImgOpen(false); setComposeModalOpen(false); } }} role="presentation">
+          <div className="relative flex h-full w-full flex-col bg-black shadow-2xl sm:h-auto sm:max-h-[90vh] sm:max-w-[600px] sm:rounded-2xl" onMouseDown={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="x-compose-title">
+            <div className="flex shrink-0 items-center justify-between border-b border-[#2f3336] px-4 py-3">
+              <button onClick={() => { setImgOpen(false); setComposeModalOpen(false); }} className="-ml-2 rounded-full p-2 text-white transition hover:bg-white/10" aria-label="Fermer la fenêtre de publication" data-testid="button-close-composer">
+                <X size={20} />
+              </button>
+              <h2 id="x-compose-title" className="text-[15px] font-bold text-white">Nouveau Tweet</h2>
+              <div className="flex items-center gap-3">
+                <button onClick={() => { setDraft(''); setComposeContext(''); setImgUrl(''); setAuthorError(''); }} disabled={!draft && !composeContext && !imgUrl} className="text-sm font-medium text-[#1d9bf0] hover:underline disabled:opacity-40" data-testid="button-clear-draft">Effacer</button>
+                <button onClick={postTweet} disabled={!draft.trim() || aiPosting} className="flex items-center gap-2 rounded-full bg-[#1d9bf0] px-4 py-1.5 text-sm font-bold text-white transition-colors hover:bg-[#1a8cd8] disabled:opacity-40" data-testid="button-post-tweet">
+                  {aiPosting && <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>}
+                  {aiPosting ? 'Publication…' : 'Poster'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex gap-3">
+                <XAvtr acct={author} size={44} />
+                <div className="flex-1 min-w-0">
+                  {publicAccounts.length > 0 && (
+                    <label className="mb-2 block">
+                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[#71767b]">Auteur public WikiBase</span>
+                      <XAuthorField
+                        accounts={publicAccounts}
+                        value={authorHandle}
+                        onChange={handle => { setAuthorHandle(handle); if (handle) setAuthorError(''); }}
+                        placeholder="Tapez un nom ou un pseudo, puis choisissez une suggestion…"
+                        ariaLabel="Rechercher l’auteur du tweet"
+                      />
+                      {authorError && <p role="alert" className="mt-1.5 text-[11px] text-[#f91880]" data-testid="error-author">{authorError}</p>}
+                    </label>
+                  )}
+                  <textarea id="x-compose-modal-area" autoFocus value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postTweet(); }}
+                    placeholder="Quoi de neuf ?" rows={draft.length > 80 ? 4 : 3}
+                    className="w-full bg-transparent text-[18px] placeholder-[#71767b] outline-none resize-none leading-relaxed min-h-[100px]" data-testid="input-tweet-draft" />
+                  <label className="mt-2 block rounded-xl border border-[#2f3336] bg-[#16181c] px-3 py-2 focus-within:border-[#1d9bf0] transition-colors">
+                    <span className="mb-1 block text-[11px] font-semibold text-[#8ecdf5]">Contexte / Consignes pour l’IA <span className="font-normal text-[#71767b]">· optionnel</span></span>
+                    <textarea
+                      value={composeContext}
+                      onChange={event => setComposeContext(event.target.value)}
+                      maxLength={700}
+                      rows={composeContext.length > 140 ? 3 : 2}
+                      placeholder="Ex. : Je veux un clash entre un journaliste et un supporter énervé, ou une annonce de transfert surprise."
+                      className="w-full resize-none bg-transparent text-[13px] leading-relaxed text-white outline-none placeholder:text-[#71767b]"
+                      data-testid="input-tweet-context"
+                    />
+                  </label>
+                  <label className="mt-2 flex items-center justify-between rounded-xl border border-[#2f3336] bg-[#16181c] px-3 py-2 text-[12px] text-[#aab1b8]">
+                    Réponses IA supplémentaires à générer
+                    <input type="number" min="0" max="8" value={aiReplyCount} onChange={event => setAiReplyCount(Math.max(0, Math.min(8, Number(event.target.value) || 0)))} className="w-16 rounded-lg border border-[#536471] bg-black px-2 py-1.5 text-right text-sm text-white outline-none focus:border-[#1d9bf0] transition-colors" data-testid="input-ai-reply-count" />
+                  </label>
+                  {imgUrl && (
+                    <div className="relative mt-2 rounded-2xl overflow-hidden border border-[#2f3336]" style={{ maxHeight: 300 }}>
+                      <img src={imgUrl} alt="" className="w-full object-cover" style={{ maxHeight: 300 }} />
+                      <button onClick={() => setImgUrl('')} className="absolute top-2 right-2 bg-black/70 rounded-full p-1.5 text-white transition hover:bg-black/90"><X size={16}/></button>
+                    </div>
+                  )}
+
+                  <div className="mt-3 pt-3 border-t border-[#2f3336]">
+                    <div className="relative">
+                      <button onClick={() => setImgOpen(v => !v)} className="text-[#1d9bf0] p-2 -ml-2 rounded-full hover:bg-[#1d9bf0]/10 transition-colors" data-testid="button-open-image-picker"><ImageIcon size={20}/></button>
+                      {imgOpen && (
+                        <div className="absolute left-0 bottom-[calc(100%+8px)] z-30 bg-[#1c2938] border border-[#2f3336] rounded-2xl shadow-2xl p-3" style={{ minWidth: 260 }}>
+                          <p className="text-[10px] text-[#71767b] mb-2 uppercase tracking-wider">Images disponibles</p>
+                          {knownImgs.map(im => (
+                            <button key={im.name} onClick={() => { setImgUrl(im.url); setImgOpen(false); }} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-white/10 text-left text-sm text-white">
+                              <img src={im.url} alt="" className="w-7 h-7 rounded object-cover shrink-0"/>{im.name}
+                            </button>
+                          ))}
+                          <div className="mt-2 pt-2 border-t border-[#2f3336]">
+                             <label className={`flex items-center justify-center gap-1.5 mb-2 rounded-lg border border-dashed border-[#1d9bf0]/60 px-2 py-1.5 text-xs text-[#1d9bf0] cursor-pointer ${imgUploading ? 'opacity-60 pointer-events-none' : 'hover:bg-[#1d9bf0]/10 transition-colors'}`}>
+                               <Upload size={14} /> {imgUploading ? 'Import en cours…' : 'Importer depuis mon ordinateur'}
+                               <input type="file" accept=".jpg,.jpeg,.png,.webp,.svg,image/*" className="hidden" disabled={imgUploading} onChange={async event => {
+                                 const file = event.target.files?.[0]; event.currentTarget.value = '';
+                                 if (!file) return;
+                                 setImgUploading(true); setImgUploadError('');
+                                 try { const uploaded = await uploadMedia(file, 'twitter'); setImgUrl(uploaded.path); setImgOpen(false); }
+                                 catch (error) { setImgUploadError(error instanceof Error ? error.message : 'Import impossible.'); }
+                                 finally { setImgUploading(false); }
+                               }} />
+                             </label>
+                             {imgUploadError && <p className="text-[10px] text-[#f4212e] mb-2">{imgUploadError}</p>}
+                            <input type="text" placeholder="URL d'image..." value={imgUrl} onChange={e => setImgUrl(e.target.value)} className="w-full bg-black text-[12px] text-white placeholder-[#71767b] outline-none px-2 py-1.5 border border-[#2f3336] rounded-lg focus:border-[#1d9bf0] transition-colors"/>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {imgOpen && !composeModalOpen && <div className="fixed inset-0 z-20" onClick={() => setImgOpen(false)}/>}
+      </div>
     </div>
   );
 }
