@@ -48,7 +48,12 @@ export function GlobalBackupPage() {
     setNotice(null);
     try {
       if (!isBackupFileSizeValid(file.size)) throw new Error('Cette sauvegarde dépasse la limite de 60 Mo.');
-      const value: unknown = JSON.parse(await file.text());
+      let value: unknown;
+      try {
+        value = JSON.parse(await file.text());
+      } catch {
+        throw new Error('Ce fichier JSON est malformé et ne peut pas être restauré.');
+      }
       const result = await importGlobalBackup(value);
       setNotice({ kind: 'success', message: summary(result) });
     } catch (error) {

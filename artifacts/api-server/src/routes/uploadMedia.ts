@@ -53,4 +53,26 @@ router.post("/upload-media", (req, res) => {
   });
 });
 
+router.delete("/images/:folder/:filename", (req, res) => {
+  const { folder, filename } = req.params;
+  if (!allowedFolders.has(folder) || !/^restored-[a-zA-Z0-9._-]{1,120}\.(?:svg|png|jpe?g|webp)$/i.test(filename)) {
+    res.status(400).json({ success: false, error: "Only restored media can be deleted." });
+    return;
+  }
+  const directory = path.resolve(uploadRoot, folder);
+  const target = path.resolve(directory, filename);
+  if (!target.startsWith(`${directory}${path.sep}`)) {
+    res.status(400).json({ success: false, error: "Invalid media path." });
+    return;
+  }
+  fs.rm(target, { force: true }, error => {
+    if (error) {
+      req.log.error({ err: error, target }, "Could not delete restored media");
+      res.status(500).json({ success: false, error: "Restored media could not be deleted." });
+      return;
+    }
+    res.status(204).end();
+  });
+});
+
 export default router;

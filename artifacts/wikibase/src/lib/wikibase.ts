@@ -488,13 +488,14 @@ const isImage = (value: unknown): value is WBImage =>
   && typeof value.missing === 'boolean'
   && (value.src === undefined || typeof value.src === 'string');
 
-function isWikiPage(value: unknown): value is WikiPage {
+export function isWikiPage(value: unknown): value is WikiPage {
   if (!isRecord(value)) return false;
   const strings = ['id', 'title', 'subtitle', 'introduction', 'category', 'type', 'sourceText', 'updatedAt', 'createdAt'];
-  if (!strings.every((key) => typeof value[key] === 'string') || typeof value.isTrashed !== 'boolean') return false;
+  if (!strings.every((key) => typeof value[key] === 'string') || typeof value.id !== 'string' || !value.id.trim() || typeof value.isTrashed !== 'boolean') return false;
   if (!isStringArray(value.aliases) || !isKVArray(value.infobox) || !isStringArray(value.links)
     || !isKVArray(value.references) || !isStringArray(value.bibliography) || !isStringArray(value.categories)) return false;
   if (value.infoboxImage !== undefined && !isImage(value.infoboxImage)) return false;
+  if (value.infoboxImageOverride !== undefined && !isImage(value.infoboxImageOverride)) return false;
   if (!Array.isArray(value.history) || !value.history.every((item) =>
     isRecord(item) && typeof item.timestamp === 'string' && typeof item.label === 'string' && typeof item.sourceText === 'string')) return false;
   if (!Array.isArray(value.sections) || !value.sections.every((section) =>

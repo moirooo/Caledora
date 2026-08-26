@@ -2,3 +2,4 @@
 - [Instagram route hydration](instagram-route-hydration.md) — wait for WikiBase pages before reconciling saved Instagram data.
 - [Gemini workspace runtime](gemini-workspace-runtime.md) — declare the Gemini SDK directly in the API service as well as its workspace wrapper.
 - [Shared social profile media](social-profile-media.md) — persist canonical media identifiers, never rendered URLs, across Instagram and Twitter/X.
+- [Backup media rollback](backup-media-rollback.md) — a restore’s rollback boundary must include media hydration and client-side upload bookkeeping.

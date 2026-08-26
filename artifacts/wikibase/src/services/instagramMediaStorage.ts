@@ -74,6 +74,24 @@ export async function restoreInstagramImage(blob: Blob): Promise<string> {
   return id;
 }
 
+/** Remove a media item created during a failed backup restoration. */
+export async function deleteInstagramImage(media: string): Promise<void> {
+  if (!/^upload:[a-zA-Z0-9-]{1,80}$/.test(media)) return;
+  const database = await openDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const request = database.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).delete(media);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } finally {
+    database.close();
+  }
+  const url = mediaUrls.get(media);
+  if (url) URL.revokeObjectURL(url);
+  mediaUrls.delete(media);
+}
+
 export function instagramMediaObjectUrl(media: string): string | undefined {
   return mediaUrls.get(media);
 }
