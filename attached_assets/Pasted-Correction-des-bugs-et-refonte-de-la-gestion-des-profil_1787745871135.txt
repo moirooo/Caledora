@@ -1,0 +1,26 @@
+Correction des bugs et refonte de la gestion des profils sur le module Twitter (X) :
+
+1. CORRECTION DE LA SAISIE DU COMPTE (Sélecteur d'auteur) :
+   - Lorsque l'utilisateur tape le nom du profil dans le champ de sélection pour poster un tweet, le champ bug et autocomplète/force la sélection de manière intempestive, empêchant de taper librement.
+   - Corrige ce comportement : le champ doit laisser l'utilisateur écrire librement sans forcer la sélection, et proposer une liste déroulante propre sur laquelle on clique volontairement pour choisir un compte correspondant.
+
+2. REMPLACEMENT DE L'APERÇU PAR UNE VRAIE PAGE DE PROFIL EN PLEIN ÉCRAN :
+   - Actuellement, cliquer sur un profil ouvre une petite modale d'aperçu flottante (type pop-up). 
+   - Remplace ce comportement : au clic sur un profil, l'application doit basculer sur une **vraie page dédiée au profil en plein écran** (avec une navigation propre et un bouton retour).
+
+3. ONGLETS COMPLETS SUR LA PAGE DE PROFIL (Tweets, Likes, Retweets) :
+   - Sur cette nouvelle page de profil en plein écran, intègre un système d'onglets complet similaire à Twitter :
+     * "Tweets" (tous les tweets originaux postés par le compte).
+     * "Réponses" (les réponses apportées).
+     * "J'aime / Likes" (les tweets likés par le compte).
+     * "Retweets" (les publications partagées).
+
+4. GLISSER-DÉPOSER (DRAG & DROP) POUR LES MÉDIAS DE PROFIL :
+   - Dans la modale d'édition du profil (avatar et bannière) :
+     * Ajoute la prise en charge complète du glisser-déposer (Drag & Drop) d'images pour la photo de profil et la bannière.
+     * Assure-toi que ces images sont enregistrées de façon persistante et incluses dans la sauvegarde globale de l'application.
+
+5. LIEN INVARIABLES AVEC WIKIPEDIA LORS DE L'ÉDITION :
+   - Lors de l'édition d'un profil Twitter :
+     * L'utilisateur peut modifier librement le nom affiché et le pseudo (@).
+     * Ajoute un affichage informatif et non modifiable (en lecture seule) indiquant clairement à quelle page / article du module **WikiBase** ce profil est relié, afin d'éviter toute confusion ou perte de repères.
