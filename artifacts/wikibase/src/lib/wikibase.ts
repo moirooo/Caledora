@@ -10,8 +10,8 @@ export type WBBlock =
 export type WBSection = { title: string; level: number; blocks: WBBlock[] };
 export type WBHistory = { timestamp: string; label: string; sourceText: string };
 
-/** One jersey kit: a name (e.g. "Domicile") and an ordered list of hex colors. */
-export type WBJersey = { name: string; colors: string[] };
+/** One jersey kit: a name, ordered colors, and an optional visual reference. */
+export type WBJersey = { name: string; colors: string[]; image?: WBImage };
 
 /** A titled sub-group of key-value fields inside the infobox. */
 export type WBInfoboxSection = { title: string; fields: KV[] };
@@ -337,6 +337,10 @@ function stripSrc(page: WikiPage): WikiPage {
             : b
       ),
     })),
+    infoboxJerseys: page.infoboxJerseys?.map((jersey) => ({
+      ...jersey,
+      image: noSrc(jersey.image),
+    })),
   };
 }
 
@@ -512,7 +516,8 @@ export function isWikiPage(value: unknown): value is WikiPage {
     }))) return false;
   if (value.accentColor !== undefined && typeof value.accentColor !== 'string') return false;
   if (value.infoboxJerseys !== undefined && (!Array.isArray(value.infoboxJerseys)
-    || !value.infoboxJerseys.every((item) => isRecord(item) && typeof item.name === 'string' && isStringArray(item.colors)))) return false;
+    || !value.infoboxJerseys.every((item) => isRecord(item) && typeof item.name === 'string' && isStringArray(item.colors)
+      && (item.image === undefined || isImage(item.image))))) return false;
   return value.infoboxSections === undefined || (Array.isArray(value.infoboxSections)
     && value.infoboxSections.every((item) => isRecord(item) && typeof item.title === 'string' && isKVArray(item.fields)));
 }

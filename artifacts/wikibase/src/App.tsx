@@ -4,7 +4,7 @@ import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } f
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
-import { allText, createPagesBackup, demoSource, downloadPagesBackup, formatDate, getDisplayInfoboxImage, getLastPagesBackupAt, loadPages, normalizeStr, parseWikiText, restorePagesBackup, savePages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
+import { allText, createPagesBackup, demoSource, downloadPagesBackup, formatDate, getDisplayInfoboxImage, getLastPagesBackupAt, loadPages, normalizeStr, parseWikiText, restorePagesBackup, savePages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WBTable, type WikiPage } from '@/lib/wikibase';
 import { getUploadedMedia, uploadMedia } from '@workspace/media-upload';
 import OriaBank from '@/pages/OriaBank.jsx';
 import { TWITTER_ACCOUNTS, TWITTER_ACCOUNT_TEMPLATES, type TwitterAccountCategory } from '@/data/twitterAccounts';
@@ -14,7 +14,7 @@ import { loadInstagramDatabase, mediaUrl as instagramMediaUrl, saveInstagramData
 import { GlobalBackupPage } from '@/components/GlobalBackupPage';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
-import { AlertTriangle, Archive, ArrowLeft, BarChart2, BookOpen, Check, CheckCircle2, ChevronRight, Clock3, Download, FileText, GitCompare, Heart, Image as ImageIcon, Menu, MessageCircle, MoreHorizontal, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowDown, ArrowLeft, ArrowUp, BarChart2, BookOpen, Check, CheckCircle2, ChevronRight, Clock3, Download, FileText, GitCompare, Heart, Image as ImageIcon, Menu, MessageCircle, MoreHorizontal, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, X } from 'lucide-react';
 
 type Theme = 'auto' | 'light' | 'dark';
 type Width = 'standard' | 'large';
@@ -449,7 +449,11 @@ function usePages() {
     void reload();
   }, []);
   const setPages = (next: WikiPage[]) => { setPagesState(next); savePages(next); };
-  return { pages, setPages, ready, reload };
+  const persistPages = async (next: WikiPage[]) => {
+    await savePages(next);
+    setPagesState(next);
+  };
+  return { pages, setPages, persistPages, ready, reload };
 }
 
 /* ─── Dashboard ─────────────────────────────────────────────────────────── */
@@ -1582,6 +1586,17 @@ function LogoPlaceholder({ initial, color }: { initial: string; color: string })
 
 /** Renders a single jersey kit as vertical color stripes in a jersey silhouette. */
 function JerseyKit({ jersey }: { jersey: WBJersey }) {
+  if (jersey.image) {
+    const src = resolveImageSrc(jersey.image);
+    return (
+      <div className="infobox-jersey-kit">
+        {src
+          ? <img src={src} className="w-9 h-11 object-contain" alt={jersey.image.alt || jersey.name} />
+          : <LogoPlaceholder initial={jersey.name[0]?.toUpperCase() ?? '?'} color={jersey.colors[0] ?? '#72777d'} />}
+        <span className="infobox-jersey-label">{jersey.name}</span>
+      </div>
+    );
+  }
   const cols = jersey.colors.slice(0, 5);
   const stripeW = 100 / cols.length;
   return (
@@ -1724,7 +1739,6 @@ function Infobox({ page, pages }: { page: WikiPage; pages: WikiPage[] }) {
                   if (src) openLightbox({ src, alt: infoboxImage.alt, caption: infoboxImage.caption });
                 }}
                 onError={(e) => {
-                  console.error('[WikiBase] Image introuvable :', e.currentTarget.src);
                   e.currentTarget.style.display = 'none';
                   e.currentTarget.nextElementSibling?.removeAttribute('hidden');
                 }}
@@ -1820,6 +1834,9 @@ function resolveImageSrc(img: WBImage): string | undefined {
   if (!f) return undefined;
   // Absolute URLs and data URIs pass through unchanged
   if (/^(https?:\/\/|data:|\/\/)/.test(f)) return f;
+  // Persistent media paths are served by the shared API, outside the Vite base
+  // path. Keep the canonical identifier intact after an IndexedDB reload.
+  if (/^\/api\/images\//.test(f)) return f;
   // Strip any leading slashes so we never double them
   const clean = f.replace(/^\/+/, '');
   // BASE_URL always ends with "/" (guaranteed by Vite)
@@ -1928,6 +1945,11 @@ function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; lab
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [dragging, setDragging] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
+
+  useEffect(() => {
+    setPreviewFailed(false);
+  }, [previewSrc]);
 
   const pickFile = async (file?: File) => {
     if (!file) return;
@@ -1941,14 +1963,18 @@ function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; lab
     setUploading(true); setUploadError('');
     try {
       const uploaded = await uploadMedia(file, 'wikibase');
-      onChange({ ...image, filename: uploaded.path, src: uploaded.path, missing: false });
+      onChange({ ...image, filename: uploaded.path, src: undefined, missing: false });
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Import impossible.');
     } finally {
       setUploading(false);
     }
   };
-  const set = (key: keyof WBImage, value: string) => onChange({ ...image, [key]: value });
+  const set = (key: keyof WBImage, value: string) => onChange({
+    ...image,
+    [key]: value,
+    ...(key === 'filename' ? { src: undefined, missing: !value.trim() } : {}),
+  });
 
   return (
     <div
@@ -1975,17 +2001,16 @@ function ImageEditor({ image, label, onChange, onDelete }: { image: WBImage; lab
 
       {/* Live preview */}
       <div className="mb-2 flex h-24 items-center justify-center rounded border border-[var(--wiki-border)] dark:border-border bg-[#eaecf0] dark:bg-muted overflow-hidden text-xs text-muted-foreground">
-        {previewSrc
+        {previewSrc && !previewFailed
           ? <img
               src={previewSrc}
               alt={image.alt || label}
               className="max-h-full max-w-full object-contain"
-              onError={(e) => {
-                console.error('[WikiBase] Aperçu image introuvable :', e.currentTarget.src);
-                e.currentTarget.style.display = 'none';
+              onError={() => {
+                setPreviewFailed(true);
               }}
             />
-          : <span className="flex flex-col items-center gap-1 text-center px-3"><ImageIcon size={18} className="opacity-40" />Aucune image</span>
+          : <span className="flex flex-col items-center gap-1 text-center px-3"><ImageIcon size={18} className="opacity-40" />{image.filename ? 'Image introuvable' : 'Aucune image'}</span>
         }
       </div>
 
@@ -2161,32 +2186,238 @@ function ReaderPage() {
 
 /* ─── EditPage ───────────────────────────────────────────────────────────── */
 
+const editInputClass = 'mt-1 h-8 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-2 text-xs font-normal';
+const editTextareaClass = 'mt-1 min-h-16 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary p-2 text-sm font-normal leading-5';
+const editCardClass = 'rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4';
+
+function EditorActions({ onUp, onDown, onDelete, canUp = true, canDown = true, label }: {
+  onUp?: () => void;
+  onDown?: () => void;
+  onDelete: () => void;
+  canUp?: boolean;
+  canDown?: boolean;
+  label: string;
+}) {
+  return (
+    <div className="flex shrink-0 items-start gap-1">
+      {onUp && <button type="button" aria-label={`Monter ${label}`} title={`Monter ${label}`} disabled={!canUp} onClick={onUp} className="rounded p-1 text-muted-foreground hover:bg-secondary disabled:opacity-30"><ArrowUp size={13} /></button>}
+      {onDown && <button type="button" aria-label={`Descendre ${label}`} title={`Descendre ${label}`} disabled={!canDown} onClick={onDown} className="rounded p-1 text-muted-foreground hover:bg-secondary disabled:opacity-30"><ArrowDown size={13} /></button>}
+      <button type="button" aria-label={`Supprimer ${label}`} title={`Supprimer ${label}`} onClick={onDelete} className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 size={13} /></button>
+    </div>
+  );
+}
+
+function ListBlockEditor({ block, onChange }: { block: Extract<WBBlock, { type: 'list' | 'numbered' }>; onChange: (block: WBBlock) => void }) {
+  const updateItems = (items: string[]) => onChange({ ...block, items });
+  return (
+    <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-xs font-bold">{block.type === 'numbered' ? 'Liste numérotée' : 'Liste à puces'}</span>
+        <button type="button" data-testid="button-add-list-item" onClick={() => updateItems([...block.items, ''])} className="wiki-link inline-flex items-center gap-1 text-xs"><Plus size={12} /> Ajouter un élément</button>
+      </div>
+      {block.items.length === 0 && <p className="mb-2 text-xs text-muted-foreground">Cette liste est vide. Ajoutez un élément pour la remplir.</p>}
+      <div className="space-y-1.5">
+        {block.items.map((item, i) => (
+          <div key={i} className="flex items-start gap-1.5">
+            <span className="mt-2 w-5 text-center text-xs text-muted-foreground">{block.type === 'numbered' ? `${i + 1}.` : '•'}</span>
+            <input data-testid={`input-list-item-${i}`} value={item} onChange={(e) => updateItems(block.items.map((value, j) => j === i ? e.target.value : value))} className={editInputClass + ' flex-1'} placeholder="Élément de liste" />
+            <button type="button" aria-label={`Supprimer l’élément ${i + 1}`} onClick={() => updateItems(block.items.filter((_, j) => j !== i))} className="mt-1 rounded p-1 text-muted-foreground hover:text-destructive"><X size={13} /></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TableBlockEditor({ table, onChange }: { table: WBTable; onChange: (table: WBTable) => void }) {
+  const columnCount = Math.max(1, table.columns.length, ...table.rows.map((row) => row.length));
+  const columns = Array.from({ length: columnCount }, (_, i) => table.columns[i] ?? '');
+  const updateCell = (rowIndex: number, columnIndex: number, value: string) => {
+    const rows = table.rows.map((row, i) => {
+      if (i !== rowIndex) return row;
+      const next = [...row];
+      while (next.length < columnCount) next.push('');
+      next[columnIndex] = value;
+      return next;
+    });
+    onChange({ ...table, rows });
+  };
+  const updateColumn = (index: number, value: string) => onChange({ ...table, columns: columns.map((column, i) => i === index ? value : column) });
+  const addColumn = () => onChange({ ...table, columns: [...columns, ''] });
+  const removeColumn = (index: number) => {
+    if (columnCount === 1) return;
+    onChange({ ...table, columns: columns.filter((_, i) => i !== index), rows: table.rows.map((row) => row.filter((_, i) => i !== index)) });
+  };
+  return (
+    <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-bold">Tableau — aperçu structuré</span>
+        <div className="flex gap-2">
+          <button type="button" data-testid="button-add-table-column" onClick={addColumn} className="wiki-link inline-flex items-center gap-1 text-xs"><Plus size={12} /> Colonne</button>
+          <button type="button" data-testid="button-add-table-row" onClick={() => onChange({ ...table, rows: [...table.rows, Array(columnCount).fill('')] })} className="wiki-link inline-flex items-center gap-1 text-xs"><Plus size={12} /> Ligne</button>
+        </div>
+      </div>
+      <label className="mb-2 block text-xs font-bold">Titre du tableau<input data-testid="input-table-title" value={table.title} onChange={(e) => onChange({ ...table, title: e.target.value })} className={editInputClass} /></label>
+      <div className="overflow-x-auto rounded border border-[var(--wiki-border)] dark:border-border">
+        <table className="w-full min-w-[520px] border-collapse text-xs">
+          <thead>
+            <tr className="bg-[#eaecf0] dark:bg-muted">
+              {columns.map((column, i) => (
+                <th key={i} className="border-b border-r border-[var(--wiki-border)] p-1.5 text-left align-top">
+                  <div className="flex items-start gap-1">
+                    <input data-testid={`input-table-column-${i}`} value={column} onChange={(e) => updateColumn(i, e.target.value)} placeholder={`Colonne ${i + 1}`} className="h-7 min-w-0 flex-1 rounded border border-[var(--wiki-border)] bg-white px-1.5 font-bold dark:bg-secondary" />
+                    <button type="button" aria-label={`Supprimer la colonne ${i + 1}`} onClick={() => removeColumn(i)} disabled={columnCount === 1} className="rounded p-1 text-muted-foreground hover:text-destructive disabled:opacity-30"><X size={12} /></button>
+                  </div>
+                </th>
+              ))}
+              <th className="w-8 border-b border-[var(--wiki-border)]" />
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.map((row, i) => (
+              <tr key={i} className="even:bg-[#f8f9fa] dark:even:bg-secondary/30">
+                {Array.from({ length: columnCount }, (_, j) => <td key={j} className="border-r border-t border-[var(--wiki-border)] p-1"><input data-testid={`input-table-cell-${i}-${j}`} value={row[j] ?? ''} onChange={(e) => updateCell(i, j, e.target.value)} placeholder="Cellule vide" className="h-7 w-full min-w-[100px] rounded border border-[var(--wiki-border)] bg-white px-1.5 dark:bg-secondary" /></td>)}
+                <td className="border-t border-[var(--wiki-border)] p-1 text-center"><button type="button" aria-label={`Supprimer la ligne ${i + 1}`} onClick={() => onChange({ ...table, rows: table.rows.filter((_, j) => j !== i) })} className="rounded p-1 text-muted-foreground hover:text-destructive"><X size={12} /></button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {table.rows.length === 0 && <p className="mt-2 text-xs text-muted-foreground">Aucune ligne. Le tableau conservera ses colonnes et peut rester vide.</p>}
+    </div>
+  );
+}
+
+function GalleryBlockEditor({ images, onChange }: { images: WBImage[]; onChange: (images: WBImage[]) => void }) {
+  const emptyImage = (): WBImage => ({ filename: '', caption: '', alt: '', alignment: 'centre', size: '300', missing: true });
+  return (
+    <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-xs font-bold">Galerie — images et légendes</span>
+        <button type="button" data-testid="button-add-gallery-image" onClick={() => onChange([...images, emptyImage()])} className="wiki-link inline-flex items-center gap-1 text-xs"><Plus size={12} /> Ajouter une image</button>
+      </div>
+      {images.length === 0 && <p className="text-xs text-muted-foreground">Galerie vide. Ajoutez une image pour la compléter.</p>}
+      <div className="space-y-2">
+        {images.map((image, i) => (
+          <ImageEditor key={i} label={`gallery-${i}`} image={image} onChange={(next) => onChange(images.map((item, j) => j === i ? next : item))} onDelete={() => onChange(images.filter((_, j) => j !== i))} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BlockEditor({ block, onChange, onDelete, onUp, onDown, canUp, canDown, index }: {
+  block: WBBlock;
+  onChange: (block: WBBlock) => void;
+  onDelete: () => void;
+  onUp: () => void;
+  onDown: () => void;
+  canUp: boolean;
+  canDown: boolean;
+  index: number;
+}) {
+  const heading = block.type === 'text' ? 'Paragraphe' : block.type === 'list' ? 'Liste à puces' : block.type === 'numbered' ? 'Liste numérotée' : block.type === 'image' ? 'Image' : block.type === 'gallery' ? 'Galerie' : 'Tableau';
+  return (
+    <div data-testid={`editor-block-${index}`} className="relative">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{heading}</span>
+        <EditorActions label={`le bloc ${index + 1}`} onUp={onUp} onDown={onDown} onDelete={onDelete} canUp={canUp} canDown={canDown} />
+      </div>
+      {block.type === 'text' && <textarea data-testid={`textarea-block-${index}`} value={block.content} onChange={(e) => onChange({ ...block, content: e.target.value })} className={editTextareaClass} placeholder="Texte du paragraphe" />}
+      {(block.type === 'list' || block.type === 'numbered') && <ListBlockEditor block={block} onChange={onChange} />}
+      {block.type === 'image' && <ImageEditor label={`block-${index}`} image={block.image} onChange={(image) => onChange({ ...block, image })} onDelete={onDelete} />}
+      {block.type === 'gallery' && <GalleryBlockEditor images={block.images} onChange={(images) => onChange({ ...block, images })} />}
+      {block.type === 'table' && <TableBlockEditor table={block.table} onChange={(table) => onChange({ ...block, table })} />}
+    </div>
+  );
+}
+
+function InfoboxReferencePreview({ value }: { value: string }) {
+  const trimmed = value.trim();
+  const flag = /^\[flag:\s*([a-zA-Z0-9-]+)\]$/i.exec(trimmed);
+  const imageReference = /^(?:\[(?:logo|image):\s*)?([^|\]]+\.(?:png|jpe?g|svg|webp))\]?$/i.exec(trimmed)?.[1]?.trim();
+  const [failed, setFailed] = useState(false);
+  const src = imageReference ? resolveImageSrc({ filename: imageReference, caption: '', alt: '', alignment: 'centre', size: '120', missing: false }) : undefined;
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  if (flag) {
+    return <div className="sm:col-span-2 flex items-center gap-2 rounded border border-dashed border-[var(--wiki-border)] bg-white px-2 py-1.5 text-[11px] text-muted-foreground dark:bg-background"><span className="font-bold">Aperçu du drapeau</span><FlagImg code={flag[1].toLowerCase()} /></div>;
+  }
+  if (!imageReference) return null;
+  return (
+    <div className="sm:col-span-2 flex items-center gap-2 rounded border border-dashed border-[var(--wiki-border)] bg-white px-2 py-1.5 text-[11px] text-muted-foreground dark:bg-background">
+      <span className="font-bold">Référence visuelle</span>
+      {src && !failed
+        ? <img src={src} alt="Aperçu du logo ou drapeau" className="h-8 max-w-16 object-contain" onError={() => setFailed(true)} />
+        : <span className="flex items-center gap-1"><ImageIcon size={13} />Fichier introuvable</span>}
+      <span className="truncate font-mono">{imageReference}</span>
+    </div>
+  );
+}
+
 function EditPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const { pages, setPages, ready } = usePages();
+  const { pages, persistPages, ready } = usePages();
   const original = pages.find((p) => p.id === id) ?? pages[0];
   const [page, setPage] = useState<WikiPage | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     if (ready && original && !page) setPage(structuredClone(original));
   }, [ready, original?.id]);
 
   const update = (key: keyof WikiPage, value: unknown) => setPage((p) => p ? { ...p, [key]: value } : p);
-  const save = () => {
+  const save = async () => {
     if (!page) return;
+    setSaving(true);
+    setSaveError('');
+    const timestamp = new Date().toISOString();
     const next = pages.map((p) => p.id === page.id
-      ? { ...page, updatedAt: new Date().toISOString(), history: [...p.history, { timestamp: new Date().toISOString(), label: 'Modification visuelle', sourceText: page.sourceText }] }
+      ? { ...page, updatedAt: timestamp, history: [...p.history, { timestamp, label: 'Modification visuelle', sourceText: page.sourceText }] }
       : p
     );
-    setPages(next); setLocation(`/page/${page.id}`);
+    try {
+      await persistPages(next);
+      setLocation(`/page/${page.id}`);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'La sauvegarde n’a pas pu être écrite.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!ready || !page) return <div className="animate-rise p-6 text-sm text-muted-foreground">Chargement…</div>;
   const updateInfo = (index: number, value: string, key: 'key' | 'value') =>
     update('infobox', page.infobox.map((r, i) => i === index ? { ...r, [key]: value } : r));
-  const updateSectionBlock = (si: number, bi: number, block: WBBlock) =>
-    update('sections', page.sections.map((s, i) => i === si ? { ...s, blocks: s.blocks.map((b, j) => j === bi ? block : b) } : s));
+  const updateInfoboxSection = (index: number, next: WBInfoboxSection) =>
+    update('infoboxSections', (page.infoboxSections ?? []).map((section, i) => i === index ? next : section));
+  const updateSection = (index: number, next: WBSection) =>
+    update('sections', page.sections.map((section, i) => i === index ? next : section));
+  const move = <T,>(items: T[], from: number, to: number) => {
+    if (to < 0 || to >= items.length) return items;
+    const next = [...items];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    return next;
+  };
+  const emptyImage = (): WBImage => ({ filename: '', caption: '', alt: '', alignment: 'centre', size: '300', missing: true });
+  const addBlock = (sectionIndex: number, type: WBBlock['type']) => {
+    const block: WBBlock = type === 'text'
+      ? { type, content: '' }
+      : type === 'list' || type === 'numbered'
+        ? { type, items: [''] }
+        : type === 'image'
+          ? { type, image: emptyImage() }
+          : type === 'gallery'
+            ? { type, images: [] }
+            : { type, table: { title: '', columns: [''], rows: [] } };
+    updateSection(sectionIndex, { ...page.sections[sectionIndex], blocks: [...page.sections[sectionIndex].blocks, block] });
+  };
 
   const currentColor = page.accentColor ?? categoryColor(page.category);
 
@@ -2196,16 +2427,17 @@ function EditPage() {
         <h1 className="font-editorial text-[1.8em] font-normal">Modifier : {page.title}</h1>
         <div className="flex gap-2 items-center">
           <Link href={`/page/${page.id}`} data-testid="link-cancel-edit" className="wiki-link text-sm">Annuler</Link>
-          <Button data-testid="button-save-page" onClick={save}><Check size={14} /> Enregistrer</Button>
+          <Button data-testid="button-save-page" onClick={() => void save()} disabled={saving}><Check size={14} /> {saving ? 'Enregistrement…' : 'Enregistrer'}</Button>
         </div>
       </div>
       <div className="border-b border-[var(--wiki-border)] dark:border-border mb-5 pb-2 text-xs text-muted-foreground">
-        Chaque sauvegarde ajoute une version à l'historique.
+        Chaque sauvegarde ajoute une version à l'historique. Les modifications visuelles ne réécrivent jamais la source TXT.
       </div>
+      {saveError && <div role="alert" className="mb-4 rounded border border-destructive/40 bg-red-50 px-3 py-2 text-sm text-destructive dark:bg-red-950/30">{saveError}</div>}
 
       <div className="mx-auto max-w-3xl space-y-4">
         {/* Identity */}
-        <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
+        <div className={editCardClass}>
           <div className="mb-3 font-bold">Identité</div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-xs font-bold">Titre<input data-testid="input-edit-title" value={page.title} onChange={(e) => update('title', e.target.value)} className="mt-1 h-9 w-full rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-2 text-sm font-normal" /></label>
@@ -2215,13 +2447,14 @@ function EditPage() {
         </div>
 
         {/* Infobox colour */}
-        <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
+        <div className={editCardClass}>
           <div className="mb-3 font-bold">Couleur de l'infobox</div>
           <div className="flex items-center gap-3 flex-wrap">
             <input
               type="color"
               value={currentColor}
               onChange={(e) => update('accentColor', e.target.value)}
+              aria-label="Couleur de l'infobox"
               className="h-10 w-16 cursor-pointer rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary p-0.5"
             />
             <span className="font-mono-app text-xs text-muted-foreground">{currentColor}</span>
@@ -2233,25 +2466,29 @@ function EditPage() {
         </div>
 
         {/* Infobox fields */}
-        <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
+        <div className={editCardClass}>
           <div className="mb-3 flex items-center justify-between font-bold">
-            Infobox
+            <div><div>Infobox</div><p className="mt-1 text-xs font-normal text-muted-foreground">Un champ sans valeur est affiché comme une bannière. Utilisez <span className="font-mono">[flag: fr]</span> ou un chemin d’image pour éditer une référence visuelle avec aperçu.</p></div>
             <Button data-testid="button-add-infobox-field" variant="outline" onClick={() => update('infobox', [...page.infobox, { key: 'Nouveau champ', value: '' }])}>
-              <Plus size={13} /> Ajouter
+              <Plus size={13} /> Champ
             </Button>
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {page.infobox.map((row, i) => (
-              <div key={i} className="flex gap-1.5">
-                <input data-testid={`input-infobox-key-${i}`} value={row.key} onChange={(e) => updateInfo(i, e.target.value, 'key')} className="w-2/5 rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-2 py-1.5 text-sm" />
-                <input data-testid={`input-infobox-value-${i}`} value={row.value} onChange={(e) => updateInfo(i, e.target.value, 'value')} className="flex-1 rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-secondary px-2 py-1.5 text-sm" />
-                <button data-testid={`button-delete-infobox-${i}`} onClick={() => update('infobox', page.infobox.filter((_, j) => j !== i))} className="rounded p-1.5 text-muted-foreground hover:text-destructive"><X size={13} /></button>
+              <div key={i} className="flex items-start gap-1.5 rounded bg-[#f8f9fa] p-2 dark:bg-secondary">
+                <div className="grid flex-1 gap-1.5 sm:grid-cols-[2fr_3fr]">
+                  <input data-testid={`input-infobox-key-${i}`} aria-label={`Clé infobox ${i + 1}`} value={row.key} onChange={(e) => updateInfo(i, e.target.value, 'key')} className={editInputClass + ' mt-0'} placeholder="Nom ou bannière" />
+                  <input data-testid={`input-infobox-value-${i}`} aria-label={`Valeur ou référence visuelle infobox ${i + 1}`} value={row.value} onChange={(e) => updateInfo(i, e.target.value, 'value')} className={editInputClass + ' mt-0'} placeholder="Valeur, [flag: fr] ou logo.png" />
+                  <InfoboxReferencePreview value={row.value} />
+                </div>
+                <EditorActions label={`le champ ${i + 1}`} onUp={() => update('infobox', move(page.infobox, i, i - 1))} onDown={() => update('infobox', move(page.infobox, i, i + 1))} onDelete={() => update('infobox', page.infobox.filter((_, j) => j !== i))} canUp={i > 0} canDown={i < page.infobox.length - 1} />
               </div>
             ))}
+            {page.infobox.length === 0 && <p className="text-xs text-muted-foreground">Aucun champ d’infobox. Ajoutez une bannière ou un champ clé / valeur.</p>}
           </div>
         </div>
 
-        <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
+        <div className={editCardClass}>
           <div className="mb-1 font-bold">Image de l'infobox</div>
           <p className="mb-3 text-xs leading-5 text-muted-foreground">
             {page.infoboxImage && !page.infoboxImageOverride
@@ -2275,34 +2512,99 @@ function EditPage() {
           />
         </div>
 
-        {/* Sections */}
-        <div className="rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-card p-4">
-          <div className="mb-3 flex items-center justify-between font-bold">
-            Sections <Badge>{page.sections.length}</Badge>
+        {/* Jersey kits */}
+        <div className={editCardClass}>
+          <div className="mb-1 flex items-center justify-between gap-2 font-bold">
+            <div>Maillots <Badge>{page.infoboxJerseys?.length ?? 0}</Badge></div>
+            <Button data-testid="button-add-jersey" variant="outline" onClick={() => update('infoboxJerseys', [...(page.infoboxJerseys ?? []), { name: 'Nouveau maillot', colors: ['#cccccc'] }])}><Plus size={13} /> Ajouter</Button>
           </div>
-          {page.sections.map((section, i) => (
-            <div key={`${section.title}-${i}`} className="mb-3 rounded border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] dark:bg-secondary p-3">
-              <div className="flex items-center gap-2">
-                <input data-testid={`input-section-title-${i}`} value={section.title} onChange={(e) => update('sections', page.sections.map((s, j) => j === i ? { ...s, title: e.target.value } : s))} className="flex-1 border-b border-[var(--wiki-border)] dark:border-border bg-transparent px-1 py-0.5 font-bold text-sm outline-none focus:border-primary" />
-                <button data-testid={`button-delete-section-${i}`} onClick={() => update('sections', page.sections.filter((_, j) => j !== i))} className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 size={13} /></button>
+          <p className="mb-3 text-xs text-muted-foreground">Définissez les couleurs et, si nécessaire, associez une image de maillot. Cette association visuelle ne modifie pas la source TXT.</p>
+          <div className="space-y-3">
+            {(page.infoboxJerseys ?? []).map((jersey, i) => (
+              <div key={i} className="rounded border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] p-3 dark:bg-secondary">
+                <div className="flex items-start gap-2">
+                  <div className="grid flex-1 gap-2 sm:grid-cols-2">
+                    <label className="text-xs font-bold">Nom<input data-testid={`input-jersey-name-${i}`} value={jersey.name} onChange={(e) => update('infoboxJerseys', (page.infoboxJerseys ?? []).map((item, j) => j === i ? { ...item, name: e.target.value } : item))} className={editInputClass} /></label>
+                    <label className="text-xs font-bold">Couleurs (hexadécimales séparées par des virgules)<input data-testid={`input-jersey-colors-${i}`} value={jersey.colors.join(', ')} onChange={(e) => update('infoboxJerseys', (page.infoboxJerseys ?? []).map((item, j) => j === i ? { ...item, colors: e.target.value.split(',').map((color) => color.trim()).filter(Boolean) } : item))} className={editInputClass} placeholder="#ffffff, #123456" /></label>
+                  </div>
+                  <EditorActions label={`le maillot ${i + 1}`} onUp={() => update('infoboxJerseys', move(page.infoboxJerseys ?? [], i, i - 1))} onDown={() => update('infoboxJerseys', move(page.infoboxJerseys ?? [], i, i + 1))} onDelete={() => update('infoboxJerseys', (page.infoboxJerseys ?? []).filter((_, j) => j !== i))} canUp={i > 0} canDown={i < (page.infoboxJerseys?.length ?? 0) - 1} />
+                </div>
+                {jersey.image
+                  ? <div className="mt-2"><ImageEditor label={`jersey-${i}`} image={jersey.image} onChange={(image) => update('infoboxJerseys', (page.infoboxJerseys ?? []).map((item, j) => j === i ? { ...item, image } : item))} onDelete={() => update('infoboxJerseys', (page.infoboxJerseys ?? []).map((item, j) => j === i ? { ...item, image: undefined } : item))} /></div>
+                  : <button type="button" data-testid={`button-add-jersey-image-${i}`} onClick={() => update('infoboxJerseys', (page.infoboxJerseys ?? []).map((item, j) => j === i ? { ...item, image: { ...emptyImage(), alt: item.name } } : item))} className="mt-2 wiki-link text-xs">+ Associer une image au maillot</button>}
               </div>
-              <div className="mt-2 space-y-1.5">
-                {section.blocks.map((block, j) =>
-                  block.type === 'text'
-                    ? <div key={j} className="flex gap-1.5">
-                        <textarea data-testid={`textarea-block-${i}-${j}`} value={block.content} onChange={(e) => updateSectionBlock(i, j, { ...block, content: e.target.value })} className="min-h-16 flex-1 rounded border border-[var(--wiki-border)] dark:border-border bg-white dark:bg-background p-2 text-sm leading-5" />
-                        <button data-testid={`button-delete-block-${i}-${j}`} onClick={() => update('sections', page.sections.map((s, si) => si === i ? { ...s, blocks: s.blocks.filter((_, bi) => bi !== j) } : s))} className="h-8 rounded p-1 text-muted-foreground hover:text-destructive"><X size={13} /></button>
-                      </div>
-                    : block.type === 'image'
-                      ? <ImageEditor key={j} label={`section-${i}-${j}`} image={block.image} onChange={(img) => updateSectionBlock(i, j, { ...block, image: img })} onDelete={() => update('sections', page.sections.map((s, si) => si === i ? { ...s, blocks: s.blocks.filter((_, bi) => bi !== j) } : s))} />
-                      : <div key={j} className="flex items-center gap-1.5 rounded bg-white dark:bg-background p-2 text-xs text-muted-foreground">
-                          Bloc {block.type === 'table' ? 'tableau' : 'liste'} — conservé depuis la source
-                          <button data-testid={`button-delete-block-${i}-${j}`} onClick={() => update('sections', page.sections.map((s, si) => si === i ? { ...s, blocks: s.blocks.filter((_, bi) => bi !== j) } : s))} className="ml-auto text-destructive"><X size={13} /></button>
-                        </div>
-                )}
+            ))}
+          </div>
+          {(page.infoboxJerseys ?? []).length === 0 && <p className="text-xs text-muted-foreground">Aucun maillot structuré. Les anciens champs texte restent affichés et éditables dans l’infobox.</p>}
+        </div>
+
+        {/* Infobox sub-sections */}
+        <div className={editCardClass}>
+          <div className="mb-3 flex items-center justify-between gap-2 font-bold">
+            <div>Sous-sections de l'infobox <Badge>{page.infoboxSections?.length ?? 0}</Badge></div>
+            <Button data-testid="button-add-infobox-section" variant="outline" onClick={() => update('infoboxSections', [...(page.infoboxSections ?? []), { title: 'Nouvelle sous-section', fields: [{ key: 'Nouveau champ', value: '' }] }])}><Plus size={13} /> Ajouter</Button>
+          </div>
+          <div className="space-y-3">
+            {(page.infoboxSections ?? []).map((section, i) => (
+              <div key={i} className="rounded border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] p-3 dark:bg-secondary">
+                <div className="flex items-start gap-2">
+                  <input data-testid={`input-infobox-section-title-${i}`} aria-label={`Titre de la sous-section d’infobox ${i + 1}`} value={section.title} onChange={(e) => updateInfoboxSection(i, { ...section, title: e.target.value })} className={editInputClass + ' mt-0 flex-1 font-bold'} />
+                  <EditorActions label={`la sous-section ${i + 1}`} onUp={() => update('infoboxSections', move(page.infoboxSections ?? [], i, i - 1))} onDown={() => update('infoboxSections', move(page.infoboxSections ?? [], i, i + 1))} onDelete={() => update('infoboxSections', (page.infoboxSections ?? []).filter((_, j) => j !== i))} canUp={i > 0} canDown={i < (page.infoboxSections?.length ?? 0) - 1} />
+                </div>
+                <div className="mt-2 space-y-1.5">
+                  {section.fields.map((field, j) => (
+                    <div key={j} className="flex gap-1.5">
+                      <input data-testid={`input-infobox-section-key-${i}-${j}`} aria-label={`Clé du champ ${j + 1} de la sous-section d’infobox ${i + 1}`} value={field.key} onChange={(e) => updateInfoboxSection(i, { ...section, fields: section.fields.map((item, k) => k === j ? { ...item, key: e.target.value } : item) })} className={editInputClass + ' mt-0 flex-1'} />
+                      <input data-testid={`input-infobox-section-value-${i}-${j}`} aria-label={`Valeur du champ ${j + 1} de la sous-section d’infobox ${i + 1}`} value={field.value} onChange={(e) => updateInfoboxSection(i, { ...section, fields: section.fields.map((item, k) => k === j ? { ...item, value: e.target.value } : item) })} className={editInputClass + ' mt-0 flex-[1.5]'} />
+                      <button type="button" aria-label={`Supprimer le champ ${j + 1}`} onClick={() => updateInfoboxSection(i, { ...section, fields: section.fields.filter((_, k) => k !== j) })} className="mt-1 rounded p-1 text-muted-foreground hover:text-destructive"><X size={13} /></button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => updateInfoboxSection(i, { ...section, fields: [...section.fields, { key: 'Nouveau champ', value: '' }] })} className="wiki-link mt-1 inline-flex items-center gap-1 text-xs"><Plus size={12} /> Champ</button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        </div>
+
+        {/* Sections and structured blocks */}
+        <div className={editCardClass}>
+          <div className="mb-3 flex items-center justify-between gap-2 font-bold">
+            <div>Sections et blocs <Badge>{page.sections.length}</Badge></div>
+            <Button data-testid="button-add-section" variant="outline" onClick={() => update('sections', [...page.sections, { title: 'Nouvelle section', level: 2, blocks: [{ type: 'text', content: '' }] }])}><Plus size={13} /> Section</Button>
+          </div>
+          {page.sections.length === 0 && <p className="mb-3 text-xs text-muted-foreground">Aucune section. Ajoutez-en une pour structurer l’article.</p>}
+          <div className="space-y-4">
+            {page.sections.map((section, i) => (
+              <div data-testid={`editor-section-${i}`} key={i} className="rounded border border-[var(--wiki-border)] dark:border-border bg-[#f8f9fa] p-3 dark:bg-secondary">
+                <div className="flex items-start gap-2">
+                  <div className="grid flex-1 gap-2 sm:grid-cols-[1fr_130px]">
+                    <label className="text-xs font-bold">Titre<input data-testid={`input-section-title-${i}`} value={section.title} onChange={(e) => updateSection(i, { ...section, title: e.target.value })} className={editInputClass} /></label>
+                    <label className="text-xs font-bold">Niveau<select data-testid={`select-section-level-${i}`} value={section.level} onChange={(e) => updateSection(i, { ...section, level: Number(e.target.value) })} className={editInputClass}><option value={2}>Section</option><option value={3}>Sous-section</option><option value={4}>Sous-sous-section</option></select></label>
+                  </div>
+                  <EditorActions label={`la section ${i + 1}`} onUp={() => update('sections', move(page.sections, i, i - 1))} onDown={() => update('sections', move(page.sections, i, i + 1))} onDelete={() => update('sections', page.sections.filter((_, j) => j !== i))} canUp={i > 0} canDown={i < page.sections.length - 1} />
+                </div>
+                <div className="mt-3 space-y-4">
+                  {section.blocks.map((block, j) => (
+                    <BlockEditor
+                      key={j}
+                      block={block}
+                      index={j}
+                      canUp={j > 0}
+                      canDown={j < section.blocks.length - 1}
+                      onChange={(next) => updateSection(i, { ...section, blocks: section.blocks.map((item, k) => k === j ? next : item) })}
+                      onUp={() => updateSection(i, { ...section, blocks: move(section.blocks, j, j - 1) })}
+                      onDown={() => updateSection(i, { ...section, blocks: move(section.blocks, j, j + 1) })}
+                      onDelete={() => updateSection(i, { ...section, blocks: section.blocks.filter((_, k) => k !== j) })}
+                    />
+                  ))}
+                  <div className="flex flex-wrap items-center gap-2 border-t border-[var(--wiki-border)] pt-3 dark:border-border">
+                    <span className="text-xs font-bold text-muted-foreground">Ajouter un bloc :</span>
+                    {(['text', 'list', 'numbered', 'image', 'table', 'gallery'] as const).map((type) => <button type="button" key={type} data-testid={`button-add-block-${type}`} onClick={() => addBlock(i, type)} className="wiki-link rounded border border-primary/25 px-2 py-1 text-xs hover:bg-primary/5">{type === 'text' ? 'Paragraphe' : type === 'list' ? 'Liste' : type === 'numbered' ? 'Liste numérotée' : type === 'image' ? 'Image' : type === 'table' ? 'Tableau' : 'Galerie'}</button>)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

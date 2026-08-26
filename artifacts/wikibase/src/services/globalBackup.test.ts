@@ -47,6 +47,7 @@ function page(id = 'page-1') {
     history: [],
     isTrashed: false,
     infoboxImageOverride: image,
+    infoboxJerseys: [{ name: 'Domicile', colors: ['#123456', '#ffffff'], image }],
   };
 }
 
@@ -73,6 +74,12 @@ test('rejects malformed nested WikiBase content before an import can begin', () 
     images: [{ ...image, missing: 'false' }],
   };
 
+  assert.equal(validateGlobalBackup(invalid), null);
+});
+
+test('rejects a malformed visual jersey image before an import can begin', () => {
+  const invalid = backup();
+  invalid.wikibase.pages[0].infoboxJerseys[0].image = { ...image, filename: 42 };
   assert.equal(validateGlobalBackup(invalid), null);
 });
 
