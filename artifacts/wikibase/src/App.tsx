@@ -11,6 +11,7 @@ import { TWITTER_ACCOUNTS, TWITTER_ACCOUNT_TEMPLATES, type TwitterAccountCategor
 import { socialAccountProfiles } from '@/data/socialAccounts';
 import { InstagramApp } from '@/components/instagram/InstagramApp';
 import { loadInstagramDatabase, mediaUrl as instagramMediaUrl, saveInstagramDatabase, updateInstagramProfile, type InstagramProfile, type InstagramRelationType } from '@/services/instagramStorage';
+import { decodeTwitterRouteHandle, formatTwitterCount, isTwitterHandleTaken, normalizeTwitterHandle } from '@/services/twitterProfile';
 import { GlobalBackupPage } from '@/components/GlobalBackupPage';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
@@ -2854,7 +2855,7 @@ const xCanonicalMedia = (value: string) => {
 const xHandle = (t: string) => '@' + t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9 ]/g, ' ').trim().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
 const xInits  = (n: string) => { const p = n.trim().split(/\s+/); return (p.length >= 2 ? p[0][0] + p[p.length - 1][0] : n.slice(0, 2)).toUpperCase(); };
 const xBadge  = (cat: string): 'gold' | 'blue' | null => ['Sports & Football','Économie','Transports','Géographie','Monuments & Lieux'].includes(cat) ? 'gold' : ['Personnes & Organisations','Politique'].includes(cat) ? 'blue' : 'gold';
-const fmtN    = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n);
+const fmtN    = (n: number) => formatTwitterCount(n);
 const xAgo    = (ts: number) => { const s = Math.floor((Date.now() - ts) / 1000); if (s < 60) return `${s}s`; const m = Math.floor(s / 60); if (m < 60) return `${m}min`; const h = Math.floor(m / 60); if (h < 24) return `${h}h`; return new Date(ts).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }); };
 const xHash = (value: string) => [...value].reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0, 2166136261);
 const xSeeded = (seed: string, min: number, max: number) => min + (xHash(seed) % (max - min + 1));
@@ -3189,7 +3190,7 @@ function XAuthorField({ accounts, value, onChange, placeholder, ariaLabel }: {
   const [query, setQuery] = useState(selectedLabel);
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const matches = focused && query.trim() && query !== selectedLabel
+  const matches = query.trim() && query !== selectedLabel
     ? accounts.filter(account => `${account.name} ${account.handle}`.toLocaleLowerCase('fr-FR').includes(query.toLocaleLowerCase('fr-FR'))).slice(0, 6)
     : [];
   const selectAccount = (account: XAccount) => {
@@ -3208,7 +3209,7 @@ function XAuthorField({ accounts, value, onChange, placeholder, ariaLabel }: {
     <div className="relative">
       <input
         value={query}
-        onChange={event => { setQuery(event.target.value); onChange(''); setActiveIndex(-1); }}
+        onChange={event => { setQuery(event.target.value); setFocused(true); onChange(''); setActiveIndex(-1); }}
         onFocus={() => setFocused(true)}
         onBlur={() => { setFocused(false); setActiveIndex(-1); }}
         onKeyDown={event => {
@@ -3415,6 +3416,7 @@ function XProfilePage({ account, tweets, relations, onBack, onEdit, onOpenProfil
   onOpenProfile: (account: XAccount) => void;
 }) {
   const [tab, setTab] = useState<'tweets' | 'replies' | 'likes' | 'retweets'>('tweets');
+  const { open: openLightbox } = useContext(LightboxContext);
   if (!account || account.isSystem || !account.profileId) {
     return (
       <div className="min-h-screen bg-black px-4 py-8 text-white">
@@ -3433,6 +3435,8 @@ function XProfilePage({ account, tweets, relations, onBack, onEdit, onOpenProfil
   const retweets = tweets.filter(tweet => tweet.retweetedByHandles?.some(handle => handle.toLowerCase() === account.handle.toLowerCase()));
   const tabItems: XTweet[] = tab === 'tweets' ? originals : tab === 'likes' ? likes : retweets;
   const profileMedia = { ...account, avatarUrl: account.avatarMedia ? instagramMediaUrl(account.avatarMedia) : account.avatarUrl };
+  const avatarSource = profileMedia.avatarUrl;
+  const bannerSource = account.bannerMedia ? instagramMediaUrl(account.bannerMedia) : undefined;
 
   return (
     <div className="min-h-screen bg-black text-white" style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" }}>
@@ -3442,12 +3446,16 @@ function XProfilePage({ account, tweets, relations, onBack, onEdit, onOpenProfil
           <div><h1 className="font-bold text-[18px]">{account.name}</h1><p className="text-[12px] text-[#71767b]">{originals.length} publication{originals.length !== 1 ? 's' : ''}</p></div>
         </header>
         <section>
-          <div className="relative h-44 bg-gradient-to-r from-[#123a5a] via-[#1d9bf0] to-[#7856ff] sm:h-56">
-            {account.bannerMedia && <img src={instagramMediaUrl(account.bannerMedia)} alt="" className="h-full w-full object-cover" />}
+          <div className={`relative h-44 bg-gradient-to-r from-[#123a5a] via-[#1d9bf0] to-[#7856ff] sm:h-56 ${bannerSource ? 'cursor-zoom-in' : ''}`}>
+            {bannerSource && <button type="button" aria-label={`Agrandir la bannière de ${account.name}`} onClick={() => openLightbox({ src: bannerSource, alt: `Bannière de ${account.name}` })} className="absolute inset-0 h-full w-full cursor-zoom-in">
+              <img src={bannerSource} alt="" className="h-full w-full object-cover" />
+            </button>}
           </div>
           <div className="px-4 pb-3">
-            <div className="-mt-12 flex items-end justify-between">
-              <div className="rounded-full border-4 border-black"><XAvtr acct={profileMedia} size={92} /></div>
+            <div className="relative z-10 -mt-14 flex items-end justify-between sm:-mt-16">
+              <button type="button" disabled={!avatarSource} aria-label={`Agrandir la photo de profil de ${account.name}`} onClick={() => avatarSource && openLightbox({ src: avatarSource, alt: `Photo de profil de ${account.name}` })} className={`rounded-full border-4 border-black bg-black ${avatarSource ? 'cursor-zoom-in' : 'cursor-default'}`}>
+                <XAvtr acct={profileMedia} size={92} />
+              </button>
               {account.profileId && <button onClick={onEdit} className="rounded-full border border-[#536471] px-4 py-2 text-[13px] font-bold hover:bg-white/10"><Pencil size={14} className="mr-1.5 inline" />Éditer le profil</button>}
             </div>
             <div className="mt-3 flex items-center gap-1.5"><h2 className="text-[21px] font-extrabold">{account.name}</h2><XBadgeIcon type={account.badge} /></div>
@@ -3706,7 +3714,8 @@ function XCard({
 function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
   const [, navigate] = useLocation();
   const params = useParams<{ handle?: string }>();
-  const routeProfileHandle = params.handle ? `@${decodeURIComponent(params.handle).replace(/^@/, '')}` : null;
+  const isProfileRoute = params.handle !== undefined;
+  const routeProfileHandle = decodeTwitterRouteHandle(params.handle);
 
   const [socialDatabase, setSocialDatabase] = useState(() => loadInstagramDatabase(pages));
   useEffect(() => {
@@ -4045,12 +4054,23 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
   }, [publicAccounts, selectedProfileAccount, socialDatabase.profiles]);
   const selectedProfileTweetCount = selectedProfileAccount ? tweets.filter(tweet => tweet.acct.profileId === selectedProfileAccount.profileId || tweet.acct.handle === selectedProfileAccount.handle).length : 0;
   const selectedProfileReplyCount = selectedProfileAccount ? tweets.reduce((total, tweet) => total + tweet.replies.filter(reply => reply.acct.profileId === selectedProfileAccount.profileId || reply.acct.handle === selectedProfileAccount.handle).length, 0) : 0;
+  const takenHandles = useMemo(() => [
+    ...publicAccounts.filter(candidate => candidate.profileId !== selectedProfileAccount?.profileId).map(candidate => candidate.handle),
+    ...XMEDIA.map(candidate => candidate.handle),
+    ...XREGISTRY.map(candidate => candidate.handle),
+    ...XSOCIAL_REFERENCE.map(candidate => candidate.handle),
+    ...dynamicFanAccts.map(candidate => candidate.handle),
+    ...tweets.flatMap(tweet => [tweet.acct, ...tweet.replies.map(reply => reply.acct)])
+      .filter(candidate => candidate.profileId !== selectedProfileAccount?.profileId)
+      .map(candidate => candidate.handle),
+  ], [dynamicFanAccts, publicAccounts, selectedProfileAccount?.profileId, tweets]);
 
   const saveTwitterProfile = (draftProfile: XProfileEditDraft) => {
     if (!selectedProfileAccount?.profileId) return;
     const currentProfile = socialDatabase.profiles.find(profile => profile.id === selectedProfileAccount.profileId);
     if (!currentProfile) return;
-    const nextHandle = `@${draftProfile.handle.replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '') || currentProfile.username}`;
+    const nextHandle = normalizeTwitterHandle(draftProfile.handle) ?? normalizeTwitterHandle(currentProfile.twitter?.handle) ?? normalizeTwitterHandle(currentProfile.username);
+    if (!nextHandle || isTwitterHandleTaken(nextHandle, selectedProfileAccount.handle, takenHandles)) return;
     const avatarMedia = xCanonicalMedia(draftProfile.avatarUrl);
     const bannerMedia = xCanonicalMedia(draftProfile.bannerUrl);
     const updatedInstagramProfile: InstagramProfile = {
@@ -4084,7 +4104,7 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
     navigate(`/twitter/profile/${encodeURIComponent(nextHandle)}`);
   };
 
-  if (routeProfileHandle) {
+  if (isProfileRoute) {
     return (
       <>
         <XProfilePage
@@ -4098,16 +4118,7 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
         {profileEditorOpen && <XProfileModal
           account={selectedProfileAccount}
           publicAccounts={publicAccounts}
-          takenHandles={[
-            ...publicAccounts.filter(candidate => candidate.profileId !== selectedProfileAccount?.profileId).map(candidate => candidate.handle),
-            ...XMEDIA.map(candidate => candidate.handle),
-            ...XREGISTRY.map(candidate => candidate.handle),
-            ...XSOCIAL_REFERENCE.map(candidate => candidate.handle),
-            ...dynamicFanAccts.map(candidate => candidate.handle),
-            ...tweets.flatMap(tweet => [tweet.acct, ...tweet.replies.map(reply => reply.acct)])
-              .filter(candidate => candidate.profileId !== selectedProfileAccount?.profileId)
-              .map(candidate => candidate.handle),
-          ]}
+          takenHandles={takenHandles}
           relationItems={selectedProfileRelations}
           tweetCount={selectedProfileTweetCount}
           replyCount={selectedProfileReplyCount}
@@ -4328,10 +4339,10 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
             </div>
           ))}
         </div>
-        {wikiAccts.length > 0 && (
+        {publicAccounts.length > 0 && (
           <div className="bg-[#16181c] rounded-2xl overflow-hidden">
             <p className="px-4 pt-4 pb-2 font-bold text-[18px]">Suggestions</p>
-              {wikiAccts.slice(0, 4).map(acct => (
+              {publicAccounts.slice(0, 4).map(acct => (
                 <div key={acct.handle} className="flex items-center gap-3 border-t border-[#2f3336] px-4 py-3">
                   <button onClick={() => navigate(`/twitter/profile/${encodeURIComponent(acct.handle)}`)} className="flex min-w-0 flex-1 items-center gap-3 text-left hover:opacity-80">
                     <XAvtr acct={acct} size={42}/>

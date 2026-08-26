@@ -67,6 +67,47 @@ test('accepts valid WikiBase pages with nested galleries and image overrides', (
   assert.ok(validateGlobalBackup(backup()));
 });
 
+test('keeps Twitter profile media valid and discoverable in a global backup', () => {
+  const withProfileMedia = backup();
+  withProfileMedia.instagram.profiles = [{
+    id: 'profile-twitter-media',
+    username: 'profile.twitter.media',
+    displayName: 'Profil Twitter média',
+    verified: false,
+    accountType: 'artiste / personnalité',
+    category: 'Test',
+    bio: 'Profil de test',
+    avatar: 'profile.svg',
+    reputation: 'populaire',
+    personality: 'familier',
+    communicationTone: 'proche des fans',
+    status: 'populaire',
+    followers: 12,
+    following: 4,
+    relations: [],
+    twitter: {
+      handle: '@ProfileTwitterMedia',
+      avatar: '/api/images/twitter/avatar.png',
+      banner: '/api/images/twitter/banner.webp',
+    },
+  }];
+  withProfileMedia.media = [
+    { source: '/api/images/twitter/avatar.png', dataUrl: 'data:image/png;base64,iVBORw0KGgo=', mimeType: 'image/png' },
+    { source: '/api/images/twitter/banner.webp', dataUrl: 'data:image/webp;base64,UklGRgAAAABXRUJQ', mimeType: 'image/webp' },
+  ];
+
+  const validated = validateGlobalBackup(withProfileMedia);
+  assert.ok(validated);
+  const twitter = validated.instagram.profiles.find(profile => profile.id === 'profile-twitter-media')?.twitter;
+  assert.equal(twitter?.handle, '@ProfileTwitterMedia');
+  assert.equal(twitter?.avatar, '/api/images/twitter/avatar.png');
+  assert.equal(twitter?.banner, '/api/images/twitter/banner.webp');
+  assert.deepEqual(validated.media.map(media => media.source), [
+    '/api/images/twitter/avatar.png',
+    '/api/images/twitter/banner.webp',
+  ]);
+});
+
 test('rejects malformed nested WikiBase content before an import can begin', () => {
   const invalid = backup();
   invalid.wikibase.pages[0].sections[0].blocks[0] = {
