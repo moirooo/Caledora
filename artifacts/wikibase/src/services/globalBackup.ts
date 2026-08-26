@@ -1,5 +1,5 @@
 import { getUploadedMedia, uploadMedia, type MediaUploadFolder } from '@workspace/media-upload';
-import { loadPages, savePagesAsync, type WikiPage } from '@/lib/wikibase';
+import { loadPages, savePagesAsync, type WikiPage, waitForPendingPageWrites } from '@/lib/wikibase';
 import {
   loadInstagramDatabase,
   saveInstagramDatabase,
@@ -249,6 +249,7 @@ function parseGlobalBackup(value: unknown): GlobalBackup | null {
 }
 
 export async function createGlobalBackup(): Promise<BackupExportResult> {
+  await waitForPendingPageWrites();
   const pages = await loadPages();
   const instagram = loadInstagramDatabase(pages);
   const tweets = currentTweets();

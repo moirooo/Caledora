@@ -1,7 +1,6 @@
 import 'flag-icons/css/flag-icons.min.css';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
-import { Archive, ArrowLeft, BarChart2, BookOpen, Check, ChevronRight, Clock3, Download, FileText, GitCompare, Heart, Image as ImageIcon, Menu, MessageCircle, MoreHorizontal, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, X } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -13,8 +12,10 @@ import { socialAccountProfiles } from '@/data/socialAccounts';
 import { InstagramApp } from '@/components/instagram/InstagramApp';
 import { loadInstagramDatabase, mediaUrl as instagramMediaUrl, saveInstagramDatabase, updateInstagramProfile, type InstagramProfile, type InstagramRelationType } from '@/services/instagramStorage';
 import { GlobalBackupPage } from '@/components/GlobalBackupPage';
+import { allText, createPagesBackup, demoSource, downloadPagesBackup, formatDate, getLastPagesBackupAt, loadPages, parseWikiText, restorePagesBackup, savePages, type WBBlock, type WBImage, type WBInfoboxSection, type WBJersey, type WBSection, type WikiPage } from '@/lib/wikibase';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
+import { AlertTriangle, Archive, ArrowLeft, BarChart2, BookOpen, Check, CheckCircle2, ChevronRight, Clock3, Download, FileText, GitCompare, Heart, Image as ImageIcon, Menu, MessageCircle, MoreHorizontal, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, X } from 'lucide-react';
 
 type Theme = 'auto' | 'light' | 'dark';
 type Width = 'standard' | 'large';
@@ -439,11 +440,17 @@ function Shell({ children }: { children: ReactNode }) {
 function usePages() {
   const [pages, setPagesState] = useState<WikiPage[]>([]);
   const [ready, setReady] = useState(false);
+  const reload = async () => {
+    const next = await loadPages();
+    setPagesState(next);
+    setReady(true);
+    return next;
+  };
   useEffect(() => {
-    loadPages().then((p) => { setPagesState(p); setReady(true); });
+    void reload();
   }, []);
   const setPages = (next: WikiPage[]) => { setPagesState(next); savePages(next); };
-  return { pages, setPages, ready };
+  return { pages, setPages, ready, reload };
 }
 
 /* ─── Dashboard ─────────────────────────────────────────────────────────── */
@@ -536,12 +543,16 @@ function DashStars() {
 
 function Dashboard() {
   const [, navigate] = useLocation();
-  const { pages } = usePages();
+  const { pages, reload } = usePages();
   const { appearance, setAppearance } = useAppearance();
 
   const [now, setNow] = useState(new Date());
   const [comingSoon, setComingSoon] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [backupAt, setBackupAt] = useState<string | null>(() => getLastPagesBackupAt());
+  const [backupBusy, setBackupBusy] = useState<'export' | 'import' | null>(null);
+  const [backupNotice, setBackupNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
 
   const active = pages.filter((p) => !p.isTrashed);
 
@@ -556,6 +567,40 @@ function Dashboard() {
     const s = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
     return s.charAt(0).toUpperCase() + s.slice(1);
   })();
+
+  const exportAllPages = async () => {
+    setBackupBusy('export');
+    setBackupNotice(null);
+    try {
+      const backup = await createPagesBackup();
+      downloadPagesBackup(backup);
+      setBackupAt(backup.exportedAt);
+      setBackupNotice({ kind: 'success', message: `${backup.pages.length} page${backup.pages.length !== 1 ? 's' : ''} exportée${backup.pages.length !== 1 ? 's' : ''}.` });
+    } catch (error) {
+      setBackupNotice({ kind: 'error', message: error instanceof Error ? error.message : 'La sauvegarde n’a pas pu être créée.' });
+    } finally {
+      setBackupBusy(null);
+    }
+  };
+
+  const importPages = async (file?: File) => {
+    if (!file) return;
+    setBackupBusy('import');
+    setBackupNotice(null);
+    try {
+      const pages = await restorePagesBackup(JSON.parse(await file.text()) as unknown);
+      await reload();
+      setBackupNotice({ kind: 'success', message: `${pages.length} page${pages.length !== 1 ? 's' : ''} restaurée${pages.length !== 1 ? 's' : ''}.` });
+    } catch (error) {
+      setBackupNotice({ kind: 'error', message: error instanceof Error ? error.message : 'Le fichier n’est pas une sauvegarde WikiBase valide.' });
+    } finally {
+      setBackupBusy(null);
+      if (backupInputRef.current) backupInputRef.current.value = '';
+    }
+  };
+
+  const backupIsStale = !backupAt || Date.now() - new Date(backupAt).getTime() > 7 * 24 * 60 * 60 * 1000;
+  const backupDate = backupAt ? new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(backupAt)) : null;
 
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
   const img = (f: string) => `${BASE}/images/${f}`;
@@ -665,6 +710,29 @@ function Dashboard() {
           {apps.map((app) => (
             <AppTile key={app.id} app={app} onClick={() => handleApp(app)} />
           ))}
+        </div>
+      </div>
+
+      {/* ── PAGE BACKUP ─────────────────────────────────────────── */}
+      <div className="relative z-10 mx-auto mb-5 w-[calc(100%-3rem)] max-w-2xl rounded-2xl px-4 py-3 text-white sm:mb-7 sm:px-5" style={glass}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-1 items-start gap-2.5">
+            {backupIsStale ? <AlertTriangle size={17} className="mt-0.5 shrink-0 text-amber-300" /> : <CheckCircle2 size={17} className="mt-0.5 shrink-0 text-emerald-300" />}
+            <div className="min-w-0">
+              <div className="text-[12px] font-semibold">{backupIsStale ? 'Aucune sauvegarde récente' : `Sauvegarde du ${backupDate}`}</div>
+              <div className="mt-0.5 text-[11px] leading-4 text-white/50">{backupIsStale ? 'Protégez vos pages avant de vider le cache du navigateur.' : 'Vos pages sont protégées par un fichier JSON exporté.'}</div>
+              {backupNotice && <div role="status" className={`mt-1 text-[11px] ${backupNotice.kind === 'success' ? 'text-emerald-300' : 'text-red-300'}`}>{backupNotice.message}</div>}
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <button onClick={() => void exportAllPages()} disabled={backupBusy !== null} className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-[11px] font-bold text-[#102342] transition hover:bg-white/90 disabled:opacity-50">
+              <Download size={14} /> {backupBusy === 'export' ? 'Export…' : 'Exporter toutes les pages'}
+            </button>
+            <button onClick={() => backupInputRef.current?.click()} disabled={backupBusy !== null} className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-white/20 disabled:opacity-50">
+              <Upload size={14} /> {backupBusy === 'import' ? 'Import…' : 'Importer une sauvegarde'}
+            </button>
+            <input ref={backupInputRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => void importPages(event.target.files?.[0])} />
+          </div>
         </div>
       </div>
 

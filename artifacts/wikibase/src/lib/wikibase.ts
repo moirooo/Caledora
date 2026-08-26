@@ -290,6 +290,7 @@ Enseignement supérieur`;
 
 const IDB_KEY = 'wikibase-pages';
 
+const BACKUP_AT_KEY = 'wikibase-pages-backup-at';
 /**
  * Strip transient blob-URL src values from every image in a page before
  * persisting. Images are NEVER stored as base64 — only their filename is kept.
@@ -338,16 +339,149 @@ export async function loadPages(): Promise<WikiPage[]> {
 
 /** Persist pages to IndexedDB and wait for the operation to complete. */
 export async function savePagesAsync(pages: WikiPage[]): Promise<void> {
-  const { set } = await import('idb-keyval');
-  await set(IDB_KEY, pages.map(stripSrc));
+  const snapshot = pages.map(stripSrc);
+  const write = pageWriteQueue.catch(() => undefined).then(async () => {
+    const { set } = await import('idb-keyval');
+    await set(IDB_KEY, snapshot);
+  });
+  pageWriteQueue = write;
+  return write;
 }
 
 /**
- * Persist pages to IndexedDB without blocking the regular editor UI.
- * Image `src` blob URLs are always stripped before writing.
+ * Queue a page write without blocking the regular editor UI. Callers that
+ * require durable storage (such as navigation-critical actions) can await the
+ * returned promise. Image `src` blob URLs are always stripped before writing.
  */
-export function savePages(pages: WikiPage[]): void {
-  void savePagesAsync(pages).catch((err) => console.error('[WikiBase] savePages failed:', err));
+export function savePages(pages: WikiPage[]): Promise<void> {
+  const write = savePagesAsync(pages);
+  void write.catch((err) => console.error('[WikiBase] savePages failed:', err));
+  return write;
 }
+
+/** Wait for every previously requested page write before reading page data. */
+export async function waitForPendingPageWrites(): Promise<void> {
+  await pageWriteQueue;
+}
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 export function formatDate(value: string) { return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value)); }
 export function allText(page: WikiPage) { return `${page.title} ${page.subtitle} ${page.introduction} ${page.categories.join(' ')}`.toLowerCase(); }
+
+const isKVArray = (value: unknown): value is KV[] =>
+  Array.isArray(value) && value.every((item) => isRecord(item) && typeof item.key === 'string' && typeof item.value === 'string');
+
+/** Build a portable backup from the current IndexedDB page store. */
+export async function createPagesBackup(): Promise<PagesBackup> {
+  await waitForPendingPageWrites();
+  return {
+    schema: PAGES_BACKUP_SCHEMA,
+    version: PAGES_BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    pages: (await loadPages()).map(stripSrc),
+  };
+}
+
+/**
+ * Validate and restore a pages backup. Existing pages are replaced only after
+ * the complete file has been validated, so malformed JSON cannot erase data.
+ */
+export async function restorePagesBackup(value: unknown): Promise<WikiPage[]> {
+  const parsed = pagesFromBackup(value);
+  if (!parsed || parsed.pages.length === 0) {
+    throw new Error('Ce fichier ne contient pas une sauvegarde WikiBase valide.');
+  }
+  const pages = parsed.pages.map(stripSrc);
+  await savePagesAsync(pages);
+  return pages;
+}
+
+/** Download a WikiBase-only JSON backup and record that the export succeeded. */
+export function downloadPagesBackup(backup: PagesBackup): void {
+  const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `wikibase-pages-${new Date().toISOString().slice(0, 10)}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+  recordPagesBackupAt(backup.exportedAt);
+}
+
+function recordPagesBackupAt(value: string) {
+  try {
+    localStorage.setItem(BACKUP_AT_KEY, value);
+  } catch (error) {
+    console.error('[WikiBase] backup timestamp could not be saved:', error);
+  }
+}
+
+const PAGES_BACKUP_SCHEMA = 'wikibase-pages-backup';
+
+export type PagesBackup = {
+  schema: typeof PAGES_BACKUP_SCHEMA;
+  version: typeof PAGES_BACKUP_VERSION;
+  exportedAt: string;
+  pages: WikiPage[];
+};
+
+const PAGES_BACKUP_VERSION = 1;
+
+let pageWriteQueue: Promise<void> = Promise.resolve();
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string');
+
+function pagesFromBackup(value: unknown): { pages: WikiPage[]; exportedAt?: string } | null {
+  if (Array.isArray(value) && value.every(isWikiPage)) return { pages: value };
+  if (!isRecord(value)) return null;
+
+  const pages = value.schema === PAGES_BACKUP_SCHEMA && value.version === PAGES_BACKUP_VERSION
+    ? value.pages
+    : isRecord(value.wikibase) ? value.wikibase.pages : value.pages;
+  if (!Array.isArray(pages) || !pages.every(isWikiPage)) return null;
+  return { pages, exportedAt: typeof value.exportedAt === 'string' ? value.exportedAt : undefined };
+}
+
+/** Return the date of the last completed WikiBase export, if one exists. */
+export function getLastPagesBackupAt(): string | null {
+  try {
+    const value = localStorage.getItem(BACKUP_AT_KEY);
+    return value && !Number.isNaN(new Date(value).getTime()) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+const isImage = (value: unknown): value is WBImage =>
+  isRecord(value)
+  && ['filename', 'caption', 'alt', 'alignment', 'size'].every((key) => typeof value[key] === 'string')
+  && typeof value.missing === 'boolean'
+  && (value.src === undefined || typeof value.src === 'string');
+
+function isWikiPage(value: unknown): value is WikiPage {
+  if (!isRecord(value)) return false;
+  const strings = ['id', 'title', 'subtitle', 'introduction', 'category', 'type', 'sourceText', 'updatedAt', 'createdAt'];
+  if (!strings.every((key) => typeof value[key] === 'string') || typeof value.isTrashed !== 'boolean') return false;
+  if (!isStringArray(value.aliases) || !isKVArray(value.infobox) || !isStringArray(value.links)
+    || !isKVArray(value.references) || !isStringArray(value.bibliography) || !isStringArray(value.categories)) return false;
+  if (value.infoboxImage !== undefined && !isImage(value.infoboxImage)) return false;
+  if (!Array.isArray(value.history) || !value.history.every((item) =>
+    isRecord(item) && typeof item.timestamp === 'string' && typeof item.label === 'string' && typeof item.sourceText === 'string')) return false;
+  if (!Array.isArray(value.sections) || !value.sections.every((section) =>
+    isRecord(section) && typeof section.title === 'string' && typeof section.level === 'number'
+    && Array.isArray(section.blocks) && section.blocks.every((block) => {
+      if (!isRecord(block)) return false;
+      if (block.type === 'text') return typeof block.content === 'string';
+      if (block.type === 'list' || block.type === 'numbered') return isStringArray(block.items);
+      if (block.type === 'image') return isImage(block.image);
+      if (block.type !== 'table' || !isRecord(block.table)) return false;
+      return typeof block.table.title === 'string' && isStringArray(block.table.columns)
+        && Array.isArray(block.table.rows) && block.table.rows.every(isStringArray);
+    }))) return false;
+  if (value.accentColor !== undefined && typeof value.accentColor !== 'string') return false;
+  if (value.infoboxJerseys !== undefined && (!Array.isArray(value.infoboxJerseys)
+    || !value.infoboxJerseys.every((item) => isRecord(item) && typeof item.name === 'string' && isStringArray(item.colors)))) return false;
+  return value.infoboxSections === undefined || (Array.isArray(value.infoboxSections)
+    && value.infoboxSections.every((item) => isRecord(item) && typeof item.title === 'string' && isKVArray(item.fields)));
+}
