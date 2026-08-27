@@ -3649,8 +3649,8 @@ function XProfilePage({ account, availableAccounts, tweets, relations, onBack, o
               <ChevronDown size={17} className={`transition-transform ${profileMenuOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
             {profileMenuOpen && (
-              <div id="x-profile-switch-menu" role="menu" aria-label="Profils Twitter/X publics" className="absolute right-0 top-[calc(100%+8px)] z-40 w-[min(300px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#2f3336] bg-[#16181c] py-1 shadow-2xl">
-                <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[#71767b]">Changer de compte</p>
+              <div id="x-profile-switch-menu" role="menu" aria-label="Profils Twitter/X publics" className="absolute right-0 top-[calc(100%+8px)] z-40 max-h-[60vh] w-[min(300px,calc(100vw-2rem))] overflow-y-auto overscroll-contain rounded-xl border border-[#2f3336] bg-[#16181c] py-1 shadow-2xl">
+                <p className="sticky top-0 z-10 bg-[#16181c] px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[#71767b]">Changer de compte</p>
                 {availableAccounts.map((candidate, index) => (
                   <button
                     key={candidate.profileId}
