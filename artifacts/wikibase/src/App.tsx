@@ -1183,13 +1183,12 @@ function CreatePage() {
     reader.onload = () => { setSource(String(reader.result)); setParsed(null); };
     reader.readAsText(file);
   };
-  const publish = () => {
+  const publish = async () => {
     if (!parsed) return;
-    loadPages().then((existing) => {
-      const next = [...existing.filter((p) => p.id !== parsed.id), { ...parsed, accentColor }];
-      savePages(next);
-      setLocation(`/page/${parsed.id}`);
-    });
+    const existing = await loadPages();
+    const next = [...existing.filter((p) => p.id !== parsed.id), { ...parsed, accentColor }];
+    await savePages(next);
+    setLocation(`/page/${parsed.id}`);
   };
 
   return (
@@ -2920,7 +2919,9 @@ function wikiToXAcct(p: WikiPage, profile?: InstagramProfile): XAccount {
     bannerUrl: twitter?.banner ? instagramMediaUrl(twitter.banner) : undefined,
     avatarMedia,
     bannerMedia: twitter?.banner,
-    profileId: profile?.id,
+    // A WikiBase page is itself a selectable public identity. Keep the
+    // identifier stable even while its social profile is still being hydrated.
+    profileId: profile?.id ?? `wiki-${p.id}`,
     wikiPageId: p.id,
     wikiPageTitle: p.title,
     relatedHandles: XACCOUNT_RELATIONS[handle.toLowerCase()],
@@ -3591,13 +3592,13 @@ function XProfilePage({ account, availableAccounts, tweets, relations, onBack, o
     });
     return () => cancelAnimationFrame(frame);
   }, [account?.profileId, profileMenuOpen]);
-  if (!account || account.isSystem || !account.profileId) {
+  if (!account || account.isSystem) {
     return (
       <div className="min-h-screen bg-black px-4 py-8 text-white">
         <button onClick={onBack} className="mb-8 flex items-center gap-2 text-[14px] text-[#8ecdf5] hover:underline"><ArrowLeft size={17} /> Retour</button>
         <div className="mx-auto max-w-[650px] rounded-2xl border border-[#2f3336] bg-[#16181c] px-6 py-16 text-center">
           <h1 className="text-xl font-bold">{availableAccounts.length > 0 ? 'Profil introuvable' : 'Aucun profil public disponible'}</h1>
-          <p className="mt-2 text-sm text-[#71767b]">{availableAccounts.length > 0 ? 'Ce profil n’est pas un compte public WikiBase.' : 'Créez ou restaurez une page WikiBase pour pouvoir sélectionner un profil X.'}</p>
+            <p className="mt-2 text-sm text-[#71767b]">{availableAccounts.length > 0 ? 'Ce profil n’est pas un compte public WikiBase.' : 'Créez ou restaurez une page WikiBase pour pouvoir sélectionner un profil X.'}</p>
         </div>
       </div>
     );
@@ -3967,7 +3968,23 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
   }, [pages]);
 
   const profileByWikiId = useMemo(() => new Map(socialDatabase.profiles.filter(profile => profile.wikiPageId).map(profile => [profile.wikiPageId!, profile])), [socialDatabase.profiles]);
-  const wikiAccountDrafts = useMemo(() => pages.filter(page => !page.isTrashed).map(page => wikiToXAcct(page, profileByWikiId.get(page.id))), [pages, profileByWikiId]);
+  const wikiAccountDrafts = useMemo(() => {
+    const usedHandles = new Set<string>();
+    return pages
+      .filter(page => !page.isTrashed)
+      .map(page => {
+        const account = wikiToXAcct(page, profileByWikiId.get(page.id));
+        const baseHandle = account.handle;
+        let handle = baseHandle;
+        let suffix = 0;
+        while (usedHandles.has(handle.toLowerCase())) {
+          suffix += 1;
+          handle = `${baseHandle}${page.id.replace(/[^a-zA-Z0-9]/g, '').slice(-4) || suffix}${suffix > 1 ? suffix : ''}`;
+        }
+        usedHandles.add(handle.toLowerCase());
+        return handle === account.handle ? account : { ...account, handle };
+      });
+  }, [pages, profileByWikiId]);
   const handleByProfileId = useMemo(() => new Map(wikiAccountDrafts.filter(account => account.profileId).map(account => [account.profileId!, account.handle])), [wikiAccountDrafts]);
   const wikiAccts = useMemo(() => wikiAccountDrafts.map(account => {
     const profile = account.profileId ? socialDatabase.profiles.find(item => item.id === account.profileId) : undefined;
