@@ -620,7 +620,7 @@ function Dashboard() {
     // CFC Official
     { id: 'cfc',       label: 'CFC Official',     image: img('logo1.png'),      bg: 'linear-gradient(145deg,#1e3a8a,#2563eb)', imgFit: 'contain', imgPad: true,  active: false },
     // Caledora Airways
-    { id: 'airways',   label: 'Caledora Airways', image: img('airways2.jpg'),   bg: 'linear-gradient(145deg,#0c4a6e,#0369a1)', imgFit: 'cover', active: true  },
+    { id: 'airways',   label: 'Caledora Airways', image: img('airways1.jpg'),   imgBg: '#ffffff', bg: 'linear-gradient(145deg,#0c4a6e,#0369a1)', imgFit: 'contain', imgPad: true, active: true  },
     // Oria Bank — white bg + padding so logo doesn't get cropped
     { id: 'bank',      label: 'Oria Bank',        image: img('oriabank.png'),   imgBg: '#ffffff', imgFit: 'contain', imgPad: true,  bg: '#ffffff', active: true },
     // Maps — custom Google Maps pin SVG

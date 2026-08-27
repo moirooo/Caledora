@@ -5,7 +5,7 @@ type FaviconDefinition = {
   type: string;
 };
 
-const AIRWAYS_FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0c4a6e"/><stop offset="1" stop-color="#0ea5e9"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#g)"/><circle cx="47" cy="17" r="8" fill="#fbbf24"/><path d="M11 36.5 28 31l17-17 4 2-10 19 11 8-2.5 3-14-5-13 7-3-2 8-9-13 2z" fill="#fff"/></svg>`;
+const AIRWAYS_FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#fff"/><path d="M37 11h15L44 32l12 7-2 4-16-4-12 10-4-2 8-12-14-2v-4l18-2z" fill="#12244d"/><circle cx="43" cy="29" r="7" fill="#d3a958"/><path d="M7 45c9-5 18-5 27 0 8 4 15 4 23 0" fill="none" stroke="#12244d" stroke-width="3" stroke-linecap="round"/><path d="M10 52c8-4 16-4 24 0 8 4 16 4 23 0" fill="none" stroke="#d3a958" stroke-width="2.5" stroke-linecap="round"/></svg>`;
 const BASE_URL = import.meta.env?.BASE_URL ?? '/';
 
 const inlineSvg = (svg: string): FaviconDefinition => ({
