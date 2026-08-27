@@ -13,6 +13,7 @@ import { InstagramApp } from '@/components/instagram/InstagramApp';
 import { loadInstagramDatabase, mediaUrl as instagramMediaUrl, saveInstagramDatabase, updateInstagramProfile, type InstagramProfile, type InstagramRelationType } from '@/services/instagramStorage';
 import { decodeTwitterRouteHandle, formatTwitterCount, isTwitterHandleTaken, normalizeTwitterHandle } from '@/services/twitterProfile';
 import { GlobalBackupPage } from '@/components/GlobalBackupPage';
+import { moduleForPath, setFavicon } from '@/services/favicon';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
 import { AlertTriangle, Archive, ArrowDown, ArrowLeft, ArrowUp, BarChart2, Bell, BookOpen, Check, CheckCircle2, ChevronDown, ChevronRight, Clock3, Download, FileText, GitCompare, Hash, Heart, Home, Image as ImageIcon, Menu, MessageCircle, MoreHorizontal, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, User, X } from 'lucide-react';
@@ -4736,6 +4737,12 @@ function InstagramPage() {
 
 
 function Router() {
+  const [location] = useLocation();
+
+  useEffect(() => {
+    setFavicon(moduleForPath(location));
+  }, [location]);
+
   return (
     <LightboxProvider>
       <Shell>
