@@ -3,6 +3,7 @@ import multer from "multer";
 import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import { getAuth } from "@clerk/express";
 
 const router = Router();
 const uploadRoot = path.resolve(import.meta.dirname, "../public/images");
@@ -38,6 +39,10 @@ const upload = multer({
 });
 
 router.post("/upload-media", (req, res) => {
+  if (!getAuth(req).userId) {
+    res.status(401).json({ success: false, error: "Unauthorized" });
+    return;
+  }
   upload.single("file")(req, res, error => {
     if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
       res.status(413).json({ success: false, error: "File exceeds the 12 MB limit." });
@@ -54,6 +59,10 @@ router.post("/upload-media", (req, res) => {
 });
 
 router.delete("/images/:folder/:filename", (req, res) => {
+  if (!getAuth(req).userId) {
+    res.status(401).json({ success: false, error: "Unauthorized" });
+    return;
+  }
   const { folder, filename } = req.params;
   if (!allowedFolders.has(folder) || !/^restored-[a-zA-Z0-9._-]{1,120}\.(?:svg|png|jpe?g|webp)$/i.test(filename)) {
     res.status(400).json({ success: false, error: "Only restored media can be deleted." });

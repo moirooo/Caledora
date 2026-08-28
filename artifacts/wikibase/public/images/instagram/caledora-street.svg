@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1500" role="img" aria-label="Rue de Caledora">
-  <defs><linearGradient id="d" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#3e185c"/><stop offset=".42" stop-color="#ca426b"/><stop offset="1" stop-color="#ffbd79"/></linearGradient></defs>
-  <rect width="1200" height="1500" fill="url(#d)"/>
-  <path d="M0 610 300 470v730H0ZM900 420l300 130v650H900Z" fill="#161631"/><path d="M230 540h750v960H230Z" fill="#282447"/>
-  <g fill="#ffd38a"><rect x="305" y="610" width="82" height="120"/><rect x="468" y="610" width="82" height="120"/><rect x="650" y="610" width="82" height="120"/><rect x="812" y="610" width="82" height="120"/><rect x="305" y="840" width="82" height="120"/><rect x="468" y="840" width="82" height="120"/><rect x="650" y="840" width="82" height="120"/><rect x="812" y="840" width="82" height="120"/></g>
-  <path d="M430 1500 575 920h52l144 580Z" fill="#0f1021"/><path d="M520 1500 600 920l80 580" fill="#333049"/>
-  <text x="600" y="130" text-anchor="middle" fill="#fff5e9" font-family="Arial, sans-serif" font-size="44" letter-spacing="7">CALEDORA CITY</text>
-</svg>

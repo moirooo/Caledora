@@ -10,6 +10,10 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: state
+    description: Authenticated owner application state.
+  - name: storage
+    description: Authenticated private object storage.
 paths:
   /healthz:
     get:
@@ -24,6 +28,70 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /state:
+    get:
+      operationId: getOwnerState
+      tags: [state]
+      responses:
+        "200":
+          description: Owner state, or an uninitialized marker.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnerStateResponse"
+        "401": { description: Authentication required }
+    put:
+      operationId: putOwnerState
+      tags: [state]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OwnerStateUpdate" }
+      responses:
+        "200":
+          description: Updated state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnerStateResponse" }
+        "400": { description: Invalid state payload }
+        "401": { description: Authentication required }
+        "409": { description: Revision conflict }
+  /storage/uploads/request-url:
+    post:
+      operationId: requestUploadUrl
+      tags: [storage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UploadUrlRequest" }
+      responses:
+        "200":
+          description: Direct upload URL.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadUrlResponse" }
+        "400": { description: Invalid upload metadata }
+        "401": { description: Authentication required }
+  /storage/uploads/complete:
+    post:
+      operationId: completeUpload
+      tags: [storage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UploadCompleteRequest" }
+      responses:
+        "200":
+          description: Object claimed by its owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadCompleteResponse" }
+        "401": { description: Authentication required }
+        "404": { description: Upload not found }
+        "409": { description: Upload is not present yet }
 components:
   schemas:
     HealthStatus:
@@ -33,4 +101,46 @@ components:
           type: string
       required:
         - status
+    OwnerStateUpdate:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, snapshot]
+      properties:
+        expectedRevision: { type: number, minimum: 0 }
+        snapshot: {}
+    OwnerStateResponse:
+      type: object
+      required: [initialized]
+      properties:
+        initialized: { type: boolean }
+        revision: { type: number }
+        snapshot: {}
+        updatedAt: { type: string, format: date-time }
+    UploadUrlRequest:
+      type: object
+      additionalProperties: false
+      required: [name, size, contentType]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        size: { type: number, minimum: 1, maximum: 12582912 }
+        contentType: { type: string }
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath, metadata]
+      properties:
+        uploadURL: { type: string }
+        objectPath: { type: string }
+        metadata: { $ref: "#/components/schemas/UploadUrlRequest" }
+    UploadCompleteRequest:
+      type: object
+      additionalProperties: false
+      required: [objectPath]
+      properties:
+        objectPath: { type: string }
+    UploadCompleteResponse:
+      type: object
+      required: [objectPath, url]
+      properties:
+        objectPath: { type: string }
+        url: { type: string }
 

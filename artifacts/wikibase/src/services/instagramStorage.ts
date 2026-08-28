@@ -106,10 +106,11 @@ const legacyMedia: Record<string, string> = { 'Instagram.png': 'brand.svg', 'riv
 const text = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const safeId = (value: unknown) => text(value, 100).replace(/[^a-zA-Z0-9._-]/g, '');
 const uploadedMediaPath = /^\/api\/images\/(?:shared|instagram|wikibase|twitter|airways)\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,110}\.(?:svg|png|jpe?g|webp)$/i;
+const cloudMediaPath = /^\/api\/storage\/objects\/uploads\/[0-9a-f-]{36}$/;
 const indexedDbMediaId = /^upload:[a-zA-Z0-9-]{1,80}$/;
 const safeMedia = (value: unknown, fallback = 'profile.svg') => {
   const file = text(value, 180);
-  if (uploadedMediaPath.test(file) || indexedDbMediaId.test(file)) return file;
+  if (uploadedMediaPath.test(file) || cloudMediaPath.test(file) || indexedDbMediaId.test(file)) return file;
   return /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}\.(?:svg|png|jpe?g|webp)$/i.test(file) ? file : legacyMedia[file] ?? fallback;
 };
 const safeNumber = (value: unknown, fallback = 0, max = 9_999_999) => Number.isFinite(value) ? Math.max(0, Math.min(max, Math.floor(Number(value)))) : fallback;
@@ -467,7 +468,7 @@ export function loadInstagramDatabase(pages: WikiPage[]): InstagramDatabase {
   return seedDatabase(pages);
 }
 
-export function saveInstagramDatabase(database: InstagramDatabase, source: 'instagram' | 'twitter' = 'instagram') {
+export function saveInstagramDatabase(database: InstagramDatabase, source: 'instagram' | 'twitter' | 'server' = 'instagram') {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(database));
   window.dispatchEvent(new CustomEvent('caledora-social-sync', { detail: { source } }));
 }
@@ -479,7 +480,7 @@ export function validateImportedInstagram(value: unknown, pages: WikiPage[]): In
 export function mediaUrl(filename: string) {
   const uploadedUrl = instagramMediaObjectUrl(filename);
   if (uploadedUrl) return uploadedUrl;
-  if (uploadedMediaPath.test(filename)) return filename;
+  if (uploadedMediaPath.test(filename) || cloudMediaPath.test(filename)) return filename;
   const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   return `${base}/images/instagram/${safeMedia(filename)}`;
 }

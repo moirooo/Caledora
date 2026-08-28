@@ -13,6 +13,7 @@ const BACKUP_VERSION = 1;
 const TWITTER_STORAGE_KEY = 'caledora-x-tweets';
 const INSTAGRAM_STORAGE_KEY = 'caledora-instagram-v1';
 const SERVER_MEDIA = /^\/api\/images\/(shared|instagram|wikibase|twitter|airways)\/([^/?#]+)$/;
+const CLOUD_MEDIA = /^\/api\/storage\/objects\/uploads\/[0-9a-f-]{36}$/;
 const MAX_MEDIA_ITEMS = 200;
 const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
 const MAX_BACKUP_BYTES = 60 * 1024 * 1024;
@@ -153,7 +154,7 @@ function isTweet(value: unknown): value is Record<string, unknown> {
 
 function mediaSources(value: unknown, sources = new Set<string>()): Set<string> {
   if (typeof value === 'string') {
-    if (value.startsWith('upload:') || SERVER_MEDIA.test(value)) sources.add(value);
+    if (value.startsWith('upload:') || SERVER_MEDIA.test(value) || CLOUD_MEDIA.test(value)) sources.add(value);
     return sources;
   }
   if (Array.isArray(value)) {
@@ -180,9 +181,9 @@ function jsonByteSize(value: unknown) {
 }
 
 async function sourceToBlob(source: string): Promise<Blob | undefined> {
-  if (UPLOAD_MEDIA.test(source)) return readInstagramImage(source);
+  if (UPLOAD_MEDIA.test(source) || CLOUD_MEDIA.test(source)) return readInstagramImage(source);
   if (!SERVER_MEDIA.test(source)) return undefined;
-  const response = await fetch(source);
+  const response = await fetch(source, { credentials: 'include' });
   if (!response.ok) throw new Error(`image_fetch_failed:${response.status}`);
   return response.blob();
 }
@@ -218,7 +219,7 @@ function isImagePayload(bytes: Uint8Array, mimeType: string) {
 }
 
 function isSupportedMediaSource(source: string) {
-  return UPLOAD_MEDIA.test(source) || SERVER_MEDIA.test(source);
+  return UPLOAD_MEDIA.test(source) || SERVER_MEDIA.test(source) || CLOUD_MEDIA.test(source);
 }
 
 function validateMediaDataUrl(dataUrl: string, mimeType: string) {
@@ -419,7 +420,7 @@ export async function restoreMedia(media: GlobalBackupMedia[]) {
       if (UPLOAD_MEDIA.test(entry.source)) {
         destination = await restoreInstagramImage(blob);
         cleanupTasks.push(() => deleteInstagramImage(destination));
-      } else if (SERVER_MEDIA.test(entry.source)) {
+      } else if (SERVER_MEDIA.test(entry.source) || CLOUD_MEDIA.test(entry.source)) {
         const name = `restored-${crypto.randomUUID()}.${extensionFor(entry.source, entry.mimeType)}`;
         const file = new File([blob], name, { type: entry.mimeType });
         destination = (await uploadMedia(file, folderFor(entry.source))).path;

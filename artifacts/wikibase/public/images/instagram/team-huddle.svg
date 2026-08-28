@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-label="Équipe Caledora">
-  <defs><linearGradient id="p" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1c224e"/><stop offset="1" stop-color="#623e9b"/></linearGradient></defs>
-  <rect width="1200" height="900" fill="url(#p)"/><ellipse cx="600" cy="790" rx="560" ry="170" fill="#195c47"/>
-  <g fill="#f4c4a5"><circle cx="355" cy="322" r="55"/><circle cx="495" cy="250" r="55"/><circle cx="650" cy="257" r="55"/><circle cx="798" cy="326" r="55"/></g>
-  <g fill="#f4f6ff"><path d="M270 700q0-250 85-250t85 250Z"/><path d="M410 700q0-300 85-300t85 300Z"/><path d="M565 700q0-300 85-300t85 300Z"/><path d="M713 700q0-250 85-250t85 250Z"/></g>
-  <text x="600" y="115" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="46" letter-spacing="8">TOUS ENSEMBLE</text>
-</svg>

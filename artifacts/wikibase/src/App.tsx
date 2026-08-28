@@ -1,6 +1,9 @@
 import 'flag-icons/css/flag-icons.min.css';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
+import { ClerkProvider, Show, SignIn, SignUp, UserButton } from '@clerk/react';
+import { publishableKeyFromHost } from '@clerk/react/internal';
+import { shadcn } from '@clerk/themes';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -14,6 +17,13 @@ import { loadInstagramDatabase, mediaUrl as instagramMediaUrl, saveInstagramData
 import { decodeTwitterRouteHandle, formatTwitterCount, isTwitterHandleTaken, normalizeTwitterHandle } from '@/services/twitterProfile';
 import { GlobalBackupPage } from '@/components/GlobalBackupPage';
 import { moduleForPath, setFavicon } from '@/services/favicon';
+import {
+  applyServerSnapshot,
+  getServerState,
+  readLocalSnapshot,
+  saveServerState,
+  type ServerSnapshot,
+} from '@/services/serverState';
 
 /* ─── Appearance context ─────────────────────────────────────────────────── */
 import { AlertTriangle, Archive, ArrowDown, ArrowLeft, ArrowUp, BarChart2, Bell, BookOpen, Check, CheckCircle2, ChevronDown, ChevronRight, Clock3, Download, FileText, GitCompare, Hash, Heart, Home, Image as ImageIcon, Menu, MessageCircle, MoreHorizontal, Pencil, Plus, Repeat2, RotateCcw, Search, Settings2, ShieldCheck, Sparkles, Star, Trash2, Upload, User, X } from 'lucide-react';
@@ -28,6 +38,208 @@ const AppearanceContext = createContext<AppearanceCtx>({
   setAppearance: () => {},
 });
 const useAppearance = () => useContext(AppearanceContext);
+
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+const clerkPubKey = publishableKeyFromHost(
+  window.location.hostname,
+  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
+);
+const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+
+const clerkAppearance = {
+  theme: shadcn,
+  cssLayerName: 'clerk',
+  options: {
+    logoPlacement: 'inside' as const,
+    logoLinkUrl: basePath || '/',
+    logoImageUrl: `${window.location.origin}${basePath}/images/site_logo.png`,
+    socialButtonsPlacement: 'bottom' as const,
+  },
+  variables: {
+    colorPrimary: '#3366cc',
+    colorForeground: '#202122',
+    colorMutedForeground: '#54595d',
+    colorBackground: '#ffffff',
+    colorInput: '#ffffff',
+    colorInputForeground: '#202122',
+    colorDanger: '#b32424',
+    colorNeutral: '#72777d',
+    borderRadius: '8px',
+    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  },
+  elements: {
+    cardBox: { width: '440px', maxWidth: 'calc(100vw - 32px)', background: '#ffffff' },
+    headerTitle: { color: '#202122' },
+    headerSubtitle: { color: '#54595d' },
+    formFieldLabel: { color: '#202122' },
+    formFieldInput: { color: '#202122', background: '#ffffff' },
+    footerActionText: { color: '#54595d' },
+    footerActionLink: { color: '#3366cc' },
+  },
+};
+
+const snapshotKeys: Array<keyof ServerSnapshot> = [
+  'version',
+  'pages',
+  'instagram',
+  'tweets',
+  'appearance',
+  'media',
+];
+
+function mergeSnapshots(
+  base: ServerSnapshot,
+  local: ServerSnapshot,
+  remote: ServerSnapshot,
+): ServerSnapshot {
+  const merged = { ...remote };
+  for (const key of snapshotKeys) {
+    const baseValue = JSON.stringify(base[key]);
+    const localChanged = JSON.stringify(local[key]) !== baseValue;
+    const remoteChanged = JSON.stringify(remote[key]) !== baseValue;
+    if (localChanged && !remoteChanged) {
+      (merged as Record<string, unknown>)[key] = local[key];
+    } else if (localChanged && remoteChanged && key === 'media') {
+      const byPath = new Map(remote.media.map(item => [item.path, item]));
+      local.media.forEach(item => byPath.set(item.path, item));
+      merged.media = [...byPath.values()].slice(-100);
+    } else if (localChanged && remoteChanged) {
+      // Both devices edited the same domain. Preserve the active device's edit;
+      // optimistic revision checking still prevents a blind stale overwrite.
+      (merged as Record<string, unknown>)[key] = local[key];
+    }
+  }
+  return merged;
+}
+
+function ServerStateGate({ children }: { children: ReactNode }) {
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
+  const revisionRef = useRef(0);
+  const lastSnapshotRef = useRef('');
+  const savingRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReady(false);
+    setError('');
+    const initialise = async () => {
+      try {
+        const remote = await getServerState();
+        let state: ServerSnapshot;
+        let revision = remote.revision ?? 0;
+        if (remote.initialized && remote.snapshot) {
+          state = remote.snapshot;
+          await applyServerSnapshot(state);
+        } else {
+          state = await readLocalSnapshot();
+          const saved = await saveServerState(state, 0);
+          revision = saved.revision ?? 0;
+        }
+        if (cancelled) return;
+        revisionRef.current = revision;
+        lastSnapshotRef.current = JSON.stringify(state);
+        setReady(true);
+      } catch (reason) {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : 'Synchronisation impossible.');
+      }
+    };
+    void initialise();
+    return () => { cancelled = true; };
+  }, [retry]);
+
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+
+    const synchronise = async () => {
+      if (savingRef.current || cancelled || document.visibilityState === 'hidden') return;
+      savingRef.current = true;
+      try {
+        const local = await readLocalSnapshot();
+        const localSerialised = JSON.stringify(local);
+        const remote = await getServerState();
+        const remoteRevision = remote.revision ?? 0;
+        const remoteChanged = Boolean(
+          remote.initialized
+          && remote.snapshot
+          && remoteRevision > revisionRef.current,
+        );
+        const localChanged = localSerialised !== lastSnapshotRef.current;
+
+        if (!localChanged && remoteChanged && remote.snapshot) {
+          await applyServerSnapshot(remote.snapshot);
+          revisionRef.current = remoteRevision;
+          lastSnapshotRef.current = JSON.stringify(remote.snapshot);
+          setError('');
+          return;
+        }
+
+        if (localChanged) {
+          const base = JSON.parse(lastSnapshotRef.current) as ServerSnapshot;
+          const candidate = remoteChanged && remote.snapshot
+            ? mergeSnapshots(base, local, remote.snapshot)
+            : local;
+          const expectedRevision = remoteChanged ? remoteRevision : revisionRef.current;
+          const saved = await saveServerState(candidate, expectedRevision);
+          revisionRef.current = saved.revision ?? revisionRef.current;
+          lastSnapshotRef.current = JSON.stringify(candidate);
+          if (remoteChanged) await applyServerSnapshot(candidate);
+          setError('');
+          return;
+        }
+        setError('');
+      } catch (reason) {
+        const message = reason instanceof Error ? reason.message : 'Synchronisation impossible.';
+        setError(message);
+        // On an optimistic conflict keep the local edit. The next interval
+        // fetches the newest revision and merges before retrying.
+      } finally {
+        savingRef.current = false;
+      }
+    };
+
+    const interval = window.setInterval(() => { void synchronise(); }, 2500);
+    const onFocus = () => { void synchronise(); };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [ready]);
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-[#f8f9fa] text-[#54595d]">
+        <div className="max-w-md rounded-xl border border-[#a2a9b1] bg-white p-6 text-center shadow-sm">
+          <ShieldCheck className="mx-auto mb-3 text-[#3366cc]" size={30} />
+          <p className="font-semibold text-[#202122]">{error ? 'Connexion au cloud impossible' : 'Synchronisation sécurisée…'}</p>
+          {error && (
+            <>
+              <p className="mt-2 text-sm">{error}</p>
+              <button onClick={() => setRetry(value => value + 1)} className="mt-4 rounded bg-[#3366cc] px-4 py-2 text-sm font-semibold text-white">
+                Réessayer
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {children}
+      {error && (
+        <div role="status" className="fixed bottom-4 right-4 z-[10000] max-w-sm rounded-lg bg-[#b32424] px-4 py-3 text-sm text-white shadow-xl">
+          État conservé localement, nouvelle tentative automatique : {error}
+        </div>
+      )}
+    </>
+  );
+}
 
 /* ─── Lightbox context ───────────────────────────────────────────────────── */
 
@@ -108,6 +320,19 @@ function AppearanceProvider({ children }: { children: ReactNode }) {
     mq.addEventListener('change', apply);
     return () => mq.removeEventListener('change', apply);
   }, [appearance.theme]);
+
+  useEffect(() => {
+    const refresh = () => {
+      try {
+        const saved = localStorage.getItem('wikibase-appearance');
+        if (saved) setAppearanceState(JSON.parse(saved) as Appearance);
+      } catch {
+        // Keep the current appearance if a remote payload is malformed.
+      }
+    };
+    window.addEventListener('caledora-server-state-applied', refresh);
+    return () => window.removeEventListener('caledora-server-state-applied', refresh);
+  }, []);
 
   const setAppearance = (a: Appearance) => {
     setAppearanceState(a);
@@ -449,6 +674,9 @@ function usePages() {
   };
   useEffect(() => {
     void reload();
+    const refresh = () => { void reload(); };
+    window.addEventListener('caledora-server-state-applied', refresh);
+    return () => window.removeEventListener('caledora-server-state-applied', refresh);
   }, []);
   const setPages = (next: WikiPage[]) => { setPagesState(next); savePages(next); };
   const persistPages = async (next: WikiPage[]) => {
@@ -4021,6 +4249,20 @@ function TwitterWorkspace({ pages }: { pages: WikiPage[] }) {
   });
   const setTweets = (t: XTweet[]) => { setTweetsState(t); localStorage.setItem(XSTORAGE, JSON.stringify(t)); };
 
+  useEffect(() => {
+    const refresh = () => {
+      try {
+        const stored = localStorage.getItem(XSTORAGE);
+        const parsed = stored ? JSON.parse(stored) : null;
+        if (Array.isArray(parsed)) setTweetsState(parsed.map(tweet => normalizeTweet(tweet as XTweet)));
+      } catch {
+        // Keep the in-memory timeline if the synchronized payload is malformed.
+      }
+    };
+    window.addEventListener('caledora-server-state-applied', refresh);
+    return () => window.removeEventListener('caledora-server-state-applied', refresh);
+  }, []);
+
   const [tab, setTab]           = useState<'foryou' | 'following' | 'discovery'>('foryou');
   const [topicFilter, setTopicFilter] = useState<'ALL' | XFeedTopic>('ALL');
   const [draft, setDraft]       = useState('');
@@ -4784,17 +5026,90 @@ function Router() {
   );
 }
 
+function OwnerLanding() {
+  return (
+    <div className="min-h-screen bg-[#f8f9fa] px-5 py-12 text-[#202122]">
+      <div className="mx-auto flex min-h-[70vh] max-w-3xl flex-col items-center justify-center text-center">
+        <img src={`${basePath}/images/site_logo.png`} alt="Caledora" className="mb-6 h-24 w-24 rounded-2xl object-contain" />
+        <p className="mb-2 text-sm font-semibold uppercase tracking-[0.18em] text-[#3366cc]">Espace privé</p>
+        <h1 className="font-serif text-4xl font-bold sm:text-5xl">CaledoraOS</h1>
+        <p className="mt-4 max-w-xl text-base leading-7 text-[#54595d]">
+          Connectez-vous pour retrouver WikiBase, Instagram, Twitter/X et vos médias sur tous vos appareils.
+        </p>
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <Link href="/sign-in" className="rounded-lg bg-[#3366cc] px-5 py-3 font-semibold text-white shadow-sm hover:bg-[#2a4b8d]">
+            Se connecter
+          </Link>
+          <Link href="/sign-up" className="rounded-lg border border-[#a2a9b1] bg-white px-5 py-3 font-semibold text-[#202122] hover:bg-[#eaecf0]">
+            Créer le compte propriétaire
+          </Link>
+        </div>
+        <p className="mt-5 text-xs text-[#72777d]">Les visiteurs non connectés disposent uniquement de cet écran d’accès.</p>
+      </div>
+    </div>
+  );
+}
+
+function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
+  const shared = {
+    routing: 'path' as const,
+    appearance: clerkAppearance,
+  };
+  return (
+    <div className="min-h-screen grid place-items-center bg-[#f8f9fa] p-4">
+      {mode === 'sign-in'
+        ? <SignIn {...shared} path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallbackRedirectUrl={basePath || '/'} />
+        : <SignUp {...shared} path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} fallbackRedirectUrl={basePath || '/'} />}
+    </div>
+  );
+}
+
+function AuthenticatedApplication() {
+  return (
+    <>
+      <Show when="signed-in">
+        <ServerStateGate>
+          <AppearanceProvider>
+            <Router />
+            <div className="fixed right-4 top-3 z-[10001] rounded-full bg-white p-1 shadow-md">
+              <UserButton />
+            </div>
+          </AppearanceProvider>
+        </ServerStateGate>
+      </Show>
+      <Show when="signed-out">
+        <OwnerLanding />
+      </Show>
+    </>
+  );
+}
+
+function AuthRouter() {
+  return (
+    <Switch>
+      <Route path="/sign-in/*?"><AuthPage mode="sign-in" /></Route>
+      <Route path="/sign-up/*?"><AuthPage mode="sign-up" /></Route>
+      <Route><AuthenticatedApplication /></Route>
+    </Switch>
+  );
+}
+
 function App() {
   return (
     <ErrorBoundary>
-      <TooltipProvider>
-        <AppearanceProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-            <Router />
+      <ClerkProvider
+        publishableKey={clerkPubKey}
+        proxyUrl={clerkProxyUrl}
+        appearance={clerkAppearance}
+        afterSignOutUrl={basePath || '/'}
+      >
+        <TooltipProvider>
+          <WouterRouter base={basePath}>
+            <AuthRouter />
           </WouterRouter>
           <Toaster />
-        </AppearanceProvider>
-      </TooltipProvider>
+        </TooltipProvider>
+      </ClerkProvider>
     </ErrorBoundary>
   );
 }

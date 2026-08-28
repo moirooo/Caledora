@@ -322,10 +322,16 @@ test('removes a restored server image when its media-library write fails', async
     const url = String(input);
     requests.push({ url, method: init?.method });
     if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+    if (url === '/api/storage/uploads/request-url') {
+      return new Response(JSON.stringify({
+        uploadURL: 'https://storage.example/upload',
+        objectPath: '/objects/uploads/11111111-1111-4111-8111-111111111111',
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (url === 'https://storage.example/upload') return new Response(null, { status: 200 });
     return new Response(JSON.stringify({
-      success: true,
-      filename: 'restored-import.png',
-      path: '/api/images/wikibase/restored-import.png',
+      objectPath: '/objects/uploads/11111111-1111-4111-8111-111111111111',
+      url: '/api/storage/objects/uploads/11111111-1111-4111-8111-111111111111',
     }), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   try {
@@ -334,8 +340,10 @@ test('removes a restored server image when its media-library write fails', async
       /localStorage quota exceeded/,
     );
     assert.deepEqual(requests, [
-      { url: '/api/upload-media', method: 'POST' },
-      { url: '/api/images/wikibase/restored-import.png', method: 'DELETE' },
+      { url: '/api/storage/uploads/request-url', method: 'POST' },
+      { url: 'https://storage.example/upload', method: 'PUT' },
+      { url: '/api/storage/uploads/complete', method: 'POST' },
+      { url: '/api/storage/objects/uploads/11111111-1111-4111-8111-111111111111', method: 'DELETE' },
     ]);
   } finally {
     globalThis.fetch = originalFetch;
@@ -359,10 +367,16 @@ test('fails media restoration when upload cleanup cannot delete the new server f
     const url = String(input);
     requests.push({ url, method: init?.method });
     if (init?.method === 'DELETE') return new Response(null, { status: 500 });
+    if (url === '/api/storage/uploads/request-url') {
+      return new Response(JSON.stringify({
+        uploadURL: 'https://storage.example/upload',
+        objectPath: '/objects/uploads/22222222-2222-4222-8222-222222222222',
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (url === 'https://storage.example/upload') return new Response(null, { status: 200 });
     return new Response(JSON.stringify({
-      success: true,
-      filename: 'restored-import.png',
-      path: '/api/images/wikibase/restored-import.png',
+      objectPath: '/objects/uploads/22222222-2222-4222-8222-222222222222',
+      url: '/api/storage/objects/uploads/22222222-2222-4222-8222-222222222222',
     }), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   try {
@@ -376,10 +390,12 @@ test('fails media restoration when upload cleanup cannot delete the new server f
         && error.message === 'Media library persistence and cleanup both failed.',
     );
     assert.deepEqual(requests, [
-      { url: '/api/upload-media', method: 'POST' },
-      { url: '/api/images/wikibase/restored-import.png', method: 'DELETE' },
-      { url: '/api/images/wikibase/restored-import.png', method: 'DELETE' },
-      { url: '/api/images/wikibase/restored-import.png', method: 'DELETE' },
+      { url: '/api/storage/uploads/request-url', method: 'POST' },
+      { url: 'https://storage.example/upload', method: 'PUT' },
+      { url: '/api/storage/uploads/complete', method: 'POST' },
+      { url: '/api/storage/objects/uploads/22222222-2222-4222-8222-222222222222', method: 'DELETE' },
+      { url: '/api/storage/objects/uploads/22222222-2222-4222-8222-222222222222', method: 'DELETE' },
+      { url: '/api/storage/objects/uploads/22222222-2222-4222-8222-222222222222', method: 'DELETE' },
     ]);
   } finally {
     globalThis.fetch = originalFetch;

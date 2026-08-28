@@ -1,0 +1,43 @@
+import type { IncomingHttpHeaders } from "node:http";
+import type { RequestHandler } from "express";
+import { createProxyMiddleware } from "http-proxy-middleware";
+
+const CLERK_FAPI = "https://frontend-api.clerk.dev";
+export const CLERK_PROXY_PATH = "/api/__clerk";
+
+export function getClerkProxyHost(req: { headers: IncomingHttpHeaders }): string | undefined {
+  const forwarded = req.headers["x-forwarded-host"];
+  const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  return raw?.split(",")[0]?.trim() || req.headers.host?.trim() || undefined;
+}
+
+/** The Clerk frontend API must be proxied before JSON parsers consume bytes. */
+export function clerkProxyMiddleware(): RequestHandler {
+  if (process.env.NODE_ENV !== "production" || !process.env.CLERK_SECRET_KEY) {
+    return (_req, _res, next) => next();
+  }
+  const secretKey = process.env.CLERK_SECRET_KEY;
+  return createProxyMiddleware({
+    target: CLERK_FAPI, changeOrigin: true, selfHandleResponse: true,
+    pathRewrite: (path: string) => path.replace(new RegExp(`^${CLERK_PROXY_PATH}`), ""),
+    on: {
+      proxyReq(proxyReq, req) {
+        const protocol = req.headers["x-forwarded-proto"] || "https";
+        proxyReq.setHeader("Clerk-Proxy-Url", `${protocol}://${getClerkProxyHost(req) || ""}${CLERK_PROXY_PATH}`);
+        proxyReq.setHeader("Clerk-Secret-Key", secretKey);
+      },
+      proxyRes(proxyRes, req, res) {
+        const headers = { ...proxyRes.headers };
+        delete headers["transfer-encoding"]; delete headers.connection; delete headers["keep-alive"];
+        const bodyless = req.method === "HEAD" || (proxyRes.statusCode ?? 502) < 200 || proxyRes.statusCode === 204 || proxyRes.statusCode === 304;
+        if (headers["content-length"] !== undefined || bodyless) {
+          res.writeHead(proxyRes.statusCode ?? 502, headers); proxyRes.pipe(res); return;
+        }
+        const chunks: Buffer[] = [];
+        proxyRes.on("data", (chunk: Buffer) => chunks.push(chunk));
+        proxyRes.on("end", () => { const body = Buffer.concat(chunks); headers["content-length"] = String(body.length); res.writeHead(proxyRes.statusCode ?? 502, headers); res.end(body); });
+        proxyRes.on("error", () => res.destroy());
+      },
+    },
+  }) as RequestHandler;
+}
